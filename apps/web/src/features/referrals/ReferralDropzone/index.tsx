@@ -61,9 +61,12 @@ const ReferralDropzone = React.forwardRef<HTMLDivElement, ReferralDropzoneProps>
         ref={ref}
         data-component="ReferralDropzone"
         data-state={isDragging ? "dragging" : "idle"}
+        onClick={disabled ? undefined : onBrowse}
         {...dropzoneProps}
         {...props}
-        className={cn(referralDropzoneVariants({ dragging: isDragging, className }))}
+        className={cn(
+          referralDropzoneVariants({ dragging: isDragging, disabled, className }),
+        )}
       >
         <span aria-hidden className={cn(referralDropzoneIconVariants())}>
           <UploadIcon size="lg" />
@@ -85,7 +88,16 @@ const ReferralDropzone = React.forwardRef<HTMLDivElement, ReferralDropzoneProps>
           className={cn(referralDropzoneInputVariants())}
         />
 
-        <Button size="sm" onClick={onBrowse} disabled={disabled}>
+        <Button
+          size="sm"
+          disabled={disabled}
+          onClick={(event) => {
+            // The whole zone already opens the picker on click — stop this
+            // one from bubbling and firing it a second time.
+            event.stopPropagation();
+            onBrowse();
+          }}
+        >
           Browse files
         </Button>
 

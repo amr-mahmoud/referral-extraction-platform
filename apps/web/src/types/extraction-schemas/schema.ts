@@ -10,6 +10,8 @@ export const SCHEMA_SOURCES = {
   SAVED: "saved",
   /** Upload a one-off schema JSON alongside the documents. */
   UPLOAD: "upload",
+  /** Defined field-by-field in the app's field builder modal. */
+  BUILT: "built",
 } as const;
 
 export type SchemaSource = (typeof SCHEMA_SOURCES)[keyof typeof SCHEMA_SOURCES];
@@ -20,6 +22,12 @@ export interface SavedSchema {
   fieldCount: number;
 }
 
+/** A field defined through the in-app field builder. */
+export interface CustomSchemaField {
+  name: string;
+  description: string;
+}
+
 /** The schema half of an upload request, as chosen in the dashboard panel. */
 export interface SchemaSelection {
   source: SchemaSource;
@@ -27,4 +35,6 @@ export interface SchemaSelection {
   savedSchemaId?: string;
   /** Set when `source` is `UPLOAD`. */
   schemaFileName?: string;
+  /** Set when `source` is `BUILT`. */
+  customFields?: CustomSchemaField[];
 }

@@ -399,3 +399,25 @@ This document serves as the centralized commit history and decision log for the 
 
 - **Modified:** `apps/web/src/features/auth/*`, `apps/web/src/features/navigation/WorkbenchHeader*`, `apps/web/src/shared/FormError/*`, `apps/web/src/server-hooks/auth/use-logout.ts`, `apps/web/src/proxy.ts`, `docs/commit-log.md`
 - **Impact:** Clinic users can log out, view formatted validation errors, and toggle the header identity menu.
+
+---
+
+## v0.0.22 | 2026-08-25 | feat
+
+**Category:** Interface Services  
+**Summary:** Implement FieldBuilderModal for custom schema field creation, shared Modal component, and upload workspace dropzone refinements.  
+**SuggestedCommitMessage:** feat: implement FieldBuilderModal, shared Modal component, and upload workspace dropzone refinements | Interface Services
+
+### 🧠 Logic & Decisions
+
+- **The Why:** Implemented interactive custom extraction schema field building workflow in `apps/web`:
+  - **Shared Modal:** Created domain-agnostic `Modal` primitive (`shared/Modal/`) with focus trapping, backdrop blur, ESC key dismiss, and scroll-lock management.
+  - **FieldBuilderModal:** Implemented `FieldBuilderModal` component (`features/extraction-schemas/FieldBuilderModal/`) allowing clinic users to visually add, configure, and remove custom field definitions (key, label, type, guidance description).
+  - **Custom Field Manager & Hook:** Created `custom-field.manager.ts` and `useFieldBuilder` hook to manage field list state, key slugification, and validation.
+  - **Dropzone Refinements:** Refined `ReferralDropzone`, `UploadFileChip`, and `UploadWorkspace` visual feedback during file drag and schema selection.
+- **State Change:** Enabled custom extraction schema creation via interactive modal interface in the dashboard workspace.
+
+### 🔗 Dependencies
+
+- **Modified:** `apps/web/src/shared/Modal/*`, `apps/web/src/features/extraction-schemas/*`, `apps/web/src/features/referrals/*`, `apps/web/src/hooks/*`, `apps/web/src/managers/*`, `docs/commit-log.md`
+- **Impact:** Clinic staff can build and configure custom extraction schema fields directly in the UI.

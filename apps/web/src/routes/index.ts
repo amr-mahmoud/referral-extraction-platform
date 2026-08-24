@@ -1,7 +1,6 @@
 export const ROUTES = {
   AUTH: "/auth",
   DASHBOARD: "/dashboard",
-  SCHEMAS: "/schemas",
 } as const;
 
 export type Route = (typeof ROUTES)[keyof typeof ROUTES];
@@ -23,5 +22,4 @@ export interface NavItem {
 /** Primary navigation shown in the workbench header. */
 export const WORKBENCH_NAV_ITEMS: readonly NavItem[] = [
   { label: "Referrals", href: ROUTES.DASHBOARD },
-  { label: "Schemas", href: ROUTES.SCHEMAS },
 ];

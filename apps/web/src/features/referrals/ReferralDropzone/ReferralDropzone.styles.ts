@@ -11,9 +11,14 @@ export const referralDropzoneVariants = cva(
         true: "border-brand bg-brand/5",
         false: "border-[#c8c5ee] bg-field hover:border-brand/60",
       },
+      disabled: {
+        true: "cursor-not-allowed",
+        false: "cursor-pointer",
+      },
     },
     defaultVariants: {
       dragging: false,
+      disabled: false,
     },
   },
 );

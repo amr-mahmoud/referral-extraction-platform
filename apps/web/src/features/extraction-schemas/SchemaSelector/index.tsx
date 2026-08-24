@@ -35,10 +35,12 @@ export interface SchemaSelectorProps
   source: SchemaSource;
   savedSchemaId?: string;
   schemaFileName?: string;
+  /** Fields already confirmed through the field-builder modal, if any. */
+  customFieldCount?: number;
   onSourceChange: (source: SchemaSource) => void;
   onSavedSchemaChange: (id: string) => void;
   onSchemaFileChange: (fileName: string | undefined) => void;
-  /** Opens the in-app field builder (screen 2a) — not wired yet. */
+  /** Opens the in-app field builder modal (wireframe 2b). */
   onBuildFields?: () => void;
   onSubmit: () => void;
   /** Drives the submit label: "Upload & extract 3 files". */
@@ -53,6 +55,7 @@ const SchemaSelector = React.forwardRef<HTMLElement, SchemaSelectorProps>(
   (
     {
       className,
+      customFieldCount = 0,
       error,
       fileCount,
       isSubmitting,
@@ -131,9 +134,13 @@ const SchemaSelector = React.forwardRef<HTMLElement, SchemaSelectorProps>(
         <div className={cn(schemaSelectorFooterVariants())}>
           <Button variant="link" size="inline" onClick={onBuildFields}>
             <PlusIcon size="sm" />
-            Build fields in the app
+            {customFieldCount > 0 ? "Edit fields in the app" : "Build fields in the app"}
           </Button>
-          <span className={cn(schemaSelectorHintVariants())}>name + description</span>
+          <span className={cn(schemaSelectorHintVariants())}>
+            {customFieldCount > 0
+              ? `${customFieldCount} field${customFieldCount === 1 ? "" : "s"} defined`
+              : "name + description"}
+          </span>
         </div>
 
         <div className={cn(schemaSelectorActionsVariants())}>

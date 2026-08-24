@@ -4,6 +4,7 @@ export const SCHEMA_SOURCE_LABELS: Record<SchemaSource, string> = {
   [SCHEMA_SOURCES.DEFAULT]: "Default — LLM auto-extract",
   [SCHEMA_SOURCES.SAVED]: "Saved schema",
   [SCHEMA_SOURCES.UPLOAD]: "Upload schema JSON",
+  [SCHEMA_SOURCES.BUILT]: "Custom fields",
 };
 
 export const SCHEMA_SOURCE_DESCRIPTIONS: Partial<Record<SchemaSource, string>> = {

@@ -41,7 +41,12 @@ const UploadFileChip = React.forwardRef<HTMLDivElement, UploadFileChipProps>(
           <button
             type="button"
             aria-label={`Remove ${candidate.name}`}
-            onClick={() => onRemove(candidate.id)}
+            onClick={(event) => {
+              // The chip sits inside the click-to-browse dropzone — without this
+              // the remove click would bubble up and reopen the file picker.
+              event.stopPropagation();
+              onRemove(candidate.id);
+            }}
             className={cn(uploadFileChipRemoveVariants())}
           >
             <CloseIcon size="sm" />

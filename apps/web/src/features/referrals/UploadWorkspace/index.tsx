@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import { FieldBuilderModal } from "@/features/extraction-schemas/FieldBuilderModal";
 import { SchemaSelector } from "@/features/extraction-schemas/SchemaSelector";
 import { useFileDropzone } from "@/hooks/use-file-dropzone";
 import { useSchemaSelection } from "@/hooks/use-schema-selection";
@@ -15,19 +16,20 @@ import { uploadWorkspaceVariants } from "./UploadWorkspace.styles";
 export interface UploadWorkspaceProps
   extends React.HTMLAttributes<HTMLDivElement> {
   savedSchemas: readonly SavedSchema[];
-  /** Opens the in-app field builder (screen 2a) — not wired yet. */
-  onBuildFields?: () => void;
 }
 
 /**
  * The upload row: files on the left, how to extract them on the right, one
  * submit. Holds the two hooks' state together because neither half can submit
- * alone — the action needs both the queued files and the schema choice.
+ * alone — the action needs both the queued files and the schema choice. Also
+ * owns the field-builder modal's open state, since confirming it is really
+ * just another way to set the schema hook's selection.
  */
 const UploadWorkspace = React.forwardRef<HTMLDivElement, UploadWorkspaceProps>(
-  ({ className, onBuildFields, savedSchemas, ...props }, ref) => {
+  ({ className, savedSchemas, ...props }, ref) => {
     const dropzone = useFileDropzone();
     const schema = useSchemaSelection(savedSchemas);
+    const [isBuilderOpen, setIsBuilderOpen] = React.useState(false);
 
     const upload = useCreateReferrals({
       onSuccess: () => dropzone.clear(),
@@ -64,16 +66,32 @@ const UploadWorkspace = React.forwardRef<HTMLDivElement, UploadWorkspaceProps>(
           source={schema.source}
           savedSchemaId={schema.savedSchemaId}
           schemaFileName={schema.schemaFileName}
+          customFieldCount={schema.customFields.length}
           onSourceChange={schema.setSource}
           onSavedSchemaChange={schema.setSavedSchemaId}
           onSchemaFileChange={schema.setSchemaFileName}
-          onBuildFields={onBuildFields}
+          onBuildFields={() => setIsBuilderOpen(true)}
           onSubmit={handleSubmit}
           fileCount={fileCount}
           isSubmitting={upload.isLoading}
           submitDisabled={fileCount === 0 || !schema.isComplete}
           error={upload.error}
         />
+
+        {isBuilderOpen ? (
+          <FieldBuilderModal
+            initialFields={schema.customFields}
+            onClose={() => setIsBuilderOpen(false)}
+            onConfirm={(fields) => {
+              // The modal's "save as reusable schema" toggle has nowhere to
+              // persist to yet — the WorkBench API has no "create extraction
+              // schema" endpoint. The fields still take effect for this
+              // upload; wire the toggle to a real save once that exists.
+              schema.confirmCustomFields(fields);
+              setIsBuilderOpen(false);
+            }}
+          />
+        ) : null}
       </div>
     );
   },

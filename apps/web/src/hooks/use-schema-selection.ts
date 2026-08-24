@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 
 import {
   SCHEMA_SOURCES,
+  type CustomSchemaField,
   type SavedSchema,
   type SchemaSelection,
   type SchemaSource,
@@ -13,6 +14,8 @@ export interface UseSchemaSelectionResult {
   source: SchemaSource;
   savedSchemaId: string | undefined;
   schemaFileName: string | undefined;
+  /** Set once the field-builder modal has been confirmed at least once. */
+  customFields: CustomSchemaField[];
   /** The selection as the upload action wants it. */
   selection: SchemaSelection;
   /** How the chosen schema should read in the referrals table. */
@@ -22,6 +25,8 @@ export interface UseSchemaSelectionResult {
   setSource: (source: SchemaSource) => void;
   setSavedSchemaId: (id: string) => void;
   setSchemaFileName: (fileName: string | undefined) => void;
+  /** Confirms fields from the builder modal and switches the active source to `BUILT`. */
+  confirmCustomFields: (fields: CustomSchemaField[]) => void;
 }
 
 /**
@@ -37,12 +42,14 @@ export function useSchemaSelection(
     savedSchemas[0]?.id,
   );
   const [schemaFileName, setSchemaFileName] = useState<string | undefined>();
+  const [customFields, setCustomFields] = useState<CustomSchemaField[]>([]);
 
   const selection = useMemo<SchemaSelection>(() => {
     if (source === SCHEMA_SOURCES.SAVED) return { source, savedSchemaId };
     if (source === SCHEMA_SOURCES.UPLOAD) return { source, schemaFileName };
+    if (source === SCHEMA_SOURCES.BUILT) return { source, customFields };
     return { source };
-  }, [savedSchemaId, schemaFileName, source]);
+  }, [customFields, savedSchemaId, schemaFileName, source]);
 
   const schemaLabel = useMemo(() => {
     if (source === SCHEMA_SOURCES.SAVED) {
@@ -50,18 +57,23 @@ export function useSchemaSelection(
       return match?.name ?? "Saved schema";
     }
     if (source === SCHEMA_SOURCES.UPLOAD) return schemaFileName ?? "Uploaded schema";
+    if (source === SCHEMA_SOURCES.BUILT) {
+      return `Custom (${customFields.length} field${customFields.length === 1 ? "" : "s"})`;
+    }
     return "Default (LLM)";
-  }, [savedSchemaId, savedSchemas, schemaFileName, source]);
+  }, [customFields, savedSchemaId, savedSchemas, schemaFileName, source]);
 
   const isComplete =
     source === SCHEMA_SOURCES.DEFAULT ||
     (source === SCHEMA_SOURCES.SAVED && Boolean(savedSchemaId)) ||
-    (source === SCHEMA_SOURCES.UPLOAD && Boolean(schemaFileName));
+    (source === SCHEMA_SOURCES.UPLOAD && Boolean(schemaFileName)) ||
+    (source === SCHEMA_SOURCES.BUILT && customFields.length > 0);
 
   return {
     source,
     savedSchemaId,
     schemaFileName,
+    customFields,
     selection,
     schemaLabel,
     isComplete,
@@ -71,5 +83,9 @@ export function useSchemaSelection(
       (fileName: string | undefined) => setSchemaFileName(fileName),
       [],
     ),
+    confirmCustomFields: useCallback((fields: CustomSchemaField[]) => {
+      setCustomFields(fields);
+      setSource(SCHEMA_SOURCES.BUILT);
+    }, []),
   };
 }

@@ -26,9 +26,10 @@ npm-debug.log*
 
 
 .agent/
+.claude/
 AGENTS.md
 Claude.md
-
+CLAUDE.md
 
 package-lock.json
 

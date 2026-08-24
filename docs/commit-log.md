@@ -312,7 +312,6 @@ This document serves as the centralized commit history and decision log for the 
 - **Modified:** `apps/workbench-api/**/*`, `.env`, `.env.example`, `docs/commit-log.md`
 - **Impact:** Clinic users can sign up, log in, receive a single JWT token, and access protected endpoints like `GET /clinics/me`.
 
----
 
 ## v0.0.18 | 2026-08-24 | feat
 

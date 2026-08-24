@@ -29,3 +29,14 @@
   --color-danger: #b23c2a;
   --color-danger-border: #f2c9c4;
 }
+
+/* Status tones — one tinted fill + one legible foreground per referral state.
+   Added for the dashboard's status pills; the ink/brand roles above cover the rest. */
+@theme {
+  --color-shell: #f4f4fb;
+
+  --color-success: #1f7a4d;
+  --color-success-tint: #e7f6ee;
+
+  --color-danger-tint: #fdecea;
+}

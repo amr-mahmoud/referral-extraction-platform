@@ -1,0 +1,22 @@
+# Shared dev image for all Node/npm-workspaces apps (web, workbench-api, agent_worker).
+# The actual app to run is chosen per-service via `command:` in docker-compose.yml.
+# Source is bind-mounted at runtime for hot reload; this image only owns node_modules.
+FROM node:20-alpine
+
+# Needed by Next.js (and other native deps) on Alpine.
+RUN apk add --no-cache libc6-compat
+
+WORKDIR /app
+
+# Copy just the manifests first so `npm install` is cached across source changes.
+COPY package.json package-lock.json ./
+COPY apps/web/package.json ./apps/web/package.json
+COPY apps/workbench-api/package.json ./apps/workbench-api/package.json
+COPY apps/agent_worker/package.json ./apps/agent_worker/package.json
+
+RUN npm install
+
+# Fallback copy so the image is runnable standalone (docker-compose overlays this with a bind mount).
+COPY . .
+
+CMD ["npm", "run", "dev"]

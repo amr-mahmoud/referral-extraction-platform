@@ -14,7 +14,10 @@
     "dev:worker": "npm run dev --workspace apps/agent_worker",
     "build": "npm run build --workspaces --if-present",
     "start": "npm run start --workspaces --if-present",
-    "lint": "npm run lint --workspaces --if-present"
+    "lint": "npm run lint --workspaces --if-present",
+    "docker:up": "docker compose up --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

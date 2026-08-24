@@ -2,13 +2,14 @@
 # Plena Referral Extraction Platform - Monorepo Makefile
 # ==============================================================================
 # This Makefile provides organized management targets for developing, building,
-# running, and stopping all three applications in the monorepo:
+# running, containerizing, and stopping all applications in the monorepo:
 #   1. web           - Next.js Web Review Interface (apps/web)
 #   2. workbench-api - NestJS Workbench API Backend (apps/workbench-api)
 #   3. agent_worker  - Node.js + TypeScript SQS Worker (apps/agent_worker)
+#   4. postgres/redis- Local data services (Docker Compose)
 # ==============================================================================
 
-.PHONY: help install dev dev-web dev-api dev-worker build build-web build-api build-worker kill stop kill-all lint clean
+.PHONY: help install dev dev-web dev-api dev-worker kill stop kill-all build build-web build-api build-worker docker-up docker-dev docker-down docker-logs docker-clean docker-fix-perms fix-perms lint clean
 
 # Default target when running 'make'
 .DEFAULT_GOAL := help
@@ -68,7 +69,36 @@ stop: kill ## Alias for 'make kill'
 kill-all: kill ## Alias for 'make kill'
 
 # ------------------------------------------------------------------------------
-# 5. PRODUCTION BUILD TARGETS
+# 5. DOCKER CONTAINERS & LOCAL STACK
+# ------------------------------------------------------------------------------
+docker-up: ## Build and start all 5 Docker services (Postgres, Redis, Web, API, Worker) in detached background mode
+	@echo "--> Starting Docker Compose stack in detached mode..."
+	docker compose up --build -d
+
+docker-dev: ## Build and start all Docker services attached with live output logs
+	@echo "--> Starting Docker Compose stack with live output logs..."
+	docker compose up --build
+
+docker-down: ## Gracefully stop and remove Docker Compose containers and networks
+	@echo "--> Stopping Docker Compose stack..."
+	docker compose down
+
+docker-logs: ## Tail live logs from all running Docker Compose containers
+	@echo "--> Tailing live Docker Compose logs (Ctrl+C to exit)..."
+	docker compose logs -f
+
+docker-clean: ## Stop Docker containers and purge volumes (wipes Postgres/Redis data) and orphan containers
+	@echo "--> Purging Docker Compose containers, networks, and persistent volumes..."
+	docker compose down -v --remove-orphans
+
+docker-give-perms: ## Fix ownership permissions on ~/.docker and repository workspace files
+	@echo "--> Restoring user file ownership on ~/.docker and workspace..."
+	sudo chown -R $$(whoami) ~/.docker .
+
+
+
+# ------------------------------------------------------------------------------
+# 6. PRODUCTION BUILD TARGETS
 # ------------------------------------------------------------------------------
 build: ## Build all applications across the monorepo
 	@echo "--> Building all monorepo applications..."
@@ -87,7 +117,7 @@ build-worker: ## Build Agent Worker TypeScript code (apps/agent_worker)
 	npm run build --workspace apps/agent_worker
 
 # ------------------------------------------------------------------------------
-# 6. QUALITY & MAINTENANCE
+# 7. QUALITY & MAINTENANCE
 # ------------------------------------------------------------------------------
 lint: ## Run linting across all monorepo apps
 	@echo "--> Linting all monorepo applications..."

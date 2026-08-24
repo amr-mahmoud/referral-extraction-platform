@@ -1,0 +1,100 @@
+name: referral-extraction-platform
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: referral-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-referral}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-referral}
+      POSTGRES_DB: ${POSTGRES_DB:-referral_extraction}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: referral-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+    container_name: referral-web
+    command: npm run dev:web
+    env_file: .env
+    environment:
+      NODE_ENV: development
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      - workbench-api
+
+  workbench-api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+    container_name: referral-workbench-api
+    command: npm run dev:api
+    env_file: .env
+    environment:
+      NODE_ENV: development
+      PORT: ${API_PORT:-8001}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-referral}:${POSTGRES_PASSWORD:-referral}@postgres:5432/${POSTGRES_DB:-referral_extraction}
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "${API_PORT:-8001}:8001"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  agent_worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+    container_name: referral-agent-worker
+    command: npm run dev:worker
+    env_file: .env
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://${POSTGRES_USER:-referral}:${POSTGRES_PASSWORD:-referral}@postgres:5432/${POSTGRES_DB:-referral_extraction}
+      REDIS_URL: redis://redis:6379
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:

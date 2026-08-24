@@ -85,13 +85,71 @@ call at very large concurrent-connection counts.
 ```
 workbench-api/
   src/
-    auth/                  # signup, login, JWT strategy, guard
-    clinics/                # clinic profile, default schema setting
-    extraction-schemas/     # web-form + JSON-upload schema creation
-    referrals/               # create, list, detail, presign
-    notifications/           # Postgres LISTEN → SSE fan-out
-    prisma/                  # shared Prisma module
-  main.ts
+    domain/
+      clinic/
+        clinic.aggregate.ts
+        password-hash.value-object.ts
+
+      referral/
+        referral.aggregate.ts
+        referral-status.value-object.ts
+        extracted-field.value-object.ts
+        bounding-box.value-object.ts
+        s3-object.value-object.ts
+
+      extraction-schema/
+        extraction-schema.aggregate.ts
+        field-definition.value-object.ts
+
+    application/
+      ports/
+        clinic-repository.port.ts
+        referral-repository.port.ts
+        extraction-schema-repository.port.ts
+        storage.port.ts              # presign/get, S3-agnostic
+        password-hasher.port.ts
+        token.port.ts                # sign/verify, JWT-agnostic
+      clinic/
+        clinic.service.ts            # signup, login use cases
+      referral/
+        referral.service.ts          # create, list, get, resolve-schema use cases
+      extraction-schema/
+        extraction-schema.service.ts # create from web form or JSON upload
+      application.module.ts
+
+    infrastructure/
+      persistence/
+        prisma.service.ts
+        clinic.repository.ts          # implements ClinicRepositoryPort
+        referral.repository.ts        # implements ReferralRepositoryPort
+        extraction-schema.repository.ts
+      storage/
+        s3-storage.service.ts         # implements StoragePort
+      auth/
+        bcrypt-password-hasher.service.ts  # implements PasswordHasherPort
+        jwt-token.service.ts               # implements TokenPort
+      notifications/
+        postgres-listen.service.ts    # LISTEN, no port — see note below
+      infrastructure.module.ts
+
+    interface/
+      http/
+        auth/
+          auth.controller.ts
+          dto/
+        clinics/
+          clinics.controller.ts
+        extraction-schemas/
+          extraction-schemas.controller.ts
+          dto/
+        referrals/
+          referrals.controller.ts     # includes the @Sse() status stream
+          dto/
+        guards/
+          jwt-auth.guard.ts
+      interface.module.ts
+
+    main.ts
   package.json
   tsconfig.json
   Dockerfile
@@ -100,6 +158,8 @@ workbench-api/
 
 `prisma/` points at the same root `prisma/schema.prisma` used by `worker-agent` — one schema,
 shared by both services, no duplicated model definitions.
+
+reference @docs/domain-layer.md for domain layer structure.
 
 ## Running locally
 

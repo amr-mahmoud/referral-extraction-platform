@@ -16,11 +16,10 @@ Target architecture (per the design doc; not yet built — see Current State bel
 
 ## Current State
 
-All three `apps/*` projects are unmodified framework scaffolds (`nest new` / `create-next-app`) with no business logic yet — no Prisma schema, no auth, no S3/SQS/Gemini integration. Expect to be building most of the design doc's flow from scratch rather than extending existing code.
+`apps/web` and `apps/workbench-api` are unmodified framework scaffolds (`create-next-app` / `nest new`). `apps/agent_worker` has been pulled off NestJS onto plain Node + TypeScript (`tsx` for dev, `tsc` for build): it's a background daemon (`src/index.ts`) with no HTTP server, just SIGINT/SIGTERM handling — the "Architecture Rules" DDD pattern below (written for NestJS DI/repositories) does not apply to it as-is. None of the three have real business logic yet — no Prisma schema, no auth, no S3/SQS/Gemini integration. Expect to be building most of the design doc's flow from scratch rather than extending existing code.
 
 ## Gotchas
 
-- **Root `package.json` workspace scripts are stale**: `dev:frontend`/`dev:api`/`dev:worker` reference `apps/frontend`, `apps/api`, `apps/worker`, but the actual directories are `apps/web`, `apps/workbench-api`, `apps/agent_worker`. These scripts will fail until either the scripts or the directory names are reconciled.
 - **`apps/workbench-api` has its own nested `.git`** (from `nest new`'s auto-init) and is currently untracked at the root repo. Do not `git add` it from the root without first deciding whether to remove its inner `.git` (to fold it into this repo normally) or register it as a proper submodule — a bare `git add apps/workbench-api` from root will otherwise create a gitlink instead of tracking its files.
 - **`docs/` and `.agent/` are gitignored** at the repo root (see `.gitignore`), so the product design doc and agent rule files exist locally but will not be committed or visible in a fresh clone.
 
@@ -53,6 +52,21 @@ npm run lint    # runs lint in every workspace that has the script
 ```
 
 Jest config for both Nest apps runs with `rootDir: src` and matches `*.spec.ts`; e2e tests live under `test/` with a separate `jest-e2e.json` config.
+
+## Local Development via Docker
+
+`docker-compose.yml` at repo root runs the whole stack for local dev: `postgres` (16-alpine, with `docker/postgres/init/` running once against an empty volume to enable `pgcrypto`/`uuid-ossp`), `redis` (7-alpine, AOF persistence), and `web`/`workbench-api`/`agent_worker` built from the single shared `docker/Dockerfile.dev`. That Dockerfile only installs deps into the image (`npm install` at the workspace root, cached via manifest-only COPY layers); each service's actual source is bind-mounted (`.:/app` + an anonymous `/app/node_modules` volume so the container's own linux `node_modules` isn't clobbered by the host mount), and hot reload comes from each app's own dev script (`next dev`, `nest start --watch`, `tsx watch`) run via `command:` in compose — so a source change never requires an image rebuild, only `package.json` changes do.
+
+```bash
+cp .env.example .env      # first time only; .env is gitignored
+npm run docker:up         # docker compose up --build
+npm run docker:down       # docker compose down
+npm run docker:logs       # docker compose logs -f
+```
+
+Ports (overridable via `.env`, defaults in `.env.example`): web `3000`, workbench-api `8001` (set via `PORT` env, read in `apps/workbench-api/src/main.ts`), postgres `5434`→container `5432`, redis `6380`→container `6379` — the host-side Postgres/Redis ports are intentionally non-default to avoid clashing with any locally-installed Postgres or other Docker Compose projects' Redis/Postgres containers; adjust them in `.env` if `5434`/`6380` are also taken on your machine. Inside the compose network, apps reach the DB/cache at `postgres:5432`/`redis:6379` regardless of host mapping (see `DATABASE_URL`/`REDIS_URL` in `.env.example`).
+
+Orchestration choice: plain Docker Compose (no Swarm/Kubernetes) — this is a single-host local dev environment for 5 services, which is exactly Compose's use case; anything heavier would be pure overhead here.
 
 ## Architecture Rules (apply to the NestJS apps)
 

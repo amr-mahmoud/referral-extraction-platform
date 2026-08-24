@@ -94,7 +94,6 @@ This document serves as the centralized commit history and decision log for the 
 
 ---
 
-
 ## v0.0.6 | 2026-08-24 | docs
 
 **Category:** System Architecture  
@@ -110,3 +109,39 @@ This document serves as the centralized commit history and decision log for the 
 
 - **Modified:** `README.md`, `docs/commit-log.md`
 - **Impact:** Serves as the primary onboarding and architecture reference for developers inspecting the root repository.
+
+---
+
+## v0.0.7 | 2026-08-24 | build
+
+**Category:** Infrastructure Services  
+**Summary:** Add Makefile targets for Docker Compose stack management (docker-up, docker-dev, docker-down, docker-logs, docker-clean).  
+**SuggestedCommitMessage:** build: add Docker Compose management targets to Makefile | Infrastructure Services
+
+### 🧠 Logic & Decisions
+
+- **The Why:** Added explicit Makefile targets (`make docker-up`, `make docker-dev`, `make docker-down`, `make docker-logs`, `make docker-clean`) to streamline container orchestration across the 5 local stack services (Postgres, Redis, Web, API, Worker).
+- **State Change:** Expanded Makefile with container lifecycle and volume purging targets.
+
+### 🔗 Dependencies
+
+- **Modified:** `Makefile`, `docs/commit-log.md`
+- **Impact:** Provides single-command Docker stack control for local development and clean-slate resets.
+
+---
+
+## v0.0.8 | 2026-08-24 | build
+
+**Category:** Infrastructure Services  
+**Summary:** Add Makefile permission repair target (make docker-fix-perms / make fix-perms) for restoring ~/.docker and workspace ownership.  
+**SuggestedCommitMessage:** build: add make fix-perms target for Docker buildx ownership repair | Infrastructure Services
+
+### 🧠 Logic & Decisions
+
+- **The Why:** Added `make docker-fix-perms` / `make fix-perms` target (`sudo chown -R $(whoami) ~/.docker .`) to resolve Docker Desktop buildx permission errors (`~/.docker/buildx/activity/desktop-linux: permission denied`).
+- **State Change:** Added Makefile permission restoration target for Docker buildx user environment repairs.
+
+### 🔗 Dependencies
+
+- **Modified:** `Makefile`, `docs/commit-log.md`
+- **Impact:** Resolves Docker buildx permission errors with a single `make fix-perms` command.

@@ -3,10 +3,9 @@ import { AuthPanel } from "@/features/auth/AuthPanel";
 import { AuthLayout } from "@/layouts/AuthLayout";
 
 /**
- * Entry point for `/auth`. Submitting is intentionally not wired yet: the
- * WorkBench API has no auth endpoints, so the credential handlers land in
- * `server-hooks/auth/` (`useLogin`) once `/auth/login` exists — see
- * `.agent/rules/frontend-workflow-architecture.md`.
+ * Entry point for `/auth`.
+ * Renders the authentication layout with AuthBrandPanel and AuthPanel,
+ * backed by domain server hooks (`useLogin`, `useSignup`) and server actions.
  */
 export function AuthApp() {
   return (

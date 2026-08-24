@@ -353,3 +353,49 @@ This document serves as the centralized commit history and decision log for the 
 
 - **Modified:** `apps/workbench-api/src/interface/http/**/*`, `docs/commit-log.md`
 - **Impact:** Clean interface layer imports and prevents CLAUDE.md from appearing in staged git changes.
+
+---
+
+## v0.0.20 | 2026-08-25 | feat
+
+**Category:** Interface Services  
+**Summary:** Connect Next.js WebApp with WorkBench API via openapi-typescript codegen, typed openapi-fetch client, server actions, and useLogin/useSignup server hooks.  
+**SuggestedCommitMessage:** feat: link Next.js web app authentication flows to WorkBench API via openapi-fetch and server hooks | Interface Services
+
+### 🧠 Logic & Decisions
+
+- **The Why:** Connected the frontend auth workflows directly to the WorkBench API backend following strict frontend architecture guidelines:
+  - **Codegen:** Exposed `/docs-json` on `apps/workbench-api/src/main.ts` and ran `openapi-typescript` to generate strongly-typed API models in `apps/web/src/types/api.generated.ts`.
+  - **Network Client:** Configured typed `openapi-fetch` client in `apps/web/src/client/api-client.ts`.
+  - **Server Actions:** Implemented `"use server"` actions in `apps/web/src/server-actions/auth.ts` (`signupAction`, `loginAction`, `logoutAction`, `getMeAction`) returning `ActionResult<T>` and managing HTTP-only `access_token` cookies.
+  - **Server Hooks:** Created `"use client"` domain wrappers in `apps/web/src/server-hooks/auth/` (`useLogin`, `useSignup`) consuming `useServerAction` foundation, managing transition loading states, and handling router navigation to `/dashboard`.
+  - **UI Integration:** Wired `SignInForm`, `SignUpForm`, and `AuthPanel` to `useLogin` and `useSignup`, rendering inline server validation error banners.
+  - **Dashboard Session:** Updated `DashboardApp` to fetch the authenticated clinic's profile via `getMeAction()` on the server and render the clinic name dynamically in `WorkbenchHeader`.
+- **State Change:** Connected Next.js auth views to live WorkBench REST API via typed client and cookie-based server session management.
+
+### 🔗 Dependencies
+
+- **Modified:** `apps/web/**/*`, `apps/workbench-api/src/main.ts`, `docs/commit-log.md`
+- **Impact:** Clinic users can sign up and log in from the Next.js UI (`/auth`), receive an HTTP-only JWT cookie session, and view their authenticated clinic profile on `/dashboard`.
+
+---
+
+## v0.0.21 | 2026-08-25 | feat
+
+**Category:** Interface Services  
+**Summary:** Refine frontend authentication error UI components, implement WorkbenchHeaderIdentity dropdown menu with logout server hook, and configure Next.js middleware proxy.  
+**SuggestedCommitMessage:** feat: refine auth error UI, header identity dropdown, and logout server hook | Interface Services
+
+### 🧠 Logic & Decisions
+
+- **The Why:** Refined authentication UI components and header navigation state in `apps/web`:
+  - **Shared FormError:** Created `FormError` shared component (`shared/FormError/`) to render standardized error alert banners across `SignInForm` and `SignUpForm`.
+  - **Header Identity Dropdown:** Implemented `WorkbenchHeaderIdentity` feature component with custom `useHoverMenu` hook for user account dropdown menu, showing clinic name, avatar, and logout action.
+  - **Logout Flow:** Created `useLogout` domain hook in `server-hooks/auth/use-logout.ts` wrapping `logoutAction` server action to clear `access_token` cookies and redirect to `/auth`.
+  - **Next.js Middleware Proxy:** Added `proxy.ts` middleware for session route protection and cookie forwarding.
+- **State Change:** Enhanced authentication user experience with dedicated error banner components, account dropdown menu, and seamless logout capabilities.
+
+### 🔗 Dependencies
+
+- **Modified:** `apps/web/src/features/auth/*`, `apps/web/src/features/navigation/WorkbenchHeader*`, `apps/web/src/shared/FormError/*`, `apps/web/src/server-hooks/auth/use-logout.ts`, `apps/web/src/proxy.ts`, `docs/commit-log.md`
+- **Impact:** Clinic users can log out, view formatted validation errors, and toggle the header identity menu.

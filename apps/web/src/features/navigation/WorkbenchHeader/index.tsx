@@ -4,14 +4,12 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { WorkbenchHeaderIdentity } from "@/features/navigation/WorkbenchHeaderIdentity";
 import { cn } from "@/lib/utils";
 import { WORKBENCH_NAV_ITEMS } from "@/routes";
-import { Avatar } from "@/shared/Avatar";
 import { BrandLockup } from "@/shared/BrandLockup";
 
 import {
-  workbenchHeaderClinicVariants,
-  workbenchHeaderIdentityVariants,
   workbenchHeaderLeadVariants,
   workbenchHeaderNavLinkVariants,
   workbenchHeaderNavVariants,
@@ -57,10 +55,7 @@ const WorkbenchHeader = React.forwardRef<HTMLElement, WorkbenchHeaderProps>(
           </nav>
         </div>
 
-        <div className={cn(workbenchHeaderIdentityVariants())}>
-          <span className={cn(workbenchHeaderClinicVariants())}>{clinicName}</span>
-          <Avatar name={clinicName} />
-        </div>
+        <WorkbenchHeaderIdentity clinicName={clinicName} />
       </header>
     );
   },

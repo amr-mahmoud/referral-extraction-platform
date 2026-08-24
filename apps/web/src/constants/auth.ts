@@ -24,5 +24,12 @@ export const AUTH_MODE_HEADINGS: Record<AuthMode, string> = {
 /** Minimum password length accepted by the sign-up form. */
 export const PASSWORD_MIN_LENGTH = 8;
 
-/** Session length offered by the "keep me signed in" checkbox. */
-export const REMEMBER_SESSION_DAYS = 30;
+/**
+ * Cookie the signed JWT is persisted under. Shared between `server-actions/auth.ts`
+ * (which sets/reads it) and `proxy.ts` (which reads it to gate protected routes) —
+ * a single source so the two never drift on the name.
+ */
+export const ACCESS_TOKEN_COOKIE = "access_token";
+
+/** Cookie lifetime, mirrored from the API's default `JWT_EXPIRES_IN` (`.env.example`). */
+export const ACCESS_TOKEN_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;

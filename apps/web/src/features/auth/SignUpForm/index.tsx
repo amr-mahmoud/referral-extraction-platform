@@ -5,9 +5,9 @@ import * as React from "react";
 import { PASSWORD_MIN_LENGTH } from "@/constants/auth";
 import { cn } from "@/lib/utils";
 import { Button } from "@/shared/Button";
+import { FormError } from "@/shared/FormError";
 import { PasswordField } from "@/shared/PasswordField";
 import { TextField } from "@/shared/TextField";
-import type { SignUpCredentials } from "@/types/auth/credentials";
 
 import {
   signUpFormFieldsVariants,
@@ -20,13 +20,21 @@ export interface SignUpFormProps
   extends Omit<React.FormHTMLAttributes<HTMLFormElement>, "onSubmit">,
     SignUpFormVariantProps {
   isSubmitting?: boolean;
-  onSubmit?: (credentials: SignUpCredentials) => void;
+  error?: string | null;
+  onSubmit?: (credentials: {
+    clinicName: string;
+    username: string;
+    password: string;
+  }) => void;
   /** Renders the "Already registered? Sign in" switch. */
   onSwitchToSignIn?: () => void;
 }
 
 const SignUpForm = React.forwardRef<HTMLFormElement, SignUpFormProps>(
-  ({ className, isSubmitting, onSubmit, onSwitchToSignIn, ...props }, ref) => {
+  (
+    { className, isSubmitting, error, onSubmit, onSwitchToSignIn, ...props },
+    ref,
+  ) => {
     const [password, setPassword] = React.useState("");
     const [confirmPassword, setConfirmPassword] = React.useState("");
 
@@ -38,12 +46,15 @@ const SignUpForm = React.forwardRef<HTMLFormElement, SignUpFormProps>(
       if (hasMismatch) return;
 
       const form = new FormData(event.currentTarget);
+      const clinicName = String(form.get("clinicName") ?? "").trim();
+      const username = String(form.get("username") ?? "").trim();
+
+      if (!clinicName || !username || !password) return;
 
       onSubmit?.({
-        clinicName: String(form.get("clinicName") ?? ""),
-        username: String(form.get("username") ?? ""),
+        clinicName,
+        username,
         password,
-        confirmPassword,
       });
     };
 
@@ -56,6 +67,8 @@ const SignUpForm = React.forwardRef<HTMLFormElement, SignUpFormProps>(
         onSubmit={handleSubmit}
         className={cn(signUpFormVariants({ className }))}
       >
+        {error ? <FormError>{error}</FormError> : null}
+
         <div className={cn(signUpFormFieldsVariants())}>
           <TextField
             name="clinicName"
@@ -102,7 +115,7 @@ const SignUpForm = React.forwardRef<HTMLFormElement, SignUpFormProps>(
 
         <p className={cn(signUpFormFootnoteVariants())}>
           Already registered?{" "}
-          <Button variant="link" size="inline" onClick={onSwitchToSignIn}>
+          <Button variant="link" size="inline" type="button" onClick={onSwitchToSignIn}>
             Sign in instead
           </Button>{" "}
           — you&rsquo;ll set a default extraction schema right after signup.

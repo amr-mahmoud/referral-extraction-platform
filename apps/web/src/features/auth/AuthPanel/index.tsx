@@ -5,8 +5,9 @@ import * as React from "react";
 import { AUTH_MODE_HEADINGS, AUTH_MODES } from "@/constants/auth";
 import { useAuthMode } from "@/hooks/use-auth-mode";
 import { cn } from "@/lib/utils";
+import { useLogin } from "@/server-hooks/auth/use-login";
+import { useSignup } from "@/server-hooks/auth/use-signup";
 import { SegmentedControl } from "@/shared/SegmentedControl";
-import type { SignInCredentials, SignUpCredentials } from "@/types/auth/credentials";
 
 import { SignInForm } from "../SignInForm";
 import { SignUpForm } from "../SignUpForm";
@@ -19,14 +20,23 @@ import {
 
 export interface AuthPanelProps
   extends React.HTMLAttributes<HTMLDivElement>,
-    AuthPanelVariantProps {
-  onSignIn?: (credentials: SignInCredentials) => void;
-  onSignUp?: (credentials: SignUpCredentials) => void;
-}
+    AuthPanelVariantProps {}
 
 const AuthPanel = React.forwardRef<HTMLDivElement, AuthPanelProps>(
-  ({ className, onSignIn, onSignUp, ...props }, ref) => {
+  ({ className, ...props }, ref) => {
     const { mode, isSignIn, items, setMode } = useAuthMode();
+
+    const {
+      execute: loginExecute,
+      isLoading: isLoginLoading,
+      error: loginError,
+    } = useLogin();
+
+    const {
+      execute: signupExecute,
+      isLoading: isSignupLoading,
+      error: signupError,
+    } = useSignup();
 
     return (
       <div
@@ -53,7 +63,9 @@ const AuthPanel = React.forwardRef<HTMLDivElement, AuthPanelProps>(
               id={`${AUTH_MODES.SIGN_IN}-panel`}
               role="tabpanel"
               aria-labelledby={`${AUTH_MODES.SIGN_IN}-tab`}
-              onSubmit={onSignIn}
+              isSubmitting={isLoginLoading}
+              error={loginError}
+              onSubmit={loginExecute}
               onSwitchToSignUp={() => setMode(AUTH_MODES.SIGN_UP)}
             />
           ) : (
@@ -61,7 +73,9 @@ const AuthPanel = React.forwardRef<HTMLDivElement, AuthPanelProps>(
               id={`${AUTH_MODES.SIGN_UP}-panel`}
               role="tabpanel"
               aria-labelledby={`${AUTH_MODES.SIGN_UP}-tab`}
-              onSubmit={onSignUp}
+              isSubmitting={isSignupLoading}
+              error={signupError}
+              onSubmit={signupExecute}
               onSwitchToSignIn={() => setMode(AUTH_MODES.SIGN_IN)}
             />
           )}

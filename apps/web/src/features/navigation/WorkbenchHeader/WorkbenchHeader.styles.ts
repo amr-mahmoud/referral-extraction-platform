@@ -31,14 +31,6 @@ export const workbenchHeaderNavLinkVariants = cva(
   },
 );
 
-export const workbenchHeaderIdentityVariants = cva(
-  "flex shrink-0 items-center gap-3",
-);
-
-export const workbenchHeaderClinicVariants = cva(
-  "hidden text-xs font-medium text-muted md:block",
-);
-
 export type WorkbenchHeaderNavLinkVariantProps = VariantProps<
   typeof workbenchHeaderNavLinkVariants
 >;

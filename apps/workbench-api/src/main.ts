@@ -39,6 +39,11 @@ async function bootstrap() {
 
   const document = SwaggerModule.createDocument(app, config);
 
+  // Serve raw OpenAPI JSON document for client codegen (openapi-typescript)
+  app.getHttpAdapter().get('/docs-json', (_req, res) => {
+    res.json(document);
+  });
+
   app.use(
     '/reference',
     apiReference({
@@ -53,5 +58,6 @@ async function bootstrap() {
   await app.listen(port);
   console.log(`--> Workbench API running on http://localhost:${port}`);
   console.log(`--> Scalar API Playground: http://localhost:${port}/reference`);
+  console.log(`--> OpenAPI JSON Spec: http://localhost:${port}/docs-json`);
 }
 void bootstrap();

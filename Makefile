@@ -9,7 +9,7 @@
 #   4. postgres/redis- Local data services (Docker Compose)
 # ==============================================================================
 
-.PHONY: help install dev dev-web dev-api dev-worker kill stop kill-all build build-web build-api build-worker docker-up docker-dev docker-dev-backend docker-dev-api docker-down docker-logs docker-clean docker-give-perms fix-perms db-reset lint clean
+.PHONY: help install dev dev-web dev-api dev-worker kill stop kill-all build build-web build-api build-worker docker-up docker-dev docker-dev-backend docker-dev-api docker-down docker-logs docker-clean docker-give-perms fix-perms db-reset lint codegen-api clean
 
 # Default target when running 'make'
 .DEFAULT_GOAL := help
@@ -178,6 +178,10 @@ build-worker: ## Build Agent Worker TypeScript code (apps/agent_worker)
 lint: ## Run linting across all monorepo apps
 	@echo "--> Linting all monorepo applications..."
 	npm run lint
+
+codegen-api: ## Regenerate apps/web's typed API client from the running Workbench API's OpenAPI spec
+	@echo "--> Generating apps/web/src/types/api.generated.ts from the Workbench API's /docs-json..."
+	npm run codegen:api --workspace apps/web
 
 clean: ## Clean node_modules, .next, and dist build outputs
 	@echo "--> Cleaning build artifacts and node_modules..."

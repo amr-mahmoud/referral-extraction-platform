@@ -55,3 +55,58 @@ This document serves as the centralized commit history and decision log for the 
 
 - **Modified:** `apps/agent_worker/README.md`
 - **Impact:** Provides clear system design guidance and operational context for developers and maintainers of the worker service.
+
+---
+
+## v0.0.4 | 2026-08-24 | build
+
+**Category:** System Foundation  
+**Summary:** Add Makefile automation, concurrent local development scripts, and resolve workspace build dependencies across all 3 monorepo apps.  
+**SuggestedCommitMessage:** build: add Makefile and concurrent dev runners for monorepo apps | System Foundation
+
+### 🧠 Logic & Decisions
+
+- **The Why:** Created a structured root `Makefile` and `concurrently` workspace configuration to provide simple single-command local execution (`make dev` / `npm run dev`) and individual target runners for `apps/web`, `apps/workbench-api`, and `apps/agent_worker`.
+- **State Change:** Fixed directory permissions, verified zero-error TypeScript/Next.js/NestJS builds across all 3 monorepo apps, and established unified developer scripts.
+
+### 🔗 Dependencies
+
+- **Modified:** `Makefile`, `package.json`, `package-lock.json`
+- **Impact:** Enables streamlined local development and build verification across all monorepo services.
+
+---
+
+## v0.0.5 | 2026-08-24 | build
+
+**Category:** System Foundation  
+**Summary:** Add Makefile targets (make kill / make stop) to terminate all active local development processes for monorepo applications.  
+**SuggestedCommitMessage:** build: add make kill targets for stopping running app processes | System Foundation
+
+### 🧠 Logic & Decisions
+
+- **The Why:** Added explicit process management targets (`make kill`, `make stop`, `make kill-all`) to the Makefile using `pkill -f` to cleanly stop any active background or foreground instances of Next.js, NestJS, `tsx watch`, and `concurrently`.
+- **State Change:** Expanded Makefile with process termination targets for local developer environment cleanup.
+
+### 🔗 Dependencies
+
+- **Modified:** `Makefile`, `docs/commit-log.md`
+- **Impact:** Allows developers to stop all running local app instances with a single command (`make stop` / `make kill`).
+
+---
+
+
+## v0.0.6 | 2026-08-24 | docs
+
+**Category:** System Architecture  
+**Summary:** Document Monorepo Applications & Local Ports summary table and setup guide in root README.md.  
+**SuggestedCommitMessage:** docs: add monorepo apps and local ports summary to root README.md | System Architecture
+
+### 🧠 Logic & Decisions
+
+- **The Why:** Updated the root `README.md` to provide a clear executive overview, monorepo topology map, local ports summary table (`apps/web` on 3000, `apps/workbench-api` on 8001, `apps/agent_worker` as SQS background daemon), and `make` commands.
+- **State Change:** Replaced placeholder `README.md` with complete documentation suite.
+
+### 🔗 Dependencies
+
+- **Modified:** `README.md`, `docs/commit-log.md`
+- **Impact:** Serves as the primary onboarding and architecture reference for developers inspecting the root repository.

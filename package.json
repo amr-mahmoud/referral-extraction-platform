@@ -1,0 +1,21 @@
+{
+  "name": "referral-extraction-platform",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Plena Referral Extraction Workbench - monorepo",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:frontend": "npm run dev --workspace apps/frontend",
+    "dev:api": "npm run start:dev --workspace apps/api",
+    "dev:worker": "npm run start:dev --workspace apps/worker",
+    "build": "npm run build --workspaces --if-present",
+    "start": "npm run start --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

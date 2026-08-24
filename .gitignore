@@ -1,0 +1,30 @@
+# Environment Variables
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+.npm-cache/
+
+# Build output
+dist/
+build/
+out/
+.next/
+*.tsbuildinfo
+next-env.d.ts
+.turbo/
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+
+/docs/*
+!/docs/commit-log.md
+
+
+
+/.agent
+

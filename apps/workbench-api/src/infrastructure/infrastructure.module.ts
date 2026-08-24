@@ -8,10 +8,10 @@ import { TOKEN_PORT } from '../application/ports/token.port';
 import { BcryptPasswordHasherService } from './auth/bcrypt-password-hasher.service';
 import { JwtTokenService } from './auth/jwt-token.service';
 import { PostgresListenService } from './notifications/postgres-listen.service';
-import { PrismaClinicRepository } from './persistence/clinic.repository';
-import { PrismaExtractionSchemaRepository } from './persistence/extraction-schema.repository';
-import { PrismaReferralRepository } from './persistence/referral.repository';
-import { PrismaService } from './persistence/prisma.service';
+import { PrismaClinicRepository } from './repository/clinic.repository';
+import { PrismaExtractionSchemaRepository } from './repository/extraction-schema.repository';
+import { PrismaReferralRepository } from './repository/referral.repository';
+import { PrismaService } from './repository/prisma.service';
 import { S3StorageService } from './storage/s3-storage.service';
 
 @Module({

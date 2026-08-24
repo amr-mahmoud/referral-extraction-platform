@@ -9,6 +9,16 @@ extraction schema management, referral creation, review reads, and pushing live 
 updates over SSE. It never touches the AI extraction itself and never handles a PDF's bytes
 directly — those are deliberately someone else's job.
 
+## Tech stack
+
+| Dependency | Purpose |
+|---|---|
+| `@nestjs/*` | API framework — required stack |
+| `prisma` | Postgres ORM — schema shared with Agent Worker |
+| `@scalar/nestjs-api-reference` | Interactive API playground, rendered from the OpenAPI doc |
+| `@nestjs/swagger` | Generates the OpenAPI doc Scalar consumes |
+| `@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner` | Issues presigned upload/download URLs |
+
 ## Responsibilities
 
 - Clinic signup / login, JWT issuance
@@ -118,7 +128,7 @@ workbench-api/
       application.module.ts
 
     infrastructure/
-      persistence/
+      repository/
         prisma.service.ts
         clinic.repository.ts          # implements ClinicRepositoryPort
         referral.repository.ts        # implements ReferralRepositoryPort
@@ -157,7 +167,12 @@ workbench-api/
 ```
 
 `prisma/` points at the same root `prisma/schema.prisma` used by `worker-agent` — one schema,
-shared by both services, no duplicated model definitions.
+shared by both services, no duplicated model definitions. `Clinic`, `Referral`, and
+`ExtractionSchema` map directly onto the three aggregate roots described below; `PrismaService`
+in `infrastructure/repository/` extends `PrismaClient` and hooks `$connect`/`$disconnect` into
+Nest's module lifecycle. The three `Prisma*Repository` classes still throw
+`NotImplementedError` — schema and client wiring are in place, but the aggregate↔row mapping
+per repository is a separate piece of work.
 
 reference @docs/domain-layer.md for domain layer structure.
 

@@ -181,3 +181,39 @@ This document serves as the centralized commit history and decision log for the 
 
 - **Modified:** `apps/workbench-api/*`, `Makefile`, `apps/web/README.md`, `.agent/rules/frontend-next-file-structure.md`, `docs/commit-log.md`
 - **Impact:** Establishes pure Domain-Driven Design foundation for auth, referral review, and schema management services in Workbench API.
+
+---
+
+## v0.0.11 | 2026-08-24 | feat
+
+**Category:** Interface Services  
+**Summary:** Integrate Scalar API Reference playground and Swagger OpenAPI documentation in Workbench API.  
+**SuggestedCommitMessage:** feat: integrate Scalar API Reference playground and OpenAPI decorators in workbench-api | Interface Services
+
+### 🧠 Logic & Decisions
+
+- **The Why:** Configured `@scalar/nestjs-api-reference` and `@nestjs/swagger` in `apps/workbench-api` (`main.ts` mounted at `/reference`). Decorated interface controllers (`AuthController`, `ClinicsController`) and DTO classes (`LoginRequest`, `SignupRequest`, `CreateExtractionSchemaRequest`, `CreateReferralRequest`, `ListReferralsQueryDto`, `UpdateReferralRequest`) with OpenAPI metadata to provide an interactive API playground and enable automated TypeScript client code generation.
+- **State Change:** Added `/reference` Scalar UI playground route, Swagger DocumentBuilder, and decorated DTO request/response contracts.
+
+### 🔗 Dependencies
+
+- **Modified:** `apps/workbench-api/src/main.ts`, `apps/workbench-api/src/interface/http/**/*`, `apps/workbench-api/package.json`
+- **Impact:** Provides an interactive API playground at `http://localhost:8001/reference` and standardized OpenAPI spec output for client codegen.
+
+---
+
+## v0.0.12 | 2026-08-24 | feat
+
+**Category:** Infrastructure Services  
+**Summary:** Configure Prisma ORM schema, client generation, and workspace scripts for Workbench API.  
+**SuggestedCommitMessage:** feat: configure Prisma ORM schema and client integration in workbench-api | Infrastructure Services
+
+### 🧠 Logic & Decisions
+
+- **The Why:** Configured shared `prisma/schema.prisma`, added root npm workspace scripts (`prisma:generate`, `prisma:migrate`, `prisma:push`, `prisma:studio`), and updated `PrismaService` in `apps/workbench-api/src/infrastructure/repository/prisma.service.ts` to extend generated `PrismaClient` with NestJS module lifecycle hooks (`$connect` / `$disconnect`).
+- **State Change:** Enabled Prisma ORM client generation and database connectivity for persistence adapters in `workbench-api`.
+
+### 🔗 Dependencies
+
+- **Modified:** `package.json`, `package-lock.json`, `prisma/schema.prisma`, `apps/workbench-api/src/infrastructure/repository/prisma.service.ts`, `apps/workbench-api/README.md`, `docs/commit-log.md`
+- **Impact:** Establishes standard Prisma database connectivity for `Clinic`, `Referral`, and `ExtractionSchema` aggregate persistence.

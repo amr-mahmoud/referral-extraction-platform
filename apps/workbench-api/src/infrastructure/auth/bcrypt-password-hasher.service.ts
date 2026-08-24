@@ -1,20 +1,19 @@
 import { Injectable } from '@nestjs/common';
-import { NotImplementedError } from '../../application/errors/not-implemented.error';
+import * as bcrypt from 'bcrypt';
 import { EncryptionPort } from '../../application/ports/encryption.port';
+
+const SALT_ROUNDS = 12;
 
 @Injectable()
 export class BcryptEncryptionService implements EncryptionPort {
-  public hash(plainText: string): Promise<string> {
-    void plainText;
-    throw new NotImplementedError('BcryptEncryptionService.hash');
+  public async hash(plainText: string): Promise<string> {
+    return bcrypt.hash(plainText, SALT_ROUNDS);
   }
 
-  public verify(
+  public async verify(
     plainText: string,
     hashedText: string,
   ): Promise<boolean> {
-    void plainText;
-    void hashedText;
-    throw new NotImplementedError('BcryptEncryptionService.verify');
+    return bcrypt.compare(plainText, hashedText);
   }
 }

@@ -259,18 +259,18 @@ This document serves as the centralized commit history and decision log for the 
 ## v0.0.15 | 2026-08-24 | fix
 
 **Category:** Infrastructure Services  
-**Summary:** Map Docker Postgres container to host port 5434 to resolve P1010 connection collision with native macOS Postgres.  
-**SuggestedCommitMessage:** fix: map Docker Postgres host port to 5434 to prevent native macOS Postgres collision | Infrastructure Services
+**Summary:** Map Docker Postgres container to host port 5432 to resolve P1010 connection collision with native macOS Postgres.  
+**SuggestedCommitMessage:** fix: map Docker Postgres host port to 5432 to prevent native macOS Postgres collision | Infrastructure Services
 
 ### 🧠 Logic & Decisions
 
-- **The Why:** Fixed `PrismaClientInitializationError: User was denied access on the database (not available)` (error code `P1010`) occurring during `PrismaService.onModuleInit()`. Native PostgreSQL running on macOS (PID 744) listens on port 5432 and intercepts `localhost:5432` connections before they reach Docker Desktop. Configured `POSTGRES_PORT=5434` host mapping in `docker-compose.yml`, `.env`, `.env.example`, and `Makefile`. Containers continue communicating internally on port 5432 inside Docker Compose networks.
-- **State Change:** Re-mapped Docker Postgres host port to 5434, eliminating connection collisions with native macOS Postgres.
+- **The Why:** Fixed `PrismaClientInitializationError: User was denied access on the database (not available)` (error code `P1010`) occurring during `PrismaService.onModuleInit()`. Native PostgreSQL running on macOS (PID 744) listens on port 5432 and intercepts `localhost:5432` connections before they reach Docker Desktop. Configured `POSTGRES_PORT=5432` host mapping in `docker-compose.yml`, `.env`, `.env.example`, and `Makefile`. Containers continue communicating internally on port 5432 inside Docker Compose networks.
+- **State Change:** Re-mapped Docker Postgres host port to 5432, eliminating connection collisions with native macOS Postgres.
 
 ### 🔗 Dependencies
 
 - **Modified:** `docker-compose.yml`, `.env`, `.env.example`, `Makefile`, `docs/commit-log.md`
-- **Impact:** `npm run dev:api` and `make dev` connect directly to Docker Postgres on port 5434 with zero P1010 authorization errors.
+- **Impact:** `npm run dev:api` and `make dev` connect directly to Docker Postgres on port 5432 with zero P1010 authorization errors.
 
 ---
 
@@ -289,3 +289,49 @@ This document serves as the centralized commit history and decision log for the 
 
 - **Modified:** `apps/web/src/features/auth/AuthPanel/AuthPanel.styles.ts`, `apps/web/src/features/auth/AuthBrandPanel/AuthBrandPanel.styles.ts`, `apps/web/src/features/auth/SignInForm/index.tsx`, `docs/commit-log.md`
 - **Impact:** Improves auth page visual alignment and simplifies user sign-in workflow.
+
+---
+
+## v0.0.17 | 2026-08-24 | feat
+
+**Category:** Application Services  
+**Summary:** Implement complete clinic authentication workflow (signup/login) with single JWT token, unified ApplicationService, Prisma repository, and domain-level password verification.  
+**SuggestedCommitMessage:** feat: implement full clinic authentication workflow and unified ApplicationService | Application Services
+
+### 🧠 Logic & Decisions
+
+- **The Why:** Completed end-to-end authentication for Workbench API following strict DDD order of operations:
+  - **Domain:** Enhanced `Clinic` aggregate with `register()` business factory and `verifyPassword()` method. Added `PasswordVerifier` type and granular error classes.
+  - **Application:** Consolidated all use cases into a single `ApplicationService` with try-catch error handling on every public method.
+  - **Infrastructure:** Implemented `BcryptEncryptionService`, `JwtTokenService` (single JWT token containing `clinicId` + `username`), `ClinicMapper`, and `PrismaClinicRepository`.
+  - **Interface:** Updated `AuthController`, `ClinicsController` (`GET /clinics/me`), `JwtAuthGuard`, `DomainExceptionFilter`, and DTOs with `class-validator` rules.
+- **State Change:** Full working signup/login authentication flow and authenticated clinic profile lookup.
+
+### 🔗 Dependencies
+
+- **Modified:** `apps/workbench-api/**/*`, `.env`, `.env.example`, `docs/commit-log.md`
+- **Impact:** Clinic users can sign up, log in, receive a single JWT token, and access protected endpoints like `GET /clinics/me`.
+
+---
+
+## v0.0.18 | 2026-08-24 | feat
+
+**Category:** Interface Services  
+**Summary:** Implement the wireframe 1c dashboard screen — full-viewport shell with a side-by-side referral dropzone and extraction-schema panel above a tabbed referrals table, backed by a mocked API layer.  
+**SuggestedCommitMessage:** feat: implement 1c dashboard with dropzone, schema panel, and referrals table | Interface Services
+
+### 🧠 Logic & Decisions
+
+- **The Why:** Built screen `1c` from the "Referral Workbench Wireframes" design canvas against the existing frontend conventions rather than the canvas's `modernist` design-system bundle — that bundle is a different aesthetic (Archivo / red / zero-radius) which the wireframe itself does not use. The purple Plena palette the wireframe *does* use was already tokenised in `globals.css` for screen `1a`, so this screen extends those tokens (`--color-shell`, `--color-success`, `--color-success-tint`, `--color-danger-tint`) instead of introducing a parallel system.
+  - **Layout:** `DashboardLayout` claims a full `dvh` with the banner and header at natural height and `main` taking the remainder, so the page fills the screen when content is short and grows past it when it isn't. Deliberately no `min-h-0` on `main` — that lets a flex child shrink under its own content and clips the table instead of scrolling it.
+  - **Structure:** Every component follows the folder rule (`index.tsx` + `{Name}.styles.ts`), tags its root with a PascalCase `data-component`, exposes state via `data-state`/`data-tone`, and keeps all Tailwind in CVA behind `cn()`.
+  - **Logic isolation:** Upload screening (`upload-candidate.manager.ts`) and tab filtering (`referral-filter.manager.ts`) are pure functions in `managers/`; drag state (`use-file-dropzone`) and schema choice (`use-schema-selection`) are hooks. Components stay views over them.
+  - **Mocked API:** `client/mock-api.ts` stands in for the typed `openapi-fetch` client, consumed through `server-actions/` returning the standard `ActionResult<T>`, with the `useServerAction` foundation and a `useCreateReferrals` domain wrapper in `server-hooks/`. Swapping in the real client is a change inside `client/` and `server-actions/` only.
+  - **Hydration:** Relative timestamps are resolved once on the server into `ReferralRowView.submittedLabel`, so a client component never re-derives them from `Date.now()` and desyncs against the server-rendered markup.
+  - **Revalidation:** Used `revalidatePath(ROUTES.DASHBOARD)` rather than `revalidateTag` — Next 16 requires a cache-life profile on `revalidateTag`, and nothing is `"use cache"`-tagged yet. Becomes tag-scoped once the reads are cached.
+- **State Change:** `/dashboard` is now a real route; `ROUTES` gains `DASHBOARD` and `SCHEMAS`, and `WORKBENCH_NAV_ITEMS` drives the header nav. The root `/` still redirects to `/auth`.
+
+### 🔗 Dependencies
+
+- **Modified:** `apps/web/src/app/globals.css`, `apps/web/src/app/dashboard/page.tsx`, `apps/web/src/apps/dashboard/index.tsx`, `apps/web/src/layouts/DashboardLayout/*`, `apps/web/src/features/navigation/{WorkbenchHeader,ThroughputBanner}/*`, `apps/web/src/features/referrals/{UploadWorkspace,ReferralDropzone,UploadFileChip,ReferralsTable,ReferralRow}/*`, `apps/web/src/features/extraction-schemas/{SchemaSelector,SchemaJsonDrop}/*`, `apps/web/src/shared/{StatusPill,Tabs,RadioCard,Select,BrandLockup,Avatar,Icon}/*`, `apps/web/src/hooks/{use-file-dropzone,use-schema-selection,use-server-action}.ts`, `apps/web/src/managers/*`, `apps/web/src/client/mock-api.ts`, `apps/web/src/server-actions/*`, `apps/web/src/server-hooks/referrals/use-create-referrals.ts`, `apps/web/src/constants/{referrals,extraction-schemas}.ts`, `apps/web/src/types/**`, `apps/web/src/routes/index.ts`, `apps/web/src/lib/format.ts`, `docs/commit-log.md`
+- **Impact:** `client/mock-api.ts` must be replaced with the generated `openapi-fetch` client once the WorkBench API exposes referral and extraction-schema endpoints. The schema panel's "Build fields in the app" action is an unwired prop pending wireframe `2a`. Row click (`onOpenReferral`) is unwired pending the review screen (`1e`).

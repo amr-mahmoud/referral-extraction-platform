@@ -6,7 +6,9 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   Sse,
+  UseGuards,
 } from '@nestjs/common';
 import { MessageEvent } from '@nestjs/common';
 import {
@@ -15,39 +17,47 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { Request } from 'express';
 import { Observable } from 'rxjs';
-import { ClinicService } from '../../../application/clinic/clinic.service';
+import { ApplicationService } from '../../../application/application.service';
 import { NotImplementedError } from '../../../application/errors/not-implemented.error';
-import { ExtractionSchemaService } from '../../../application/extraction-schema/extraction-schema.service';
+import { TokenClaims } from '../../../application/ports/token.port';
 import { Paginated } from '../../../application/ports/referral-repository.port';
-import { ReferralService } from '../../../application/referral/referral.service';
-import { Clinic } from '../../../domain/clinic/clinic.aggregate';
 import { ExtractionSchema } from '../../../domain/extraction-schema/extraction-schema.aggregate';
 import { Referral } from '../../../domain/referral/referral.aggregate';
+import { ClinicId } from '../../../domain/shared/ids/clinic-id.value-object';
+import { ClinicDto } from '../auth/dto/auth-response.dto';
+import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { CreateExtractionSchemaRequest } from './dto/create-extraction-schema.request.dto';
 import { CreateReferralRequest } from './dto/create-referral.request.dto';
 import { ListReferralsQueryDto } from './dto/list-referrals.query.dto';
 import { UpdateReferralRequest } from './dto/update-referral.request.dto';
 
+interface AuthenticatedRequest extends Request {
+  user: TokenClaims;
+}
+
 @ApiBearerAuth('JWT-auth')
 @Controller()
 export class ClinicsController {
   public constructor(
-    private readonly clinicService: ClinicService,
-    private readonly extractionSchemaService: ExtractionSchemaService,
-    private readonly referralService: ReferralService,
+    private readonly applicationService: ApplicationService,
   ) {}
 
   @ApiTags('Clinics')
+  @UseGuards(JwtAuthGuard)
   @Get('clinics/me')
   @ApiOperation({ summary: 'Get current authenticated clinic profile' })
-  @ApiResponse({ status: 200, description: 'Clinic profile details' })
+  @ApiResponse({ status: 200, description: 'Clinic profile details', type: ClinicDto })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  public me(): Promise<Clinic> {
-    throw new NotImplementedError('ClinicsController.me');
+  public async me(@Req() req: AuthenticatedRequest): Promise<ClinicDto> {
+    const clinicId = ClinicId.from(req.user.clinicId);
+    const clinic = await this.applicationService.getClinic(clinicId);
+    return ClinicDto.fromDomain(clinic);
   }
 
   @ApiTags('Extraction Schemas')
+  @UseGuards(JwtAuthGuard)
   @Post('extraction-schemas')
   @ApiOperation({ summary: 'Publish a new custom extraction schema version' })
   @ApiResponse({ status: 201, description: 'Extraction schema published' })
@@ -59,6 +69,7 @@ export class ClinicsController {
   }
 
   @ApiTags('Extraction Schemas')
+  @UseGuards(JwtAuthGuard)
   @Get('extraction-schemas')
   @ApiOperation({ summary: 'List all extraction schema versions for authenticated clinic' })
   @ApiResponse({ status: 200, description: 'List of extraction schema versions' })
@@ -67,6 +78,7 @@ export class ClinicsController {
   }
 
   @ApiTags('Referrals')
+  @UseGuards(JwtAuthGuard)
   @Post('referrals')
   @ApiOperation({ summary: 'Create new referral and issue presigned S3 upload URL' })
   @ApiResponse({ status: 201, description: 'Referral created and presigned S3 URL issued' })
@@ -78,6 +90,7 @@ export class ClinicsController {
   }
 
   @ApiTags('Referrals')
+  @UseGuards(JwtAuthGuard)
   @Get('referrals')
   @ApiOperation({ summary: 'List paginated referrals for authenticated clinic' })
   @ApiResponse({ status: 200, description: 'Paginated list of referrals' })
@@ -89,6 +102,7 @@ export class ClinicsController {
   }
 
   @ApiTags('Referrals')
+  @UseGuards(JwtAuthGuard)
   @Get('referrals/:id')
   @ApiOperation({ summary: 'Get referral detail by ID with extracted payload and bounding boxes' })
   @ApiResponse({ status: 200, description: 'Referral detail record' })
@@ -99,6 +113,7 @@ export class ClinicsController {
   }
 
   @ApiTags('Referrals')
+  @UseGuards(JwtAuthGuard)
   @Patch('referrals/:id')
   @ApiOperation({ summary: 'Correct/Update extracted referral field values and bounding boxes' })
   @ApiResponse({ status: 200, description: 'Referral record updated' })

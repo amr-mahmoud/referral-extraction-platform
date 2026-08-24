@@ -3,8 +3,9 @@ import {
   ExecutionContext,
   Inject,
   Injectable,
+  UnauthorizedException,
 } from '@nestjs/common';
-import { NotImplementedError } from '../../../application/errors/not-implemented.error';
+import { Request } from 'express';
 import {
   TOKEN_PORT,
   type TokenPort,
@@ -17,7 +18,24 @@ export class JwtAuthGuard implements CanActivate {
   ) {}
 
   public canActivate(context: ExecutionContext): boolean {
-    void context;
-    throw new NotImplementedError('JwtAuthGuard.canActivate');
+    const request = context.switchToHttp().getRequest<Request>();
+    const authHeader = request.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      throw new UnauthorizedException('Missing or invalid Authorization header');
+    }
+
+    const token = authHeader.split(' ')[1];
+    if (!token) {
+      throw new UnauthorizedException('Bearer token is missing');
+    }
+
+    try {
+      const claims = this.tokenService.verify(token);
+      (request as Request & { user?: typeof claims }).user = claims;
+      return true;
+    } catch {
+      throw new UnauthorizedException('Invalid or expired authentication token');
+    }
   }
 }

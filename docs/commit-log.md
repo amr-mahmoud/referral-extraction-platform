@@ -253,3 +253,39 @@ This document serves as the centralized commit history and decision log for the 
 
 - **Modified:** `docker-compose.yml`, `.env`, `.env.example`, `Makefile`, `docs/commit-log.md`
 - **Impact:** Enforces standard port 5432 across Docker Compose, local environment configs, and Makefile reset automation.
+
+---
+
+## v0.0.15 | 2026-08-24 | fix
+
+**Category:** Infrastructure Services  
+**Summary:** Map Docker Postgres container to host port 5434 to resolve P1010 connection collision with native macOS Postgres.  
+**SuggestedCommitMessage:** fix: map Docker Postgres host port to 5434 to prevent native macOS Postgres collision | Infrastructure Services
+
+### 🧠 Logic & Decisions
+
+- **The Why:** Fixed `PrismaClientInitializationError: User was denied access on the database (not available)` (error code `P1010`) occurring during `PrismaService.onModuleInit()`. Native PostgreSQL running on macOS (PID 744) listens on port 5432 and intercepts `localhost:5432` connections before they reach Docker Desktop. Configured `POSTGRES_PORT=5434` host mapping in `docker-compose.yml`, `.env`, `.env.example`, and `Makefile`. Containers continue communicating internally on port 5432 inside Docker Compose networks.
+- **State Change:** Re-mapped Docker Postgres host port to 5434, eliminating connection collisions with native macOS Postgres.
+
+### 🔗 Dependencies
+
+- **Modified:** `docker-compose.yml`, `.env`, `.env.example`, `Makefile`, `docs/commit-log.md`
+- **Impact:** `npm run dev:api` and `make dev` connect directly to Docker Postgres on port 5434 with zero P1010 authorization errors.
+
+---
+
+## v0.0.16 | 2026-08-24 | feat
+
+**Category:** Interface Services  
+**Summary:** Refine frontend auth view layout padding and remove remember session checkbox from sign in form.  
+**SuggestedCommitMessage:** feat: refine auth panel layout spacing and remove remember session checkbox | Interface Services
+
+### 🧠 Logic & Decisions
+
+- **The Why:** Adjusted AuthPanel and AuthBrandPanel responsive padding in `apps/web/src/features/auth/AuthPanel/AuthPanel.styles.ts` (`xl:pt-36`) and `AuthBrandPanel.styles.ts` (`py-14`), and simplified `SignInForm` by removing the redundant remember session checkbox component.
+- **State Change:** Streamlined authentication user interface layout and form inputs.
+
+### 🔗 Dependencies
+
+- **Modified:** `apps/web/src/features/auth/AuthPanel/AuthPanel.styles.ts`, `apps/web/src/features/auth/AuthBrandPanel/AuthBrandPanel.styles.ts`, `apps/web/src/features/auth/SignInForm/index.tsx`, `docs/commit-log.md`
+- **Impact:** Improves auth page visual alignment and simplifies user sign-in workflow.

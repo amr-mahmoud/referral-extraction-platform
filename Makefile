@@ -102,17 +102,17 @@ docker-give-perms: ## Fix ownership permissions on ~/.docker and repository work
 	@echo "--> Restoring user file ownership on ~/.docker and workspace..."
 	sudo chown -R $$(whoami) ~/.docker .
 
-db-reset: ## Remove DB container, purge data volume, spin up DB container at port 5432, and apply schema
+db-reset: ## Remove DB container, purge data volume, spin up DB container at port 5434, and apply schema
 	@echo "--> Resetting database container and purging volume..."
 	-docker compose stop postgres 2>/dev/null || true
 	-docker compose rm -f -v postgres 2>/dev/null || true
 	-docker volume rm -f referral-extraction-platform_postgres_data 2>/dev/null || true
-	@echo "--> Starting database container on port 5432..."
+	@echo "--> Starting database container on port 5434..."
 	docker compose up -d postgres
 	@echo "--> Waiting for Postgres database to become healthy..."
 	@until [ "$$(docker inspect --format='{{.State.Health.Status}}' referral-postgres 2>/dev/null)" = "healthy" ]; do sleep 1; done
 	@sleep 2
-	@echo "--> Applying database schema on port 5432..."
+	@echo "--> Applying database schema on port 5434..."
 	@docker compose exec -T postgres psql -U referral -d referral_extraction -c '\
 		CREATE TABLE IF NOT EXISTS "clinics" (\
 			"id" TEXT NOT NULL,\
@@ -149,7 +149,7 @@ db-reset: ## Remove DB container, purge data volume, spin up DB container at por
 		);\
 		CREATE UNIQUE INDEX IF NOT EXISTS "clinics_username_key" ON "clinics"("username");\
 	'
-	@echo "--> Database reset complete. Postgres is running on port 5432."
+	@echo "--> Database reset complete. Postgres is running on port 5434."
 
 
 

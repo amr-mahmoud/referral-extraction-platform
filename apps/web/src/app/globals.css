@@ -1,26 +1,31 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
+/* Font family is wired to the next/font variable set on <html> in app/layout.tsx. */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-plus-jakarta), ui-sans-serif, system-ui, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* Workbench palette — sourced from the "Referral Workbench Wireframes" design canvas.
+   Light-only by design: the wireframes commit to a single look. */
+@theme {
+  --color-canvas: #f4f4fa;
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  --color-ink: #17163a;
+  --color-ink-soft: #4b4a70;
+  --color-muted: #6e6c8f;
+  --color-faint: #a5a3bf;
+
+  --color-brand: #6357f0;
+  --color-brand-deep: #4a3fd0;
+  --color-brand-tint: #efeffe;
+  --color-brand-mist: #f2f2fb;
+
+  --color-field: #fbfbff;
+  --color-field-border: #ddddee;
+  --color-control-border: #ccccdf;
+  --color-hairline: #ececf6;
+  --color-hairline-strong: #e6e5f4;
+
+  --color-danger: #b23c2a;
+  --color-danger-border: #f2c9c4;
 }

@@ -25,6 +25,10 @@ npm-debug.log*
 !/docs/commit-log.md
 
 
+.agent/
+AGENTS.md
+Claude.md
+
 
 
 

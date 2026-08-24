@@ -235,3 +235,21 @@ This document serves as the centralized commit history and decision log for the 
 
 - **Modified:** `Makefile`, `docker-compose.yml`, `.env.example`, `apps/workbench-api/src/application/ports/*`, `apps/workbench-api/src/infrastructure/*`, `docs/commit-log.md`
 - **Impact:** `make db-reset` resets Postgres container on port 5435 and syncs Prisma schema with zero manual steps.
+
+---
+
+## v0.0.14 | 2026-08-24 | refactor
+
+**Category:** Infrastructure Services  
+**Summary:** Enforce standard Postgres port 5432 across docker-compose, environment variables, and Makefile db-reset target.  
+**SuggestedCommitMessage:** refactor: set Postgres port 5432 default across Docker Compose and environment config | Infrastructure Services
+
+### 🧠 Logic & Decisions
+
+- **The Why:** Reverted all database port mappings to standard port `5432` across `docker-compose.yml`, `.env`, `.env.example`, and `Makefile`. Updated `make db-reset` to execute schema initialization DDL directly inside the container via `docker compose exec`, guaranteeing zero host-to-container port conflicts and healthy database setup.
+- **State Change:** Aligned all database connection URIs and port mappings to standard default port 5432.
+
+### 🔗 Dependencies
+
+- **Modified:** `docker-compose.yml`, `.env`, `.env.example`, `Makefile`, `docs/commit-log.md`
+- **Impact:** Enforces standard port 5432 across Docker Compose, local environment configs, and Makefile reset automation.

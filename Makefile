@@ -102,18 +102,54 @@ docker-give-perms: ## Fix ownership permissions on ~/.docker and repository work
 	@echo "--> Restoring user file ownership on ~/.docker and workspace..."
 	sudo chown -R $$(whoami) ~/.docker .
 
-db-reset: ## Remove DB container, purge data volume, spin up DB container at port 5435, and push/apply Prisma schema
+db-reset: ## Remove DB container, purge data volume, spin up DB container at port 5432, and apply schema
 	@echo "--> Resetting database container and purging volume..."
 	-docker compose stop postgres 2>/dev/null || true
 	-docker compose rm -f -v postgres 2>/dev/null || true
 	-docker volume rm -f referral-extraction-platform_postgres_data 2>/dev/null || true
-	@echo "--> Starting database container on port 5435..."
+	@echo "--> Starting database container on port 5432..."
 	docker compose up -d postgres
 	@echo "--> Waiting for Postgres database to become healthy..."
 	@until [ "$$(docker inspect --format='{{.State.Health.Status}}' referral-postgres 2>/dev/null)" = "healthy" ]; do sleep 1; done
-	@echo "--> Applying Prisma schema to database on port 5435..."
-	DATABASE_URL="postgresql://referral:referral@localhost:5435/referral_extraction" npm run prisma:push
-	@echo "--> Database reset complete. Postgres is running on port 5435."
+	@sleep 2
+	@echo "--> Applying database schema on port 5432..."
+	@docker compose exec -T postgres psql -U referral -d referral_extraction -c '\
+		CREATE TABLE IF NOT EXISTS "clinics" (\
+			"id" TEXT NOT NULL,\
+			"clinic_name" TEXT NOT NULL,\
+			"username" TEXT NOT NULL,\
+			"password_hash" TEXT NOT NULL,\
+			"default_extraction_schema_id" TEXT,\
+			"created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,\
+			"updated_at" TIMESTAMP(3) NOT NULL,\
+			CONSTRAINT "clinics_pkey" PRIMARY KEY ("id")\
+		);\
+		CREATE TABLE IF NOT EXISTS "referrals" (\
+			"id" TEXT NOT NULL,\
+			"patient_name" TEXT NOT NULL,\
+			"clinic_id" TEXT NOT NULL,\
+			"extraction_schema_id" TEXT,\
+			"status" TEXT NOT NULL DEFAULT '\''PENDING'\'',\
+			"s3_bucket" TEXT NOT NULL,\
+			"s3_object_key" TEXT NOT NULL,\
+			"extracted_payload" JSONB,\
+			"failed_reason" TEXT,\
+			"created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,\
+			"updated_at" TIMESTAMP(3) NOT NULL,\
+			CONSTRAINT "referrals_pkey" PRIMARY KEY ("id")\
+		);\
+		CREATE TABLE IF NOT EXISTS "extraction_schemas" (\
+			"id" TEXT NOT NULL,\
+			"clinic_id" TEXT NOT NULL,\
+			"version" INTEGER NOT NULL DEFAULT 1,\
+			"schema_definition" JSONB NOT NULL,\
+			"created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,\
+			"updated_at" TIMESTAMP(3) NOT NULL,\
+			CONSTRAINT "extraction_schemas_pkey" PRIMARY KEY ("id")\
+		);\
+		CREATE UNIQUE INDEX IF NOT EXISTS "clinics_username_key" ON "clinics"("username");\
+	'
+	@echo "--> Database reset complete. Postgres is running on port 5432."
 
 
 

@@ -1,98 +1,122 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Agent Worker
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+> Lives at `worker-agent/` in the monorepo, alongside `workbench-api/` (NestJS) and `client/` (Next.js).
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## What this is
 
-## Description
+The Agent Worker is a standalone TypeScript process — no framework, no HTTP surface — that
+turns a completed S3 upload into a structured, reviewable referral. Its entire lifecycle is:
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+**pull a message → download a PDF → call Gemini → write a row → delete the message.**
 
-## Project setup
+It has no routes, no sessions, no knowledge of who's connected to the frontend, and no
+opinion about how results reach the browser. It updates Postgres; the WorkBench API
+(via `LISTEN`/`NOTIFY` and SSE) is what turns that write into something the client sees.
 
-```bash
-$ npm install
+## Why not NestJS or Express
+
+Both are frameworks built around handling inbound HTTP requests — routing, middleware,
+guards, a request/response lifecycle. This service never receives a request; it only makes
+outbound calls (SQS, S3, Gemini, Postgres) in a loop. Adding either would mean bootstrapping
+machinery this component structurally doesn't use. The WorkBench API is deliberately NestJS,
+where that machinery earns its keep — the split is a judgment call about matching the tool
+to what each service actually does, not an oversight of the assignment's "NestJS" stack line.
+
+## Processing flow
+
+1. Long-poll SQS (`WaitTimeSeconds: 20`) for S3 `ObjectCreated` event notifications.
+2. Parse the event to recover `bucket`, `key`, and the `referral_id` embedded in the key
+   (`referrals/{clinic_id}/{referral_id}.pdf`) — no extra DB lookup needed to identify the row.
+3. Set `Referral.status = PROCESSING`.
+4. Run a cheap pre-check: valid PDF, page count and size sane, quick "is this a referral"
+   pass. Fails here → `status = REJECTED`, `error_message` set, message deleted, done.
+5. Download the PDF bytes from S3.
+6. Resolve the extraction schema for this referral: referral-specific override → clinic's
+   `default_extraction_schema_id` → null (LLM default field set). The resolved id is what
+   gets persisted on the referral row — not just whatever was requested at upload time.
+7. Call Gemini 2.5 multimodal with the PDF and the resolved schema, requesting the nested
+   `{ value, page_number, bounding_box }` shape per field.
+8. Write `extracted_payload` (JSONB) and `status = COMPLETED` to Postgres.
+9. Delete the SQS message **only after** the DB write succeeds.
+10. On any exception in steps 4–8: write `status = FAILED` with `error_message`, and leave
+    the message alone — SQS's visibility timeout will redeliver it, up to `maxReceiveCount`,
+    after which it lands in the DLQ for manual inspection instead of looping forever.
+
+## Status values this service writes
+
+| Status | Meaning |
+|---|---|
+| `PROCESSING` | Picked up off the queue, work in progress |
+| `COMPLETED` | Extraction succeeded, `extracted_payload` populated |
+| `FAILED` | System/processing error (timeout, malformed response, DB issue) — retryable |
+| `REJECTED` | Content-level rejection (not a valid referral, unreadable) — not retried |
+
+(`AWAITING_UPLOAD` and `PENDING` are set by the WorkBench API before this service ever
+sees the referral.)
+
+## Bounding boxes: graceful degradation
+
+`bounding_box` is treated as **nullable per field**. If Gemini returns a confident location,
+the review UI can highlight it; if not, the extracted value still displays normally, just
+without click-to-highlight for that field. A failure to ground one field never fails the
+whole extraction.
+
+## Environment variables
+
+| Variable | Purpose |
+|---|---|
+| `AWS_REGION` | Region for SQS + S3 clients |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | Scoped IAM credentials (S3 read, SQS consume only) |
+| `SQS_QUEUE_URL` | Queue to poll |
+| `S3_BUCKET` | Bucket holding uploaded referral PDFs |
+| `DATABASE_URL` | Postgres connection string (same schema as `workbench-api`) |
+| `GEMINI_API_KEY` | Gemini 2.5 multimodal API key |
+| `MAX_CONCURRENT_MESSAGES` | `ReceiveMessage` batch size (default: 5) |
+| `POLL_WAIT_SECONDS` | Long-poll duration (default: 20) |
+
+## Project structure
+
+```
+worker-agent/
+  src/
+    index.ts        # entry point, poll loop
+    extractor.ts     # schema resolution + Gemini call
+    s3.ts            # download helper
+    db.ts            # Prisma client, status writes
+    healthcheck.ts   # optional node:http liveness endpoint for container orchestration
+  package.json
+  tsconfig.json
+  Dockerfile
+  .env.example
 ```
 
-## Compile and run the project
+`db.ts` imports the same generated Prisma client as `workbench-api` (shared `prisma/schema.prisma`
+at the repo root) — one schema, one source of truth, no duplicated model definitions between
+the two services.
+
+## Running locally
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+cd worker-agent
+cp .env.example .env   # fill in AWS creds, queue URL, bucket, DB URL, Gemini key
+npm install
+npm run dev
 ```
 
-## Run tests
+Requires the SQS queue and S3 bucket to already exist and be wired together (see the root
+`infra/setup-aws.sh`), and Postgres reachable at `DATABASE_URL` (the root `docker-compose.yml`
+starts it if you're running everything locally).
 
-```bash
-# unit tests
-$ npm run test
+The worker holds no listening port by default. If deploying to an orchestrator that expects
+a liveness probe, `healthcheck.ts` starts a one-route `node:http` server (not Express) purely
+to answer `200 ok`.
 
-# e2e tests
-$ npm run test:e2e
+## Assumptions & limitations
 
-# test coverage
-$ npm run test:cov
-```
-
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+- Single-instance polling for the demo; horizontal scaling is "run more copies of this same
+  process," since SQS consumer competition handles message distribution for free — no
+  coordination logic needed in the worker itself.
+- No built-in rate limiting against the Gemini API beyond SQS's natural backpressure (a slow
+  consumer just means messages queue longer, not that anything is dropped).
+- Bounding-box grounding accuracy on low-quality fax scans hasn't been validated at scale;
+  treated as best-effort per the graceful-degradation approach above, not a guarantee.

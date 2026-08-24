@@ -133,15 +133,51 @@ This document serves as the centralized commit history and decision log for the 
 ## v0.0.8 | 2026-08-24 | build
 
 **Category:** Infrastructure Services  
-**Summary:** Add Makefile permission repair target (make docker-fix-perms / make fix-perms) for restoring ~/.docker and workspace ownership.  
+**Summary:** Add Makefile permission repair target (make docker-give-perms / make fix-perms) for restoring ~/.docker and workspace ownership.  
 **SuggestedCommitMessage:** build: add make fix-perms target for Docker buildx ownership repair | Infrastructure Services
 
 ### 🧠 Logic & Decisions
 
-- **The Why:** Added `make docker-fix-perms` / `make fix-perms` target (`sudo chown -R $(whoami) ~/.docker .`) to resolve Docker Desktop buildx permission errors (`~/.docker/buildx/activity/desktop-linux: permission denied`).
+- **The Why:** Added `make docker-give-perms` / `make fix-perms` target (`sudo chown -R $(whoami) ~/.docker .`) to resolve Docker Desktop buildx permission errors (`~/.docker/buildx/activity/desktop-linux: permission denied`).
 - **State Change:** Added Makefile permission restoration target for Docker buildx user environment repairs.
 
 ### 🔗 Dependencies
 
 - **Modified:** `Makefile`, `docs/commit-log.md`
 - **Impact:** Resolves Docker buildx permission errors with a single `make fix-perms` command.
+
+---
+
+## v0.0.9 | 2026-08-24 | build
+
+**Category:** Infrastructure Services  
+**Summary:** Add make targets (docker-dev-backend / docker-dev-api) to build and run the NestJS Workbench API container in Docker dev mode.  
+**SuggestedCommitMessage:** build: add docker-dev-backend target to Makefile | Infrastructure Services
+
+### 🧠 Logic & Decisions
+
+- **The Why:** Added `make docker-dev-backend` (and `make docker-dev-api` alias) to allow developers to build and start specifically the NestJS Workbench API container and its backend database dependencies (`postgres`, `redis`) in dev mode with live logs.
+- **State Change:** Added targeted backend container dev runner in Makefile.
+
+### 🔗 Dependencies
+
+- **Modified:** `Makefile`, `docs/commit-log.md`
+- **Impact:** Allows targeted development of the backend container service without building the frontend container.
+
+---
+
+## v0.0.10 | 2026-08-24 | feat
+
+**Category:** System Architecture  
+**Summary:** Implement Clean DDD architecture layers, domain aggregates, and dependency injection wiring in Workbench API.  
+**SuggestedCommitMessage:** feat: implement Clean DDD architecture layers and domain aggregates in workbench-api | System Architecture
+
+### 🧠 Logic & Decisions
+
+- **The Why:** Structured `apps/workbench-api` into Hexagonal / Clean Architecture boundaries (`domain/`, `application/`, `infrastructure/`, `interface/`). Encapsulated `Clinic`, `Referral`, and `ExtractionSchema` aggregate roots with zero framework dependencies.
+- **State Change:** Wired NestJS dependency injection modules (`ApplicationModule`, `InfrastructureModule`, `InterfaceModule`), mapped HTTP controllers, resolved port dependency tokens (`TOKEN_PORT`, `CLINIC_REPOSITORY_PORT`, `REFERRAL_REPOSITORY_PORT`), and established strict aggregate boundaries.
+
+### 🔗 Dependencies
+
+- **Modified:** `apps/workbench-api/*`, `Makefile`, `apps/web/README.md`, `.agent/rules/frontend-next-file-structure.md`, `docs/commit-log.md`
+- **Impact:** Establishes pure Domain-Driven Design foundation for auth, referral review, and schema management services in Workbench API.

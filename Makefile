@@ -9,7 +9,7 @@
 #   4. postgres/redis- Local data services (Docker Compose)
 # ==============================================================================
 
-.PHONY: help install dev dev-web dev-api dev-worker kill stop kill-all build build-web build-api build-worker docker-up docker-dev docker-down docker-logs docker-clean docker-fix-perms fix-perms lint clean
+.PHONY: help install dev dev-web dev-api dev-worker kill stop kill-all build build-web build-api build-worker docker-up docker-dev docker-dev-backend docker-dev-api docker-down docker-logs docker-clean docker-give-perms fix-perms lint clean
 
 # Default target when running 'make'
 .DEFAULT_GOAL := help
@@ -78,6 +78,13 @@ docker-up: ## Build and start all 5 Docker services (Postgres, Redis, Web, API, 
 docker-dev: ## Build and start all Docker services attached with live output logs
 	@echo "--> Starting Docker Compose stack with live output logs..."
 	docker compose up --build
+
+docker-dev-backend: ## Build and start NestJS Workbench API container in dev mode with live logs
+	@echo "--> Starting NestJS Workbench API container (workbench-api)..."
+	docker compose up --build workbench-api
+
+
+
 
 docker-down: ## Gracefully stop and remove Docker Compose containers and networks
 	@echo "--> Stopping Docker Compose stack..."

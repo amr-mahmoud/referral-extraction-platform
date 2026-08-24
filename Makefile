@@ -9,7 +9,7 @@
 #   4. postgres/redis- Local data services (Docker Compose)
 # ==============================================================================
 
-.PHONY: help install dev dev-web dev-api dev-worker kill stop kill-all build build-web build-api build-worker docker-up docker-dev docker-dev-backend docker-dev-api docker-down docker-logs docker-clean docker-give-perms fix-perms lint clean
+.PHONY: help install dev dev-web dev-api dev-worker kill stop kill-all build build-web build-api build-worker docker-up docker-dev docker-dev-backend docker-dev-api docker-down docker-logs docker-clean docker-give-perms fix-perms db-reset lint clean
 
 # Default target when running 'make'
 .DEFAULT_GOAL := help
@@ -101,6 +101,19 @@ docker-clean: ## Stop Docker containers and purge volumes (wipes Postgres/Redis 
 docker-give-perms: ## Fix ownership permissions on ~/.docker and repository workspace files
 	@echo "--> Restoring user file ownership on ~/.docker and workspace..."
 	sudo chown -R $$(whoami) ~/.docker .
+
+db-reset: ## Remove DB container, purge data volume, spin up DB container at port 5435, and push/apply Prisma schema
+	@echo "--> Resetting database container and purging volume..."
+	-docker compose stop postgres 2>/dev/null || true
+	-docker compose rm -f -v postgres 2>/dev/null || true
+	-docker volume rm -f referral-extraction-platform_postgres_data 2>/dev/null || true
+	@echo "--> Starting database container on port 5435..."
+	docker compose up -d postgres
+	@echo "--> Waiting for Postgres database to become healthy..."
+	@until [ "$$(docker inspect --format='{{.State.Health.Status}}' referral-postgres 2>/dev/null)" = "healthy" ]; do sleep 1; done
+	@echo "--> Applying Prisma schema to database on port 5435..."
+	DATABASE_URL="postgresql://referral:referral@localhost:5435/referral_extraction" npm run prisma:push
+	@echo "--> Database reset complete. Postgres is running on port 5435."
 
 
 

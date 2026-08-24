@@ -4,9 +4,9 @@ import { FieldDefinition } from '../../domain/extraction-schema/field-definition
 import { ClinicId } from '../../domain/shared/ids/clinic-id.value-object';
 import { NotImplementedError } from '../errors/not-implemented.error';
 import {
-  EXTRACTION_SCHEMA_REPOSITORY_PORT,
-  type ExtractionSchemaRepositoryPort,
-} from '../ports/extraction-schema-repository.port';
+  CLINIC_REPOSITORY_PORT,
+  type ClinicRepositoryPort,
+} from '../ports/clinic-repository.port';
 
 export interface CreateExtractionSchemaCommand {
   clinicId: ClinicId;
@@ -16,8 +16,8 @@ export interface CreateExtractionSchemaCommand {
 @Injectable()
 export class ExtractionSchemaService {
   public constructor(
-    @Inject(EXTRACTION_SCHEMA_REPOSITORY_PORT)
-    private readonly schemaRepository: ExtractionSchemaRepositoryPort,
+    @Inject(CLINIC_REPOSITORY_PORT)
+    private readonly clinicRepository: ClinicRepositoryPort,
   ) {}
 
   public create(

@@ -7,9 +7,9 @@ import {
   type ClinicRepositoryPort,
 } from '../ports/clinic-repository.port';
 import {
-  PASSWORD_HASHER_PORT,
-  type PasswordHasherPort,
-} from '../ports/password-hasher.port';
+  ENCRYPTION_PORT,
+  type EncryptionPort,
+} from '../ports/encryption.port';
 import { TOKEN_PORT, type TokenPort } from '../ports/token.port';
 
 export interface ClinicSignupCommand {
@@ -33,8 +33,8 @@ export class ClinicService {
   public constructor(
     @Inject(CLINIC_REPOSITORY_PORT)
     private readonly clinicRepository: ClinicRepositoryPort,
-    @Inject(PASSWORD_HASHER_PORT)
-    private readonly passwordHasher: PasswordHasherPort,
+    @Inject(ENCRYPTION_PORT)
+    private readonly encryptionService: EncryptionPort,
     @Inject(TOKEN_PORT) private readonly tokenService: TokenPort,
   ) {}
 

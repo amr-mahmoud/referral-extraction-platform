@@ -6,10 +6,6 @@ import { ExtractionSchemaId } from '../../domain/shared/ids/extraction-schema-id
 import { ReferralId } from '../../domain/shared/ids/referral-id.value-object';
 import { NotImplementedError } from '../errors/not-implemented.error';
 import {
-  EXTRACTION_SCHEMA_REPOSITORY_PORT,
-  type ExtractionSchemaRepositoryPort,
-} from '../ports/extraction-schema-repository.port';
-import {
   Paginated,
   REFERRAL_REPOSITORY_PORT,
   type ReferralRepositoryPort,
@@ -39,8 +35,6 @@ export class ReferralService {
   public constructor(
     @Inject(REFERRAL_REPOSITORY_PORT)
     private readonly referralRepository: ReferralRepositoryPort,
-    @Inject(EXTRACTION_SCHEMA_REPOSITORY_PORT)
-    private readonly schemaRepository: ExtractionSchemaRepositoryPort,
     @Inject(STORAGE_PORT) private readonly storage: StoragePort,
   ) {}
 

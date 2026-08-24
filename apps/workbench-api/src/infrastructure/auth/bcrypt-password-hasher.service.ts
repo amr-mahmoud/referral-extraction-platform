@@ -1,20 +1,20 @@
 import { Injectable } from '@nestjs/common';
 import { NotImplementedError } from '../../application/errors/not-implemented.error';
-import { PasswordHasherPort } from '../../application/ports/password-hasher.port';
+import { EncryptionPort } from '../../application/ports/encryption.port';
 
 @Injectable()
-export class BcryptPasswordHasherService implements PasswordHasherPort {
-  public hash(plainPassword: string): Promise<string> {
-    void plainPassword;
-    throw new NotImplementedError('BcryptPasswordHasherService.hash');
+export class BcryptEncryptionService implements EncryptionPort {
+  public hash(plainText: string): Promise<string> {
+    void plainText;
+    throw new NotImplementedError('BcryptEncryptionService.hash');
   }
 
   public verify(
-    plainPassword: string,
-    hashedPassword: string,
+    plainText: string,
+    hashedText: string,
   ): Promise<boolean> {
-    void plainPassword;
-    void hashedPassword;
-    throw new NotImplementedError('BcryptPasswordHasherService.verify');
+    void plainText;
+    void hashedText;
+    throw new NotImplementedError('BcryptEncryptionService.verify');
   }
 }

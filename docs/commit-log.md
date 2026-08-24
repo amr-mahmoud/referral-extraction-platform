@@ -217,3 +217,21 @@ This document serves as the centralized commit history and decision log for the 
 
 - **Modified:** `package.json`, `package-lock.json`, `prisma/schema.prisma`, `apps/workbench-api/src/infrastructure/repository/prisma.service.ts`, `apps/workbench-api/README.md`, `docs/commit-log.md`
 - **Impact:** Establishes standard Prisma database connectivity for `Clinic`, `Referral`, and `ExtractionSchema` aggregate persistence.
+
+---
+
+## v0.0.13 | 2026-08-24 | refactor
+
+**Category:** Infrastructure Services  
+**Summary:** Refactor encryption ports, scope aggregate queries, configure Postgres port 5435, and add make db-reset target.  
+**SuggestedCommitMessage:** refactor: simplify repository ports, set Postgres port 5435, and add make db-reset target | Infrastructure Services
+
+### 🧠 Logic & Decisions
+
+- **The Why:** Simplified aggregate persistence boundaries by removing separate `ExtractionSchemaRepositoryPort` (extraction schemas are queried within `Clinic` and `Referral` aggregate contexts). Renamed `PASSWORD_HASHER_PORT` to `ENCRYPTION_PORT` (`EncryptionPort` interface). Configured local Postgres container host port mapping to `5435` in `docker-compose.yml` and `.env.example`, and added `make db-reset` to purge container volumes, wait for Postgres health check on port 5435, and push Prisma schema automatically.
+- **State Change:** Re-mapped Postgres port to 5435, added `make db-reset` script, and streamlined application ports and infrastructure module bindings.
+
+### 🔗 Dependencies
+
+- **Modified:** `Makefile`, `docker-compose.yml`, `.env.example`, `apps/workbench-api/src/application/ports/*`, `apps/workbench-api/src/infrastructure/*`, `docs/commit-log.md`
+- **Impact:** `make db-reset` resets Postgres container on port 5435 and syncs Prisma schema with zero manual steps.

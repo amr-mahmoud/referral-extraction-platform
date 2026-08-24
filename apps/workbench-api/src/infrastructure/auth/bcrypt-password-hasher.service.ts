@@ -10,10 +10,7 @@ export class BcryptEncryptionService implements EncryptionPort {
     return bcrypt.hash(plainText, SALT_ROUNDS);
   }
 
-  public async verify(
-    plainText: string,
-    hashedText: string,
-  ): Promise<boolean> {
+  public async verify(plainText: string, hashedText: string): Promise<boolean> {
     return bcrypt.compare(plainText, hashedText);
   }
 }

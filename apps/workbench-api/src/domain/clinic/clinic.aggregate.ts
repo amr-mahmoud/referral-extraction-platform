@@ -139,10 +139,7 @@ export class Clinic {
     candidatePassword: string,
     verifier: PasswordVerifier,
   ): Promise<void> {
-    const isValid = await verifier(
-      candidatePassword,
-      this._passwordHash.value,
-    );
+    const isValid = await verifier(candidatePassword, this._passwordHash.value);
 
     if (!isValid) {
       throw new ClinicInvalidCredentialsError();

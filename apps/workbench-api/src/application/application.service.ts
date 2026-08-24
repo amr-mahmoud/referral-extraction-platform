@@ -19,10 +19,7 @@ import {
   CLINIC_REPOSITORY_PORT,
   type ClinicRepositoryPort,
 } from './ports/clinic-repository.port';
-import {
-  ENCRYPTION_PORT,
-  type EncryptionPort,
-} from './ports/encryption.port';
+import { ENCRYPTION_PORT, type EncryptionPort } from './ports/encryption.port';
 import {
   Paginated,
   REFERRAL_REPOSITORY_PORT,
@@ -188,9 +185,14 @@ export class ApplicationService {
   ): Promise<ExtractionSchema> {
     try {
       void command;
-      throw new NotImplementedError('ApplicationService.createExtractionSchema');
+      throw new NotImplementedError(
+        'ApplicationService.createExtractionSchema',
+      );
     } catch (error) {
-      if (error instanceof DomainError || error instanceof NotImplementedError) {
+      if (
+        error instanceof DomainError ||
+        error instanceof NotImplementedError
+      ) {
         throw error;
       }
       throw new Error(
@@ -204,11 +206,12 @@ export class ApplicationService {
   ): Promise<ExtractionSchema[]> {
     try {
       void clinicId;
-      throw new NotImplementedError(
-        'ApplicationService.listExtractionSchemas',
-      );
+      throw new NotImplementedError('ApplicationService.listExtractionSchemas');
     } catch (error) {
-      if (error instanceof DomainError || error instanceof NotImplementedError) {
+      if (
+        error instanceof DomainError ||
+        error instanceof NotImplementedError
+      ) {
         throw error;
       }
       throw new Error(
@@ -226,7 +229,10 @@ export class ApplicationService {
       void command;
       throw new NotImplementedError('ApplicationService.createReferral');
     } catch (error) {
-      if (error instanceof DomainError || error instanceof NotImplementedError) {
+      if (
+        error instanceof DomainError ||
+        error instanceof NotImplementedError
+      ) {
         throw error;
       }
       throw new Error(
@@ -242,7 +248,10 @@ export class ApplicationService {
       void query;
       throw new NotImplementedError('ApplicationService.listReferralsByClinic');
     } catch (error) {
-      if (error instanceof DomainError || error instanceof NotImplementedError) {
+      if (
+        error instanceof DomainError ||
+        error instanceof NotImplementedError
+      ) {
         throw error;
       }
       throw new Error(
@@ -260,7 +269,10 @@ export class ApplicationService {
       void referralId;
       throw new NotImplementedError('ApplicationService.getReferralByClinic');
     } catch (error) {
-      if (error instanceof DomainError || error instanceof NotImplementedError) {
+      if (
+        error instanceof DomainError ||
+        error instanceof NotImplementedError
+      ) {
         throw error;
       }
       throw new Error(
@@ -276,7 +288,10 @@ export class ApplicationService {
       void command;
       throw new NotImplementedError('ApplicationService.correctReferral');
     } catch (error) {
-      if (error instanceof DomainError || error instanceof NotImplementedError) {
+      if (
+        error instanceof DomainError ||
+        error instanceof NotImplementedError
+      ) {
         throw error;
       }
       throw new Error(

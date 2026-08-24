@@ -312,6 +312,7 @@ This document serves as the centralized commit history and decision log for the 
 - **Modified:** `apps/workbench-api/**/*`, `.env`, `.env.example`, `docs/commit-log.md`
 - **Impact:** Clinic users can sign up, log in, receive a single JWT token, and access protected endpoints like `GET /clinics/me`.
 
+---
 
 ## v0.0.18 | 2026-08-24 | feat
 
@@ -334,3 +335,21 @@ This document serves as the centralized commit history and decision log for the 
 
 - **Modified:** `apps/web/src/app/globals.css`, `apps/web/src/app/dashboard/page.tsx`, `apps/web/src/apps/dashboard/index.tsx`, `apps/web/src/layouts/DashboardLayout/*`, `apps/web/src/features/navigation/{WorkbenchHeader,ThroughputBanner}/*`, `apps/web/src/features/referrals/{UploadWorkspace,ReferralDropzone,UploadFileChip,ReferralsTable,ReferralRow}/*`, `apps/web/src/features/extraction-schemas/{SchemaSelector,SchemaJsonDrop}/*`, `apps/web/src/shared/{StatusPill,Tabs,RadioCard,Select,BrandLockup,Avatar,Icon}/*`, `apps/web/src/hooks/{use-file-dropzone,use-schema-selection,use-server-action}.ts`, `apps/web/src/managers/*`, `apps/web/src/client/mock-api.ts`, `apps/web/src/server-actions/*`, `apps/web/src/server-hooks/referrals/use-create-referrals.ts`, `apps/web/src/constants/{referrals,extraction-schemas}.ts`, `apps/web/src/types/**`, `apps/web/src/routes/index.ts`, `apps/web/src/lib/format.ts`, `docs/commit-log.md`
 - **Impact:** `client/mock-api.ts` must be replaced with the generated `openapi-fetch` client once the WorkBench API exposes referral and extraction-schema endpoints. The schema panel's "Build fields in the app" action is an unwired prop pending wireframe `2a`. Row click (`onOpenReferral`) is unwired pending the review screen (`1e`).
+
+---
+
+## v0.0.19 | 2026-08-25 | refactor
+
+**Category:** Interface Services  
+**Summary:** Consolidate interface layer DTOs into a centralized index file
+**SuggestedCommitMessage:** refactor: consolidate interface DTO exports | Interface Services
+
+### 🧠 Logic & Decisions
+
+- **The Why:** Re-organized request and response DTO definitions in `apps/workbench-api/src/interface/http/dto/index.dto.ts` into a clean, centralized index module for simpler imports across controllers.
+- **State Change:** Centralized HTTP interface DTO exports.
+
+### 🔗 Dependencies
+
+- **Modified:** `apps/workbench-api/src/interface/http/**/*`, `docs/commit-log.md`
+- **Impact:** Clean interface layer imports and prevents CLAUDE.md from appearing in staged git changes.

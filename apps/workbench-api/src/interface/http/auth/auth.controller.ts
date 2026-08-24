@@ -1,9 +1,12 @@
 import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ApplicationService } from '../../../application/application.service';
-import { AuthResponseDto, ClinicDto } from './dto/auth-response.dto';
-import { LoginRequest } from './dto/login.request.dto';
-import { SignupRequest } from './dto/signup.request.dto';
+import {
+  AuthResponseDto,
+  ClinicDto,
+  LoginRequest,
+  SignupRequest,
+} from '../dto/index.dto';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -17,7 +20,10 @@ export class AuthController {
     description: 'Clinic registered successfully',
     type: AuthResponseDto,
   })
-  @ApiResponse({ status: 400, description: 'Invalid input or password requirements not met' })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid input or password requirements not met',
+  })
   @ApiResponse({ status: 409, description: 'Username is already taken' })
   public async signup(@Body() body: SignupRequest): Promise<AuthResponseDto> {
     const result = await this.applicationService.signup(body);

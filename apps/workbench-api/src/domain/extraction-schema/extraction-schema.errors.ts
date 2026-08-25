@@ -14,6 +14,14 @@ export class ExtractionSchemaValidationError extends DomainError {
   }
 }
 
+export class ExtractionSchemaEmptyError extends DomainError {
+  public readonly code = ExtractionSchemaErrorCode.EMPTY_SCHEMA;
+
+  constructor(message: string) {
+    super(message);
+  }
+}
+
 export class ExtractionSchemaNotFoundError extends DomainError {
   public readonly code = ExtractionSchemaErrorCode.SCHEMA_NOT_FOUND;
 

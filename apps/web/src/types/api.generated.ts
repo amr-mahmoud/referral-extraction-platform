@@ -166,21 +166,37 @@ export interface components {
             password: string;
         };
         SchemaFieldDefinitionDto: {
-            /** @description Unique JSON property key for extracted value. */
-            key: string;
+            /** @description Parameter name / Unique JSON property key for extracted value. */
+            name?: string;
+            key?: string;
             /** @description Human-readable label displayed in UI workbench. */
-            label: string;
+            label?: string;
             /**
              * @description Field data type.
              * @enum {string}
              */
-            type: "text" | "number" | "date" | "boolean" | "select";
-            /** @description Optional guidance prompt for Gemini LLM extractor. */
-            description?: string | null;
+            type?: "text" | "number" | "date" | "boolean" | "select";
+            /** @description Mandatory guidance prompt description for Gemini LLM extractor. */
+            description: string;
         };
         CreateExtractionSchemaRequest: {
             /** @description Array of custom field definitions for LLM extraction. */
             fields: components["schemas"]["SchemaFieldDefinitionDto"][];
+        };
+        ExtractionSchemaDto: {
+            /** @description Unique extraction schema ID (UUID). */
+            id: string;
+            /** @description Owning clinic ID (UUID). */
+            clinicId: string;
+            /** @description Schema version integer. */
+            version: number;
+            /** @description Array of field definitions in this schema. */
+            fields: components["schemas"]["SchemaFieldDefinitionDto"][];
+            /**
+             * Format: date-time
+             * @description Creation timestamp.
+             */
+            createdAt: string;
         };
         CreateReferralRequest: {
             /** @description Name of the patient associated with referral. */
@@ -329,7 +345,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ExtractionSchemaDto"][];
+                };
             };
         };
     };
@@ -351,7 +369,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ExtractionSchemaDto"];
+                };
             };
         };
     };

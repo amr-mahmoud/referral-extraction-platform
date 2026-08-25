@@ -20,21 +20,22 @@ export class FieldDefinition {
   public constructor(
     public readonly key: string,
     public readonly label: string,
-    public readonly type: FieldType,
-    public readonly description: string | null,
+    public readonly description: string,
   ) {
     if (typeof key !== 'string' || key.trim() === '') {
       throw new InvalidFieldDefinitionError(
-        'Field key must be a non-empty string',
+        'Field key/name must be a non-empty string',
       );
     }
     if (typeof label !== 'string' || label.trim() === '') {
       throw new InvalidFieldDefinitionError(
-        'Field label must be a non-empty string',
+        'Field label/name must be a non-empty string',
       );
     }
-    if (!Object.values(FieldType).includes(type)) {
-      throw new InvalidFieldDefinitionError(`Unknown field type '${type}'`);
+    if (typeof description !== 'string' || description.trim() === '') {
+      throw new InvalidFieldDefinitionError(
+        'Field description is required and must be a non-empty string',
+      );
     }
   }
 }

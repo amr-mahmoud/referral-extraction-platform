@@ -9,7 +9,7 @@
 #   4. postgres/redis- Local data services (Docker Compose)
 # ==============================================================================
 
-.PHONY: help install dev dev-web dev-api dev-worker kill stop kill-all build build-web build-api build-worker docker-up docker-dev docker-dev-backend docker-dev-api docker-down docker-logs docker-clean docker-give-perms fix-perms db-reset lint codegen-api clean
+.PHONY: help install dev dev-web dev-api dev-worker kill stop kill-all clean-dev-api kill-api build build-web build-api build-worker docker-up docker-dev docker-dev-backend docker-dev-api docker-down docker-logs docker-clean docker-give-perms fix-perms db-reset lint codegen-api clean
 
 # Default target when running 'make'
 .DEFAULT_GOAL := help
@@ -67,6 +67,15 @@ kill: ## Kill all running local development processes for web, api, and worker a
 stop: kill ## Alias for 'make kill'
 
 kill-all: kill ## Alias for 'make kill'
+
+clean-dev-api: ## Kill any running dev-api process listening on port 8001
+	@echo "--> Killing dev-api processes listening on port 8001..."
+	@-lsof -ti :8001 | xargs kill -9 2>/dev/null || true
+	@-pkill -f "apps/workbench-api" 2>/dev/null || true
+	@-pkill -f "nest start" 2>/dev/null || true
+	@echo "--> Dev-api port 8001 cleared."
+
+kill-api: clean-dev-api ## Alias for 'make clean-dev-api'
 
 # ------------------------------------------------------------------------------
 # 5. DOCKER CONTAINERS & LOCAL STACK

@@ -5,9 +5,8 @@ import {
   ClinicNotFoundError,
   ClinicUsernameTakenError,
 } from '../domain/clinic/clinic.errors';
-import { PasswordHash } from '../domain/clinic/password-hash.value-object';
+import type { FieldDefinitionInput } from '../domain/domain-types/extraction-schema.input';
 import { ExtractionSchema } from '../domain/extraction-schema/extraction-schema.aggregate';
-import { FieldDefinition } from '../domain/extraction-schema/field-definition.value-object';
 import { ExtractedField } from '../domain/referral/extracted-field.value-object';
 import { Referral } from '../domain/referral/referral.aggregate';
 import { ClinicId } from '../domain/shared/ids/clinic-id.value-object';
@@ -50,7 +49,8 @@ export interface AuthResult {
 
 export interface CreateExtractionSchemaCommand {
   clinicId: ClinicId;
-  schemaDefinition: FieldDefinition[];
+  /** Already normalised by the interface layer; see `normalizeExtractionSchemaFields`. */
+  fields: FieldDefinitionInput[];
 }
 
 // ── Referral Commands & Queries ──────────────────────────────────────
@@ -184,15 +184,23 @@ export class ApplicationService {
     command: CreateExtractionSchemaCommand,
   ): Promise<ExtractionSchema> {
     try {
-      void command;
-      throw new NotImplementedError(
-        'ApplicationService.createExtractionSchema',
+      // 1. Find the version this schema supersedes (0 when the clinic has none).
+      const latestVersion = await this.clinicRepository.findLatestSchemaVersion(
+        command.clinicId,
       );
+
+      // 2. Build the aggregate — it validates every field (parameter name +
+      //    mandatory description) and derives the next version itself.
+      const schemaAggregate = new ExtractionSchema({
+        clinicId: command.clinicId,
+        schemaDefinition: command.fields,
+        ...(latestVersion > 0 ? { oldVersion: latestVersion } : { version: 1 }),
+      });
+
+      // 3. Persist domain aggregate via ClinicRepositoryPort
+      return await this.clinicRepository.saveExtractionSchema(schemaAggregate);
     } catch (error) {
-      if (
-        error instanceof DomainError ||
-        error instanceof NotImplementedError
-      ) {
+      if (error instanceof DomainError) {
         throw error;
       }
       throw new Error(
@@ -205,13 +213,11 @@ export class ApplicationService {
     clinicId: ClinicId,
   ): Promise<ExtractionSchema[]> {
     try {
-      void clinicId;
-      throw new NotImplementedError('ApplicationService.listExtractionSchemas');
+      return await this.clinicRepository.listExtractionSchemasByClinic(
+        clinicId,
+      );
     } catch (error) {
-      if (
-        error instanceof DomainError ||
-        error instanceof NotImplementedError
-      ) {
+      if (error instanceof DomainError) {
         throw error;
       }
       throw new Error(

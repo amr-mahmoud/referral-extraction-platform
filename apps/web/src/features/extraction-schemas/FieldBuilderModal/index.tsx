@@ -123,11 +123,7 @@ const FieldBuilderModal = ({
       </div>
 
       <div className={cn(fieldBuilderFooterVariants())}>
-        <Checkbox
-          checked={builder.saveAsSchema}
-          onChange={(event) => builder.setSaveAsSchema(event.target.checked)}
-          label="Save as a reusable schema for this clinic"
-        />
+    
 
         {builder.error ? (
           <p role="alert" className={cn(fieldBuilderErrorVariants())}>
@@ -140,7 +136,7 @@ const FieldBuilderModal = ({
             Cancel
           </Button>
           <Button variant="dark" size="sm" onClick={handleConfirm}>
-            Use these fields
+            Create new Schema
           </Button>
         </div>
       </div>

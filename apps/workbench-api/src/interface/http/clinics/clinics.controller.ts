@@ -23,13 +23,14 @@ import { ApplicationService } from '../../../application/application.service';
 import { NotImplementedError } from '../../../application/errors/not-implemented.error';
 import { TokenClaims } from '../../../application/ports/token.port';
 import { Paginated } from '../../../application/ports/referral-repository.port';
-import { ExtractionSchema } from '../../../domain/extraction-schema/extraction-schema.aggregate';
 import { Referral } from '../../../domain/referral/referral.aggregate';
 import { ClinicId } from '../../../domain/shared/ids/clinic-id.value-object';
+import { normalizeExtractionSchemaFields } from '../dto/extraction-schema-input.mapper';
 import {
   ClinicDto,
   CreateExtractionSchemaRequest,
   CreateReferralRequest,
+  ExtractionSchemaDto,
   ListReferralsQueryDto,
   UpdateReferralRequest,
 } from '../dto/index.dto';
@@ -64,12 +65,21 @@ export class ClinicsController {
   @UseGuards(JwtAuthGuard)
   @Post('extraction-schemas')
   @ApiOperation({ summary: 'Publish a new custom extraction schema version' })
-  @ApiResponse({ status: 201, description: 'Extraction schema published' })
-  public createSchema(
+  @ApiResponse({
+    status: 201,
+    description: 'Extraction schema published',
+    type: ExtractionSchemaDto,
+  })
+  public async createSchema(
+    @Req() req: AuthenticatedRequest,
     @Body() body: CreateExtractionSchemaRequest,
-  ): Promise<ExtractionSchema> {
-    void body;
-    throw new NotImplementedError('ClinicsController.createSchema');
+  ): Promise<ExtractionSchemaDto> {
+    const clinicId = ClinicId.from(req.user.clinicId);
+    const schema = await this.applicationService.createExtractionSchema({
+      clinicId,
+      fields: normalizeExtractionSchemaFields(body.fields),
+    });
+    return ExtractionSchemaDto.fromDomain(schema);
   }
 
   @ApiTags('Extraction Schemas')
@@ -81,9 +91,15 @@ export class ClinicsController {
   @ApiResponse({
     status: 200,
     description: 'List of extraction schema versions',
+    type: [ExtractionSchemaDto],
   })
-  public listSchemas(): Promise<ExtractionSchema[]> {
-    throw new NotImplementedError('ClinicsController.listSchemas');
+  public async listSchemas(
+    @Req() req: AuthenticatedRequest,
+  ): Promise<ExtractionSchemaDto[]> {
+    const clinicId = ClinicId.from(req.user.clinicId);
+    const schemas =
+      await this.applicationService.listExtractionSchemas(clinicId);
+    return schemas.map((schema) => ExtractionSchemaDto.fromDomain(schema));
   }
 
   @ApiTags('Referrals')

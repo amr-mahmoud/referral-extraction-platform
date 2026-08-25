@@ -1,6 +1,13 @@
-import { IsNotEmpty, IsString, Matches, MinLength } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+import {
+  IsDefined,
+  IsNotEmpty,
+  IsString,
+  Matches,
+  MinLength,
+} from 'class-validator';
 import { Clinic } from '../../../domain/clinic/clinic.aggregate';
-import { FieldType } from '../../../domain/extraction-schema/field-definition.value-object';
+import { ExtractionSchema } from '../../../domain/extraction-schema/extraction-schema.aggregate';
 
 export class SignupRequest {
   /** Full name or title of the clinic. */
@@ -72,23 +79,88 @@ export class AuthResponseDto {
   public readonly token!: string;
 }
 
+/**
+ * One field on the wire.
+ *
+ * Deliberately carries no `class-validator` decorators: `fields` below is a
+ * union (array or map) so `@ValidateNested` cannot descend into it without
+ * breaking the map form. Field-level rules — a parameter name is required, a
+ * description is required and non-empty — are enforced once in the domain by
+ * `ExtractionSchema` / `FieldDefinition`, which keeps them true for every
+ * entry point rather than only this one. `DomainExceptionFilter` surfaces
+ * those as 400s.
+ */
 export class SchemaFieldDefinitionDto {
-  /** Unique JSON property key for extracted value. */
-  public readonly key!: string;
+  /** Parameter name for the field, e.g. `policy_number`. */
+  public readonly name?: string;
 
-  /** Human-readable label displayed in UI workbench. */
-  public readonly label!: string;
+  /** Unique JSON property key for the extracted value. Defaults to `name`. */
+  public readonly key?: string;
 
-  /** Field data type. */
-  public readonly type!: FieldType;
+  /** Human-readable label displayed in UI workbench. Defaults to `name`. */
+  public readonly label?: string;
 
-  /** Optional guidance prompt for Gemini LLM extractor. */
-  public readonly description?: string | null;
+  /** Mandatory guidance prompt description for Gemini LLM extractor. */
+  public readonly description!: string;
 }
 
 export class CreateExtractionSchemaRequest {
-  /** Array of custom field definitions for LLM extraction. */
+  /**
+   * Field definitions, accepted in either form:
+   *  - an array of {@link SchemaFieldDefinitionDto} (in-app field builder), or
+   *  - a flat `{ "field_name": "description" }` map (uploaded JSON config).
+   *
+   * Both are normalised by `normalizeExtractionSchemaFields` before reaching
+   * the domain. Kept under this single property because the global
+   * `ValidationPipe` runs with `forbidNonWhitelisted: true` — a bare top-level
+   * map body would be rejected before it ever reached the controller.
+   */
+  @IsDefined({ message: 'fields is required' })
+  @ApiProperty({
+    oneOf: [
+      {
+        type: 'array',
+        items: { $ref: '#/components/schemas/SchemaFieldDefinitionDto' },
+      },
+      { type: 'object', additionalProperties: { type: 'string' } },
+    ],
+    examples: {
+      array: [{ name: 'policy_number', description: 'Top right of page 1' }],
+      map: { policy_number: 'Top right of page 1' },
+    },
+  })
+  public readonly fields!: SchemaFieldDefinitionDto[] | Record<string, string>;
+}
+
+export class ExtractionSchemaDto {
+  /** Unique extraction schema ID (UUID). */
+  public readonly id!: string;
+
+  /** Owning clinic ID (UUID). */
+  public readonly clinicId!: string;
+
+  /** Schema version integer. */
+  public readonly version!: number;
+
+  /** Array of field definitions in this schema. */
   public readonly fields!: SchemaFieldDefinitionDto[];
+
+  /** Creation timestamp. */
+  public readonly createdAt!: Date;
+
+  public static fromDomain(schema: ExtractionSchema): ExtractionSchemaDto {
+    return {
+      id: schema.id,
+      clinicId: schema.clinicId.value,
+      version: schema.version,
+      fields: schema.schemaDefinition.map((f) => ({
+        key: f.key,
+        label: f.label,
+        description: f.description,
+      })),
+      createdAt: schema.createdAt,
+    };
+  }
 }
 
 export class CreateReferralRequest {

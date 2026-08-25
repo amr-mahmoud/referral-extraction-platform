@@ -421,3 +421,28 @@ This document serves as the centralized commit history and decision log for the 
 
 - **Modified:** `apps/web/src/shared/Modal/*`, `apps/web/src/features/extraction-schemas/*`, `apps/web/src/features/referrals/*`, `apps/web/src/hooks/*`, `apps/web/src/managers/*`, `docs/commit-log.md`
 - **Impact:** Clinic staff can build and configure custom extraction schema fields directly in the UI.
+
+---
+
+## v0.0.23 | 2026-08-25 | feat
+
+**Category:** Domain Models  
+**Summary:** Implement ExtractionSchema creation API with strict domain invariant validation for parameter names and required field descriptions, DomainService, DomainModule, and PrismaClinicRepository persistence.  
+**SuggestedCommitMessage:** feat: implement ExtractionSchema creation API with DomainService validation and Prisma persistence | Domain Models
+
+### 🧠 Logic & Decisions
+
+- **The Why:** Implemented `createExtractionSchema` API endpoint following strict Hexagonal Clean Architecture and DDD principles:
+  - **Domain Invariants:** Enforced in `FieldDefinition` value object and `DomainService` that every field in an extraction schema MUST contain a parameter name (`name`/`key`/`label`) AND a **mandatory non-empty description** (`description`). Throw `InvalidFieldDefinitionError` if description or parameter name is missing/empty.
+  - **Domain Types & Service:** Defined `ExtractionSchemaInput` in `domain/domain-types/extraction-schema.input.ts` and created `DomainService` in `domain/services/domain.service.ts` to construct `ExtractionSchema` aggregate instances from raw JSON input.
+  - **Domain Module:** Registered `DomainModule` in `domain/domain.module.ts` exporting `DomainService` for injection into `ApplicationModule`.
+  - **Repository Port & Persistence:** Extended `ClinicRepositoryPort` with `saveExtractionSchema`, `findLatestSchemaVersion`, `findExtractionSchemaById`, and `listExtractionSchemasByClinic`, implemented via `ExtractionSchemaMapper` and `PrismaClinicRepository`.
+  - **Application Service:** Implemented `ApplicationService.createExtractionSchema` wrapped in try/catch handling, calculating incremental schema versions.
+  - **Interface Endpoint:** Implemented guarded `POST /extraction-schemas` in `ClinicsController` (`@UseGuards(JwtAuthGuard)`), extracting authenticated `clinicId` from JWT token payload.
+  - **Testing:** Unit tested `DomainService` validation rules (4 passing Jest tests).
+- **State Change:** Enabled custom extraction schema aggregate creation and persistence with strict domain-level invariant validation.
+
+### 🔗 Dependencies
+
+- **Modified:** `apps/workbench-api/src/domain/**/*`, `apps/workbench-api/src/application/**/*`, `apps/workbench-api/src/infrastructure/**/*`, `apps/workbench-api/src/interface/**/*`, `apps/web/src/types/api.generated.ts`, `docs/commit-log.md`
+- **Impact:** Clinic users can publish custom JSON extraction schema versions via `POST /extraction-schemas` authenticated with JWT, with guaranteed domain-level validation.

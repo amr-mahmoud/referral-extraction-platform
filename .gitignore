@@ -26,6 +26,7 @@ npm-debug.log*
 
 
 .agent/
+.agent/*
 .claude/
 AGENTS.md
 Claude.md

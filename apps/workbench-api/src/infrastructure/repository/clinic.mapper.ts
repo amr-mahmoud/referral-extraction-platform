@@ -6,7 +6,7 @@ import { ExtractionSchemaId } from '../../domain/shared/ids/extraction-schema-id
 
 export class ClinicMapper {
   public static toDomain(raw: PrismaClinic): Clinic {
-    return Clinic.create({
+    return new Clinic({
       id: ClinicId.from(raw.id),
       clinicName: raw.clinicName,
       username: raw.username,

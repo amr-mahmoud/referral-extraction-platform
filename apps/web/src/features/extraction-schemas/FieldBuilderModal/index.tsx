@@ -5,7 +5,6 @@ import * as React from "react";
 import { useFieldBuilder } from "@/hooks/use-field-builder";
 import { cn } from "@/lib/utils";
 import { Button } from "@/shared/Button";
-import { Checkbox } from "@/shared/Checkbox";
 import { CloseIcon } from "@/shared/Icon";
 import { Modal } from "@/shared/Modal";
 import type { CustomSchemaField } from "@/types/extraction-schemas/schema";
@@ -32,29 +31,37 @@ const TITLE_ID = "field-builder-title";
 
 export interface FieldBuilderModalProps {
   onClose: () => void;
-  onConfirm: (fields: CustomSchemaField[], saveAsSchema: boolean) => void;
-  /** Fields already confirmed, so reopening to edit starts from them. */
-  initialFields?: readonly CustomSchemaField[];
-  initialSaveAsSchema?: boolean;
+  /** Always publishes — every schema built here is saved to the clinic's account. */
+  onConfirm: (fields: CustomSchemaField[]) => void;
+  /**
+   * True while the schema is being published. The modal stays open and
+   * blocks its own actions through this — closing early would hide a
+   * publish failure the user still needs to see and react to.
+   */
+  isSaving?: boolean;
+  /** Publish error from the last confirm attempt, if any. */
+  saveError?: string | null;
 }
 
 /**
  * Wireframe 2b — "Build fields in the app". Mounted only while open (see
- * `UploadWorkspace`), so `useFieldBuilder` always starts from a fresh draft
- * seeded from whatever was last confirmed.
+ * `UploadWorkspace`), so `useFieldBuilder` always starts fresh. There is no
+ * "save as reusable schema" toggle: every confirmed field set is published to
+ * `POST /extraction-schemas` and becomes selectable as a saved schema — the
+ * clinic can only ever run an upload against a schema that's in the database.
  */
 const FieldBuilderModal = ({
   onClose,
   onConfirm,
-  initialFields,
-  initialSaveAsSchema,
+  isSaving,
+  saveError,
 }: FieldBuilderModalProps) => {
-  const builder = useFieldBuilder({ initialFields, initialSaveAsSchema });
+  const builder = useFieldBuilder();
 
   const handleConfirm = () => {
     const sanitized = builder.validate();
     if (!sanitized) return;
-    onConfirm(sanitized, builder.saveAsSchema);
+    onConfirm(sanitized);
   };
 
   return (
@@ -67,6 +74,7 @@ const FieldBuilderModal = ({
           type="button"
           aria-label="Close"
           onClick={onClose}
+          disabled={isSaving}
           className={cn(fieldBuilderCloseVariants())}
         >
           <CloseIcon size="sm" />
@@ -123,20 +131,24 @@ const FieldBuilderModal = ({
       </div>
 
       <div className={cn(fieldBuilderFooterVariants())}>
-    
-
         {builder.error ? (
           <p role="alert" className={cn(fieldBuilderErrorVariants())}>
             {builder.error}
           </p>
         ) : null}
 
+        {saveError ? (
+          <p role="alert" className={cn(fieldBuilderErrorVariants())}>
+            {saveError}
+          </p>
+        ) : null}
+
         <div className={cn(fieldBuilderActionsVariants())}>
-          <Button variant="outline" size="sm" onClick={onClose}>
+          <Button variant="outline" size="sm" onClick={onClose} disabled={isSaving}>
             Cancel
           </Button>
-          <Button variant="dark" size="sm" onClick={handleConfirm}>
-            Create new Schema
+          <Button variant="dark" size="sm" onClick={handleConfirm} disabled={isSaving}>
+            {isSaving ? "Creating…" : "Create new schema"}
           </Button>
         </div>
       </div>

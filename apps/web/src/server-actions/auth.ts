@@ -6,6 +6,7 @@ import {
   ACCESS_TOKEN_COOKIE,
   ACCESS_TOKEN_MAX_AGE_SECONDS,
 } from "@/constants/auth";
+import { getApiErrorMessage } from "@/lib/api-error";
 import type { components } from "@/types/api.generated";
 import type { ActionResult } from "@/types/server-action";
 
@@ -13,18 +14,6 @@ export type SignupInput = components["schemas"]["SignupRequest"];
 export type LoginInput = components["schemas"]["LoginRequest"];
 export type AuthResponse = components["schemas"]["AuthResponseDto"];
 export type ClinicProfile = components["schemas"]["ClinicDto"];
-
-function getErrorMessage(error: unknown, fallback: string): string {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "message" in error &&
-    typeof (error as Record<string, unknown>).message === "string"
-  ) {
-    return (error as Record<string, unknown>).message as string;
-  }
-  return fallback;
-}
 
 /**
  * Server Action: Register a new clinic account
@@ -38,7 +27,7 @@ export async function signupAction(
     });
 
     if (error || !data) {
-      const errorMessage = getErrorMessage(
+      const errorMessage = getApiErrorMessage(
         error,
         `Signup failed with status ${response.status}`,
       );
@@ -76,7 +65,7 @@ export async function loginAction(
     });
 
     if (error || !data) {
-      const errorMessage = getErrorMessage(
+      const errorMessage = getApiErrorMessage(
         error,
         response.status === 401
           ? "Invalid username or password"
@@ -141,7 +130,7 @@ export async function getMeAction(): Promise<ActionResult<ClinicProfile>> {
     if (error || !data) {
       return {
         success: false,
-        error: getErrorMessage(
+        error: getApiErrorMessage(
           error,
           `Failed to fetch profile (${response.status})`,
         ),

@@ -7,6 +7,7 @@ import {
   SCHEMA_SOURCE_LABELS,
   SCHEMA_SOURCE_ORDER,
 } from "@/constants/extraction-schemas";
+import type { UploadedSchema } from "@/hooks/use-schema-selection";
 import { cn } from "@/lib/utils";
 import { Button } from "@/shared/Button";
 import { PlusIcon } from "@/shared/Icon";
@@ -34,12 +35,10 @@ export interface SchemaSelectorProps
   savedSchemas: readonly SavedSchema[];
   source: SchemaSource;
   savedSchemaId?: string;
-  schemaFileName?: string;
-  /** Fields already confirmed through the field-builder modal, if any. */
-  customFieldCount?: number;
+  uploadedSchema?: UploadedSchema;
   onSourceChange: (source: SchemaSource) => void;
   onSavedSchemaChange: (id: string) => void;
-  onSchemaFileChange: (fileName: string | undefined) => void;
+  onSchemaUploaded: (schema: UploadedSchema | undefined) => void;
   /** Opens the in-app field builder modal (wireframe 2b). */
   onBuildFields?: () => void;
   onSubmit: () => void;
@@ -55,18 +54,17 @@ const SchemaSelector = React.forwardRef<HTMLElement, SchemaSelectorProps>(
   (
     {
       className,
-      customFieldCount = 0,
       error,
       fileCount,
       isSubmitting,
       onBuildFields,
       onSavedSchemaChange,
-      onSchemaFileChange,
+      onSchemaUploaded,
       onSourceChange,
       onSubmit,
       savedSchemaId,
       savedSchemas,
-      schemaFileName,
+      uploadedSchema,
       source,
       submitDisabled,
       ...props
@@ -77,7 +75,7 @@ const SchemaSelector = React.forwardRef<HTMLElement, SchemaSelectorProps>(
       () =>
         savedSchemas.map((schema) => ({
           value: schema.id,
-          label: `${schema.name} · ${schema.fieldCount} fields`,
+          label: `${schema.name} · ${schema.fieldCount} field${schema.fieldCount === 1 ? "" : "s"}`,
         })),
       [savedSchemas],
     );
@@ -91,15 +89,16 @@ const SchemaSelector = React.forwardRef<HTMLElement, SchemaSelectorProps>(
           options={schemaOptions}
           value={savedSchemaId ?? ""}
           aria-label="Saved extraction schema"
+          placeholder="No saved schemas yet"
           disabled={source !== SCHEMA_SOURCES.SAVED}
-          onChange={(event) => onSavedSchemaChange(event.target.value)}
+          onChange={onSavedSchemaChange}
         />
       ),
       [SCHEMA_SOURCES.UPLOAD]: (
         <SchemaJsonDrop
-          fileName={schemaFileName}
+          uploadedSchema={uploadedSchema}
           disabled={source !== SCHEMA_SOURCES.UPLOAD}
-          onSelect={onSchemaFileChange}
+          onUploaded={onSchemaUploaded}
         />
       ),
     };
@@ -134,13 +133,9 @@ const SchemaSelector = React.forwardRef<HTMLElement, SchemaSelectorProps>(
         <div className={cn(schemaSelectorFooterVariants())}>
           <Button variant="link" size="inline" onClick={onBuildFields}>
             <PlusIcon size="sm" />
-            {customFieldCount > 0 ? "Edit fields in the app" : "Build fields in the app"}
+            Build fields in the app
           </Button>
-          <span className={cn(schemaSelectorHintVariants())}>
-            {customFieldCount > 0
-              ? `${customFieldCount} field${customFieldCount === 1 ? "" : "s"} defined`
-              : "name + description"}
-          </span>
+          <span className={cn(schemaSelectorHintVariants())}>name + description</span>
         </div>
 
         <div className={cn(schemaSelectorActionsVariants())}>

@@ -78,6 +78,8 @@ export const DocumentIcon = createIcon(
   </>,
 );
 
+export const CheckIcon = createIcon("check", <path d="M20 6 9 17l-5-5" />);
+
 export const LogoutIcon = createIcon(
   "logout",
   <>

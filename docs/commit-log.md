@@ -446,3 +446,21 @@ This document serves as the centralized commit history and decision log for the 
 
 - **Modified:** `apps/workbench-api/src/domain/**/*`, `apps/workbench-api/src/application/**/*`, `apps/workbench-api/src/infrastructure/**/*`, `apps/workbench-api/src/interface/**/*`, `apps/web/src/types/api.generated.ts`, `docs/commit-log.md`
 - **Impact:** Clinic users can publish custom JSON extraction schema versions via `POST /extraction-schemas` authenticated with JWT, with guaranteed domain-level validation.
+
+---
+
+## v0.0.24 | 2026-08-25 | refactor
+
+**Category:** Domain Models  
+**Summary:** Refactor Clinic and ExtractionSchema aggregates to props-based constructors with self-validating invariants, and connect frontend FieldBuilderModal to extraction-schema API endpoints.  
+**SuggestedCommitMessage:** refactor: standardize aggregate props constructors and integrate frontend extraction-schema creation | Domain Models
+
+### 🧠 Logic & Decisions
+
+- **The Why:** Standardized aggregate root construction across `apps/workbench-api` (`Clinic` and `ExtractionSchema`) by replacing positional constructors and external domain static factory methods with props-based constructors (`new Clinic(props)`, `new ExtractionSchema(props)`). All domain invariants (clinic name non-empty check, username regex `/^[a-zA-Z0-9_]{3,50}$/`, raw password strength, non-empty field parameter names, and mandatory Gemini LLM field descriptions) are self-validated directly within aggregate constructors upon instantiation.
+- **State Change:** Refactored `ApplicationService.signup`, `ApplicationService.createExtractionSchema`, and mapper classes (`ClinicMapper`, `ExtractionSchemaMapper`) to instantiate aggregates directly via `new Aggregate(props)`. Connected `FieldBuilderModal` and `SchemaJsonDrop` in `apps/web` to publish custom schemas directly to `POST /extraction-schemas` via `useCreateExtractionSchema` server hooks.
+
+### 🔗 Dependencies
+
+- **Modified:** `apps/workbench-api/src/domain/clinic/clinic.aggregate.ts`, `apps/workbench-api/src/domain/extraction-schema/extraction-schema.aggregate.ts`, `apps/workbench-api/src/application/application.service.ts`, `apps/workbench-api/src/infrastructure/repository/clinic.mapper.ts`, `apps/web/src/features/extraction-schemas/**/*`, `apps/web/src/server-hooks/extraction-schemas/**/*`, `docs/commit-log.md`
+- **Impact:** Ensures consistent domain aggregate creation rules across `workbench-api` services while enabling real-time extraction schema creation and JSON upload in the `apps/web` UI.

@@ -1,11 +1,19 @@
+"use client";
+
 import * as React from "react";
 
+import { useSelectDropdown } from "@/hooks/use-select-dropdown";
 import { cn } from "@/lib/utils";
-import { ChevronDownIcon } from "@/shared/Icon";
+import { CheckIcon, ChevronDownIcon } from "@/shared/Icon";
 
 import {
-  selectControlVariants,
+  selectEmptyVariants,
   selectIndicatorVariants,
+  selectOptionCheckVariants,
+  selectOptionVariants,
+  selectPanelVariants,
+  selectTriggerLabelVariants,
+  selectTriggerVariants,
   selectVariants,
   type SelectVariantProps,
 } from "./Select.styles";
@@ -15,36 +23,126 @@ export interface SelectOption {
   label: string;
 }
 
-export interface SelectProps
-  extends Omit<React.SelectHTMLAttributes<HTMLSelectElement>, "size" | "children">,
-    SelectVariantProps {
+export interface SelectProps extends SelectVariantProps {
   options: readonly SelectOption[];
-  /** Applied to the wrapper rather than the `<select>`. */
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+  /** Shown when nothing is selected, or when `options` is empty. */
+  placeholder?: string;
+  "aria-label"?: string;
+  className?: string;
+  /** Applied to the wrapper rather than the trigger button. */
   containerClassName?: string;
 }
 
-/** Native `<select>` behind the wireframe's field styling — no popover to trap focus. */
-const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
-  ({ className, containerClassName, options, size, ...props }, ref) => {
+/**
+ * A custom single-select listbox, not a native `<select>` — the browser's own
+ * chrome around a native control can't be restyled to match the rest of the
+ * app, and the open panel is built to read as a direct extension of the
+ * trigger field (shared border, no gap, no floating-card shadow) rather than
+ * a separate popover sitting on top of it.
+ */
+const Select = React.forwardRef<HTMLButtonElement, SelectProps>(
+  (
+    {
+      className,
+      containerClassName,
+      disabled,
+      options,
+      placeholder = "Select…",
+      size,
+      value,
+      onChange,
+      "aria-label": ariaLabel,
+    },
+    ref,
+  ) => {
+    const listboxId = React.useId();
+    const selectedIndex = options.findIndex((option) => option.value === value);
+    const selectedOption = selectedIndex >= 0 ? options[selectedIndex] : undefined;
+
+    const dropdown = useSelectDropdown<HTMLDivElement>({
+      optionCount: options.length,
+      selectedIndex,
+      disabled,
+      onCommit: (index) => {
+        const option = options[index];
+        if (option) onChange(option.value);
+      },
+    });
+
     return (
-      <span
+      <div
+        ref={dropdown.containerRef}
         data-component="Select"
+        data-state={dropdown.isOpen ? "open" : "closed"}
         className={cn(selectVariants({ className: containerClassName }))}
       >
-        <select
+        <button
           ref={ref}
-          {...props}
-          className={cn(selectControlVariants({ size, className }))}
+          type="button"
+          aria-haspopup="listbox"
+          aria-expanded={dropdown.isOpen}
+          aria-controls={listboxId}
+          aria-label={ariaLabel}
+          disabled={disabled || options.length === 0}
+          onClick={dropdown.toggle}
+          onKeyDown={dropdown.onTriggerKeyDown}
+          className={cn(
+            selectTriggerVariants({ size, open: dropdown.isOpen, className }),
+          )}
         >
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+          <span
+            className={cn(
+              selectTriggerLabelVariants({ placeholder: !selectedOption }),
+            )}
+          >
+            {selectedOption?.label ?? placeholder}
+          </span>
+          <ChevronDownIcon
+            size="sm"
+            className={cn(selectIndicatorVariants({ open: dropdown.isOpen }))}
+          />
+        </button>
 
-        <ChevronDownIcon size="sm" className={cn(selectIndicatorVariants())} />
-      </span>
+        {dropdown.isOpen ? (
+          <ul
+            id={listboxId}
+            role="listbox"
+            aria-label={ariaLabel}
+            className={cn(selectPanelVariants())}
+          >
+            {options.length === 0 ? (
+              <li className={cn(selectEmptyVariants())}>Nothing to select</li>
+            ) : (
+              options.map((option, index) => (
+                <li
+                  key={option.value}
+                  id={`${listboxId}-option-${index}`}
+                  role="option"
+                  aria-selected={option.value === value}
+                  onMouseEnter={() => dropdown.setHighlightedIndex(index)}
+                  onClick={() => {
+                    onChange(option.value);
+                    dropdown.close();
+                  }}
+                  className={cn(
+                    selectOptionVariants({
+                      highlighted: index === dropdown.highlightedIndex,
+                    }),
+                  )}
+                >
+                  <span className="truncate">{option.label}</span>
+                  {option.value === value ? (
+                    <CheckIcon size="sm" className={cn(selectOptionCheckVariants())} />
+                  ) : null}
+                </li>
+              ))
+            )}
+          </ul>
+        ) : null}
+      </div>
     );
   },
 );

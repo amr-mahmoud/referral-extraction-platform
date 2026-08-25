@@ -1,4 +1,3 @@
-import type { SavedSchema } from "@/types/extraction-schemas/schema";
 import {
   REFERRAL_STATUSES,
   type ReferralSummary,
@@ -82,12 +81,6 @@ const REFERRALS: readonly ReferralSummary[] = [
   },
 ];
 
-const SAVED_SCHEMAS: readonly SavedSchema[] = [
-  { id: "sch_derm_v3", name: "Derm intake v3", fieldCount: 18 },
-  { id: "sch_derm_v2", name: "Derm intake v2", fieldCount: 14 },
-  { id: "sch_insurance", name: "Insurance-only", fieldCount: 6 },
-];
-
 /** Weekly throughput strip above the header. */
 export interface ThroughputStats {
   referralsThisWeek: number;
@@ -107,10 +100,6 @@ function delay<TValue>(value: TValue, ms = 120): Promise<TValue> {
 
 export function fetchReferrals(): Promise<readonly ReferralSummary[]> {
   return delay(REFERRALS);
-}
-
-export function fetchSavedSchemas(): Promise<readonly SavedSchema[]> {
-  return delay(SAVED_SCHEMAS);
 }
 
 export function fetchThroughputStats(): Promise<ThroughputStats> {

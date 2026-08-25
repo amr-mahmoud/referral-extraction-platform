@@ -11,22 +11,8 @@ import type { CustomSchemaField } from "@/types/extraction-schemas/schema";
 
 const STARTER_ROW_COUNT = 2;
 
-function seedFields(initial: readonly CustomSchemaField[] | undefined): CustomFieldDraft[] {
-  if (initial && initial.length > 0) {
-    return initial.map((field) => ({ ...createEmptyCustomField(), ...field }));
-  }
-  return Array.from({ length: STARTER_ROW_COUNT }, createEmptyCustomField);
-}
-
-export interface UseFieldBuilderOptions {
-  initialFields?: readonly CustomSchemaField[];
-  initialSaveAsSchema?: boolean;
-}
-
 export interface UseFieldBuilderResult {
   fields: CustomFieldDraft[];
-  saveAsSchema: boolean;
-  setSaveAsSchema: (value: boolean) => void;
   error: string | null;
   /** Count of rows that would actually be sent (blank rows don't count). */
   fieldCount: number;
@@ -38,18 +24,14 @@ export interface UseFieldBuilderResult {
 }
 
 /**
- * Owns one field-builder session: the draft rows, the save-as-schema toggle,
- * and validation. Meant to be used by a component that only mounts while the
- * modal is open, so a fresh instance — reseeded from `initialFields` — is
- * exactly what "cancel discards, reopening resumes the last confirmed set"
- * requires, with no extra reset plumbing.
+ * Owns one field-builder session: the draft rows and their validation.
+ * Every confirm publishes a new schema, so a fresh instance — always two
+ * blank starter rows — is exactly right; there's no prior draft to resume.
  */
-export function useFieldBuilder({
-  initialFields,
-  initialSaveAsSchema,
-}: UseFieldBuilderOptions = {}): UseFieldBuilderResult {
-  const [fields, setFields] = useState<CustomFieldDraft[]>(() => seedFields(initialFields));
-  const [saveAsSchema, setSaveAsSchema] = useState(initialSaveAsSchema ?? false);
+export function useFieldBuilder(): UseFieldBuilderResult {
+  const [fields, setFields] = useState<CustomFieldDraft[]>(() =>
+    Array.from({ length: STARTER_ROW_COUNT }, createEmptyCustomField),
+  );
   const [error, setError] = useState<string | null>(null);
 
   const updateField = useCallback(
@@ -81,8 +63,6 @@ export function useFieldBuilder({
 
   return {
     fields,
-    saveAsSchema,
-    setSaveAsSchema,
     error,
     fieldCount: sanitizeCustomFields(fields).length,
     updateField,

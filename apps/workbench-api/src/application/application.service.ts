@@ -105,8 +105,7 @@ export class ApplicationService {
         command.password,
       );
 
-      const clinic = Clinic.register({
-        id: ClinicId.from(crypto.randomUUID()),
+      const clinic = new Clinic({
         clinicName: command.clinicName,
         username: command.username,
         rawPassword: command.password,

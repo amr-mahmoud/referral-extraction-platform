@@ -165,23 +165,30 @@ export interface components {
             /** @description Clinic account password. */
             password: string;
         };
-        SchemaFieldDefinitionDto: {
-            /** @description Parameter name / Unique JSON property key for extracted value. */
-            name?: string;
-            key?: string;
-            /** @description Human-readable label displayed in UI workbench. */
-            label?: string;
+        CreateExtractionSchemaRequest: {
             /**
-             * @description Field data type.
-             * @enum {string}
+             * @description Field definitions, accepted in either form:
+             *      - an array of {@link SchemaFieldDefinitionDto} (in-app field builder), or
+             *      - a flat `{ "field_name": "description" }` map (uploaded JSON config).
+             *
+             *     Both are normalised by `normalizeExtractionSchemaFields` before reaching
+             *     the domain. Kept under this single property because the global
+             *     `ValidationPipe` runs with `forbidNonWhitelisted: true` — a bare top-level
+             *     map body would be rejected before it ever reached the controller.
              */
-            type?: "text" | "number" | "date" | "boolean" | "select";
+            fields: components["schemas"]["SchemaFieldDefinitionDto"][] | {
+                [key: string]: string;
+            };
+        };
+        SchemaFieldDefinitionDto: {
+            /** @description Parameter name for the field, e.g. `policy_number`. */
+            name?: string;
+            /** @description Unique JSON property key for the extracted value. Defaults to `name`. */
+            key?: string;
+            /** @description Human-readable label displayed in UI workbench. Defaults to `name`. */
+            label?: string;
             /** @description Mandatory guidance prompt description for Gemini LLM extractor. */
             description: string;
-        };
-        CreateExtractionSchemaRequest: {
-            /** @description Array of custom field definitions for LLM extraction. */
-            fields: components["schemas"]["SchemaFieldDefinitionDto"][];
         };
         ExtractionSchemaDto: {
             /** @description Unique extraction schema ID (UUID). */

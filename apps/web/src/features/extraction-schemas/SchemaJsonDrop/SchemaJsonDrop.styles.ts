@@ -24,6 +24,14 @@ export const schemaJsonDropInputVariants = cva("sr-only");
 
 export const schemaJsonDropNameVariants = cva("truncate");
 
+export const schemaJsonDropWrapVariants = cva("flex flex-col gap-1.5");
+
+export const schemaJsonDropMetaVariants = cva("text-[11px] text-muted");
+
+export const schemaJsonDropErrorVariants = cva(
+  "text-[11px] font-medium text-danger",
+);
+
 export type SchemaJsonDropVariantProps = VariantProps<
   typeof schemaJsonDropVariants
 >;

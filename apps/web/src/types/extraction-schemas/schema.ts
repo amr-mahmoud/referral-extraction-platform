@@ -8,21 +8,25 @@ export const SCHEMA_SOURCES = {
   DEFAULT: "default",
   /** Reuse a schema the clinic has already saved. */
   SAVED: "saved",
-  /** Upload a one-off schema JSON alongside the documents. */
+  /** Upload a one-off schema JSON alongside the documents — persisted on validation. */
   UPLOAD: "upload",
-  /** Defined field-by-field in the app's field builder modal. */
-  BUILT: "built",
 } as const;
 
 export type SchemaSource = (typeof SCHEMA_SOURCES)[keyof typeof SCHEMA_SOURCES];
 
+/**
+ * Every schema referenceable from the dashboard is one the clinic already has
+ * saved in the database — there is no "for this upload only" schema. The
+ * field builder publishes to `POST /extraction-schemas` the moment its fields
+ * are confirmed and the result becomes a `SavedSchema`, same as any other.
+ */
 export interface SavedSchema {
   id: string;
   name: string;
   fieldCount: number;
 }
 
-/** A field defined through the in-app field builder. */
+/** A field as the in-app field builder collects it, before it's published. */
 export interface CustomSchemaField {
   name: string;
   description: string;
@@ -31,10 +35,10 @@ export interface CustomSchemaField {
 /** The schema half of an upload request, as chosen in the dashboard panel. */
 export interface SchemaSelection {
   source: SchemaSource;
-  /** Set when `source` is `SAVED`. */
+  /** Set when `source` is `SAVED` (including one just published from the field builder). */
   savedSchemaId?: string;
-  /** Set when `source` is `UPLOAD`. */
+  /** Set when `source` is `UPLOAD`, once the dropped file is persisted. */
+  uploadedSchemaId?: string;
+  /** Set when `source` is `UPLOAD` — display only, the id above is authoritative. */
   schemaFileName?: string;
-  /** Set when `source` is `BUILT`. */
-  customFields?: CustomSchemaField[];
 }

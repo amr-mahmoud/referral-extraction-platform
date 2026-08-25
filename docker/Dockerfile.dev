@@ -19,4 +19,8 @@ RUN npm install
 # Fallback copy so the image is runnable standalone (docker-compose overlays this with a bind mount).
 COPY . .
 
+# @prisma/client's postinstall can't see the schema while only manifests are copied,
+# so regenerate against the shared schema explicitly (needs no DB connection).
+RUN npx prisma generate --schema=prisma/schema.prisma
+
 CMD ["npm", "run", "dev"]

@@ -16,6 +16,7 @@ enum ReferralStatus {
   PROCESSING
   COMPLETED
   FAILED
+  REJECTED
 }
 
 enum FieldType {

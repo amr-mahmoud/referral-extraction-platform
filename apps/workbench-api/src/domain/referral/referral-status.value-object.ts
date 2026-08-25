@@ -22,6 +22,7 @@ export enum ReferralStatusValue {
   PROCESSING = 'PROCESSING',
   COMPLETED = 'COMPLETED',
   FAILED = 'FAILED',
+  REJECTED = 'REJECTED',
 }
 
 const ALLOWED_TRANSITIONS: Record<
@@ -40,9 +41,11 @@ const ALLOWED_TRANSITIONS: Record<
   [ReferralStatusValue.PROCESSING]: [
     ReferralStatusValue.COMPLETED,
     ReferralStatusValue.FAILED,
+    ReferralStatusValue.REJECTED,
   ],
   [ReferralStatusValue.COMPLETED]: [],
   [ReferralStatusValue.FAILED]: [],
+  [ReferralStatusValue.REJECTED]: [],
 };
 
 export class ReferralStatus {

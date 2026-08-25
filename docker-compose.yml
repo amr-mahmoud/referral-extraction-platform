@@ -86,6 +86,9 @@ services:
       NODE_ENV: development
       DATABASE_URL: postgresql://${POSTGRES_USER:-referral}:${POSTGRES_PASSWORD:-referral}@postgres:5432/${POSTGRES_DB:-referral_extraction}
       REDIS_URL: redis://redis:6379
+      HEALTHCHECK_PORT: "8002"
+    ports:
+      - "${WORKER_PORT:-8002}:8002"
     volumes:
       - .:/app
       - /app/node_modules
@@ -94,6 +97,12 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:$${HEALTHCHECK_PORT:-8002}/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
 volumes:
   postgres_data:

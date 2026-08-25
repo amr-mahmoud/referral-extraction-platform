@@ -9,7 +9,7 @@
 #   4. postgres/redis- Local data services (Docker Compose)
 # ==============================================================================
 
-.PHONY: help install dev dev-web dev-api dev-worker kill stop kill-all clean-dev-api kill-api build build-web build-api build-worker docker-up docker-dev docker-dev-backend docker-dev-api docker-down docker-logs docker-clean docker-give-perms fix-perms db-reset db-down-reset db-apply-migrations run-agent run-agent-examples lint codegen-api clean
+.PHONY: help install dev dev-web dev-api dev-worker kill stop kill-all clean-dev-api kill-api build build-web build-api build-worker docker-up docker-dev docker-dev-backend docker-dev-api docker-down docker-logs docker-clean docker-give-perms fix-perms db-reset db-down-reset db-apply-migrations lint codegen-api clean
 
 # Default target when running 'make'
 .DEFAULT_GOAL := help
@@ -171,15 +171,4 @@ codegen-api: ## Regenerate apps/web's typed API client from the running Workbenc
 clean: ## Clean node_modules, .next, and dist build outputs
 	@echo "--> Cleaning build artifacts and node_modules..."
 	rm -rf node_modules apps/web/.next apps/web/dist apps/workbench-api/dist apps/agent_worker/dist
-
-# ------------------------------------------------------------------------------
-# 8. AGENT WORKER & EXTRACTION AGENT
-# ------------------------------------------------------------------------------
-run-agent: ## Run Plena extraction agent on example PDF (e.g. make run-agent or FILE="Linda Carter (2).pdf" make run-agent)
-	@echo "--> Running Plena Referral Extraction Agent..."
-	@npm run run:agent --workspace apps/agent_worker $(if $(FILE),-- "$(FILE)",)
-
-run-agent-examples: ## List all available example referral PDFs
-	@echo "--> Available Example PDFs in apps/agent_worker/examples:"
-	@npm run run:agent --workspace apps/agent_worker -- --list-only 2>/dev/null || ls -la apps/agent_worker/examples
 

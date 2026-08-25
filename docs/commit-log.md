@@ -612,3 +612,27 @@ This document serves as the centralized commit history and decision log for the 
 
 - **Modified:** `apps/web/package.json` (+`axios`), `apps/web/src/hooks/use-custom-upload-files-to-presigned-urls-with-progress.ts` (new, replaces deleted `use-direct-file-uploads.ts`), `apps/web/src/managers/direct-upload.manager.ts` (trimmed to `matchSlotsToCandidates` only), `apps/web/src/server-hooks/referrals/use-create-referrals.ts`, `apps/web/src/features/referrals/UploadFileChip/index.tsx`, `apps/web/src/features/referrals/ReferralDropzone/index.tsx`, `apps/web/src/server-actions/referrals.ts` (stale doc-comment reference)
 - **Impact:** None outside `apps/web` — this is a client-side-only refactor of the upload transport and progress bookkeeping; the `POST /referrals` contract and the S3 presigned-URL shape are unchanged.
+
+---
+
+## v0.0.31 | 2026-08-26 | feat | AGENT WORKER DAEMON
+
+**Category:** Infrastructure Services  
+**Summary:** Implement the complete Agent Worker daemon per `apps/agent_worker/plan.md` — SQS consumer → S3 download → pre-validation → Gemini 2.5 Flash extraction → normalized `extracted_payload` write-back — plus the shared `REJECTED` status enum and Docker/healthcheck wiring.  
+**SuggestedCommitMessage:** feat: implement agent_worker extraction daemon per plan | Infrastructure Services
+
+### 🧠 Logic & Decisions
+
+- **The Why:** The worker is the third service in the design doc's data path (client → S3 → SQS → worker → Postgres → SSE) and was previously a stub (`index.ts` only handled signals). Per the plan's lean mandate it is a plain Node + TypeScript daemon — no NestJS, no HTTP framework, only outbound calls — with a flat `clients/` + `extraction/` layering instead of DDD ports/repositories.
+  - **Dedup without a Redis Set (§2.8):** idempotency comes from an atomic conditional DB claim — `updateMany` where `status IN (AWAITING_UPLOAD, PENDING)` → `PROCESSING`; a `0` count means another consumer already claimed or the referral is terminal, so the worker skips Gemini and the SQS message is deleted. Postgres is the single source of truth; no in-processing Redis set needed. Delete-after-commit turns SQS at-least-once into effectively-once extraction.
+  - **`REJECTED` status added to the shared schema:** content-level rejection (not a referral, unreadable) is a terminal, non-retried state with the message deleted, distinct from system `FAILED` which leaves the message for visibility-timeout redelivery → DLQ. Required adding `REJECTED` to `prisma/schema.prisma`'s enum and to workbench-api's `ReferralStatusValue`/`ALLOWED_TRANSITIONS` (`PROCESSING → REJECTED`, terminal).
+  - **Cross-service payload contracts enforced in `payload-normalizer`:** LLM emits `[ymin, xmin, ymax, xmax]` bounding boxes and is prompted for 1-indexed `pageNumber`; the normalizer re-maps bbox to `{xmin, ymin, xmax, ymax}` and validates `pageNumber` as `int ≥ 1` via zod — both required to satisfy workbench-api's `ExtractedField`/`BoundingBox` value objects, which re-validate the stored JSONB on every read. Malformed/missing bboxes degrade to `null` per field (graceful degradation), never failing the whole extraction.
+  - **Redis is read-only + fallback:** `referral:{id}` cache is read in O(1); on a cache miss the worker falls back to Postgres (`fileName`/`extractionSchemaId`) so a Redis blip never fails a job. The clinic secondary-index `SADD` runs best-effort after the `COMPLETED` commit and never fails the job.
+  - **Replaced `@google/adk` with direct `@google/genai`** (a single extraction call doesn't earn a framework) and **removed the example-file test harness** (`run-agent.ts`, `example-files.ts`, `examples/`) entirely on request; `typecheck`/`lint` are both `tsc --noEmit`, the worker's only static gate.
+  - **Env zod-validated at boot** (fail fast) and **Gemini output zod-validated**; `Dockerfile.dev` gained `prisma generate` (postinstall can't see the schema during manifest-only COPY), `docker-compose.yml` gained the worker's healthcheck on port 8002, `.env.example` gained `WORKER_PORT`.
+- **State Change:** A functional background extraction daemon now exists (previously a stub), the shared DB enum now includes `REJECTED` (requires `make db-apply-migrations`/`prisma db push`), and `COMPLETED` referrals are written with 1-indexed pages and `{xmin,ymin,xmax,ymax}` bounding boxes for the review UI.
+
+### 🔗 Dependencies
+
+- **Modified:** `apps/agent_worker/src/**` (new `config/env.config.ts`, `types/*`, `clients/{aws,database,cache,ai}/*`, `extraction/*`, `server/healthcheck.ts`, rewritten `index.ts`), `apps/agent_worker/package.json`, `apps/agent_worker/plan.md` (new), `prisma/schema.prisma` (+`REJECTED`), `apps/workbench-api/src/domain/referral/referral-status.value-object.ts` (+`REJECTED`, +`PROCESSING → REJECTED`), `docker-compose.yml`, `docker/Dockerfile.dev`, `.env.example` (+`WORKER_PORT`), `Makefile`, `package-lock.json`
+- **Impact:** workbench-api must push the new enum (`make db-apply-migrations`) before any worker write can set `REJECTED`; the worker now requires `SQS_QUEUE_URL`, `S3_BUCKET_NAME`, `DATABASE_URL`, `GEMINI_API_KEY` at boot (zod fail-fast); the compose worker service exposes `8002/healthz`; the review UI now consumes 1-indexed `pageNumber` and `{xmin,ymin,xmax,ymax}` bboxes from `COMPLETED` referrals.

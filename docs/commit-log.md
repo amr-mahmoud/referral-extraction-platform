@@ -490,3 +490,27 @@ This document serves as the centralized commit history and decision log for the 
 
 - **Modified:** `prisma/schema.prisma`, `.env.example`, `apps/workbench-api/package.json`, `apps/workbench-api/src/domain/referral/**/*`, `apps/workbench-api/src/domain/shared/ids/referral-id.value-object.ts`, `apps/workbench-api/src/application/application.service.ts`, `apps/workbench-api/src/application/ports/referral-repository.port.ts`, `apps/workbench-api/src/application/ports/storage.port.ts`, `apps/workbench-api/src/infrastructure/repository/referral.mapper.ts`, `apps/workbench-api/src/infrastructure/repository/referral.repository.ts`, `apps/workbench-api/src/infrastructure/storage/s3-storage.service.ts`, `apps/workbench-api/src/interface/http/dto/index.dto.ts`, `apps/workbench-api/src/interface/http/clinics/clinics.controller.ts`, `apps/workbench-api/src/interface/http/filters/domain-exception.filter.ts`, `docs/commit-log.md`
 - **Impact:** Requires a real, reachable S3 bucket (`S3_BUCKET_NAME`) with `s3:PutObject`/`s3:GetObject` granted to the configured IAM user and a CORS rule allowing the web app's origin — there is no local emulator fallback. `apps/web` still calls the mocked upload flow in `client/mock-api.ts` and was intentionally not wired to this endpoint in this change; its `types/api.generated.ts` was not regenerated.
+
+---
+
+## v0.0.26 | 2026-08-25 | feat | Batch Referral Upload
+
+**Category:** Application Services  
+**Summary:** Implement batch referral creation API with atomic persistence, single-schema resolution 
+**SuggestedCommitMessage:** feat: implement batch referral creation API with atomic persistence | Application Services
+
+### 🧠 Logic & Decisions
+
+- **The Why:** Refactored referral upload slot creation (`POST /referrals`) to support batch file processing in a single API call:
+  - **Batch Command & DTO:** Created `CreateReferralsRequest` / `CreateReferralItemRequest` DTOs accepting an array of files (`files`) with a shared `extractionSchemaId` override.
+  - **Single Schema Resolution:** Resolved `extractionSchemaId` once per batch rather than per file, avoiding redundant DB lookups.
+  - **Fail-Fast Aggregates:** Constructed all `Referral` aggregates upfront so any file validation error (e.g. invalid file extension) aborts the entire batch before storage presigning or DB writes.
+  - **Atomic Persistence:** Added `saveReferrals(referrals: Referral[])` to `ReferralRepositoryPort` and `PrismaReferralRepository` executing Prisma transaction batch upserts.
+  - **Unit Testing:** Created comprehensive unit test suite in `application.service.spec.ts` covering batch presigned upload flows and error handling.
+- **State Change:** `POST /referrals` accepts batch file uploads and returns an array of presigned S3 upload slot objects in request order.
+
+### 🔗 Dependencies
+
+- **Modified:** `apps/workbench-api/src/application/application.service.ts`, `apps/workbench-api/src/application/application.service.spec.ts`, `apps/workbench-api/src/application/ports/referral-repository.port.ts`, `apps/workbench-api/src/infrastructure/repository/referral.repository.ts`, `apps/workbench-api/src/interface/http/clinics/clinics.controller.ts`, `apps/workbench-api/src/interface/http/dto/index.dto.ts`, `apps/workbench-api/src/domain/shared/ids/referral-id.value-object.ts`
+- **Impact:** `POST /referrals` returns `CreateReferralResponseDto[]` array instead of single object to support multi-file batch uploads from the dashboard UI.
+

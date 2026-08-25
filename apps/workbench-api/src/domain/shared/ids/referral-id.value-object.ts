@@ -1,4 +1,7 @@
-import { InvalidReferralIdError, Referral } from '../../referral/referral.aggregate';
+import {
+  InvalidReferralIdError,
+  Referral,
+} from '../../referral/referral.aggregate';
 
 export { InvalidReferralIdError };
 

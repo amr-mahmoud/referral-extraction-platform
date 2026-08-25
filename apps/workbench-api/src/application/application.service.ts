@@ -10,6 +10,7 @@ import { ExtractionSchemaNotFoundError } from '../domain/extraction-schema/extra
 import { ExtractionSchema } from '../domain/extraction-schema/extraction-schema.aggregate';
 import { ExtractedField } from '../domain/referral/extracted-field.value-object';
 import { Referral } from '../domain/referral/referral.aggregate';
+import { ReferralValidationError } from '../domain/referral/referral.errors';
 import { ClinicId } from '../domain/shared/ids/clinic-id.value-object';
 import { ExtractionSchemaId } from '../domain/shared/ids/extraction-schema-id.value-object';
 import { ReferralId } from '../domain/shared/ids/referral-id.value-object';
@@ -60,11 +61,15 @@ export interface CreateExtractionSchemaCommand {
 
 // ── Referral Commands & Queries ──────────────────────────────────────
 
-export interface CreateNewReferralWithAttachedPresignedUrlCommand {
-  clinicId: ClinicId;
+export interface CreateReferralItemCommand {
   fileName: string;
   patientName?: string | null;
-  /** Explicit override. Falls back to the clinic's default, then `null`. */
+}
+
+export interface CreateNewReferralsWithAttachedPresignedUrlsCommand {
+  clinicId: ClinicId;
+  files: CreateReferralItemCommand[];
+  /** Shared across the whole batch. Falls back to the clinic's default, then `null`. */
   extractionSchemaId?: ExtractionSchemaId | null;
 }
 
@@ -239,38 +244,65 @@ export class ApplicationService {
 
   // ── Referrals ────────────────────────────────────────────────────
 
-  public async createNewReferralWithAttachedPresignedUrl(
-    command: CreateNewReferralWithAttachedPresignedUrlCommand,
-  ): Promise<ReferralWithPresignedUpload> {
+  public async createNewReferralsWithAttachedPresignedUrls(
+    command: CreateNewReferralsWithAttachedPresignedUrlsCommand,
+  ): Promise<ReferralWithPresignedUpload[]> {
     try {
+      if (command.files.length === 0) {
+        // Reuses the existing ReferralValidationError — defense-in-depth behind
+        // the DTO's @ArrayNotEmpty, no new error class.
+        throw new ReferralValidationError(
+          'At least one referral file is required',
+        );
+      }
+
+      // 1. Resolve schema ONCE — clinic-scoped, not file-scoped.
       const extractionSchemaId = await this.resolveExtractionSchemaId(
         command.clinicId,
         command.extractionSchemaId,
       );
 
-      const referral = new Referral({
-        clinicId: command.clinicId,
-        fileName: command.fileName,
-        patientName: command.patientName ?? null,
-
-        extractionSchemaId,
-      });
-
-      const upload = await this.storageService.presignReferralUpload(
-        command.clinicId,
-        referral.id,
+      // 2. Construct ALL aggregates up front — one bad fileName fails the
+      //    whole batch before anything is persisted or presigned (fail-fast).
+      const referrals = command.files.map(
+        (file) =>
+          new Referral({
+            clinicId: command.clinicId,
+            fileName: file.fileName,
+            patientName: file.patientName ?? null,
+            extractionSchemaId,
+          }),
       );
 
-      const savedReferral =
-        await this.referralRepository.saveReferral(referral);
+      // 3. Presign all uploads. getSignedUrl is a local SigV4 signing
+      //    operation (no AWS network round-trip), so doing this before the DB
+      //    write is cheap and means a presigning failure leaves zero rows
+      //    committed.
+      const uploads = await Promise.all(
+        referrals.map((referral) =>
+          this.storageService.presignReferralUpload(
+            command.clinicId,
+            referral.id,
+          ),
+        ),
+      );
 
-      return { referral: savedReferral, upload };
+      // 4. Persist all rows atomically — all-or-nothing.
+      const savedReferrals =
+        await this.referralRepository.saveReferrals(referrals);
+
+      // 5. Zip by index — referrals/uploads/savedReferrals are all the same
+      //    length and order as `command.files`.
+      return savedReferrals.map((referral, index) => ({
+        referral,
+        upload: uploads[index],
+      }));
     } catch (error) {
       if (error instanceof DomainError) {
         throw error;
       }
       throw new Error(
-        `Failed to create referral: ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to create referrals: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }
@@ -280,7 +312,6 @@ export class ApplicationService {
     requestedExtractionSchemaId: ExtractionSchemaId | null | undefined,
   ): Promise<ExtractionSchemaId | null> {
     if (requestedExtractionSchemaId) {
-      
       const schema = await this.clinicRepository.findExtractionSchemaById(
         requestedExtractionSchemaId,
       );

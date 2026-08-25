@@ -76,4 +76,19 @@ export class PrismaReferralRepository implements ReferralRepositoryPort {
 
     return ReferralMapper.toDomain(row);
   }
+
+  public async saveReferrals(referrals: Referral[]): Promise<Referral[]> {
+    const rows = await this.prisma.$transaction(
+      referrals.map((referral) => {
+        const data = ReferralMapper.toPersistence(referral);
+        return this.prisma.referral.upsert({
+          where: { id: data.id },
+          create: data,
+          update: data,
+        });
+      }),
+    );
+
+    return rows.map((row) => ReferralMapper.toDomain(row));
+  }
 }

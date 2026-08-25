@@ -30,8 +30,8 @@ import { normalizeExtractionSchemaFields } from '../dto/extraction-schema-input.
 import {
   ClinicDto,
   CreateExtractionSchemaRequest,
-  CreateReferralRequest,
   CreateReferralResponseDto,
+  CreateReferralsRequest,
   ExtractionSchemaDto,
   ListReferralsQueryDto,
   UpdateReferralRequest,
@@ -108,29 +108,36 @@ export class ClinicsController {
   @UseGuards(JwtAuthGuard)
   @Post('referrals')
   @ApiOperation({
-    summary: 'Create new referral and issue presigned S3 upload URL',
+    summary: 'Create new referrals in batch and issue presigned S3 upload URLs',
   })
   @ApiResponse({
     status: 201,
-    description: 'Referral created and presigned S3 URL issued',
-    type: CreateReferralResponseDto,
+    description:
+      'Referrals created and presigned S3 URLs issued, in request order',
+    type: [CreateReferralResponseDto],
   })
   @ApiResponse({ status: 404, description: 'Extraction schema not found' })
-  public async createNewReferralWithAttachedPresignedUrl(
+  public async createNewReferralsWithAttachedPresignedUrls(
     @Req() req: AuthenticatedRequest,
-    @Body() body: CreateReferralRequest,
-  ): Promise<CreateReferralResponseDto> {
+    @Body() body: CreateReferralsRequest,
+  ): Promise<CreateReferralResponseDto[]> {
     const clinicId = ClinicId.from(req.user.clinicId);
-    const result =
-      await this.applicationService.createNewReferralWithAttachedPresignedUrl({
-        clinicId,
-        fileName: body.fileName,
-
-        extractionSchemaId: body.extractionSchemaId
-          ? ExtractionSchemaId.from(body.extractionSchemaId)
-          : null,
-      });
-    return CreateReferralResponseDto.fromDomain(result);
+    const results =
+      await this.applicationService.createNewReferralsWithAttachedPresignedUrls(
+        {
+          clinicId,
+          files: body.files.map((file) => ({
+            fileName: file.fileName,
+            patientName: file.patientName,
+          })),
+          extractionSchemaId: body.extractionSchemaId
+            ? ExtractionSchemaId.from(body.extractionSchemaId)
+            : null,
+        },
+      );
+    return results.map((result) =>
+      CreateReferralResponseDto.fromDomain(result),
+    );
   }
 
   @ApiTags('Referrals')

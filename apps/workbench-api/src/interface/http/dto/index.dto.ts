@@ -1,5 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
+  ArrayNotEmpty,
+  IsArray,
   IsDefined,
   IsNotEmpty,
   IsOptional,
@@ -7,6 +10,7 @@ import {
   IsUUID,
   Matches,
   MinLength,
+  ValidateNested,
 } from 'class-validator';
 import { Clinic } from '../../../domain/clinic/clinic.aggregate';
 import { ExtractionSchema } from '../../../domain/extraction-schema/extraction-schema.aggregate';
@@ -167,7 +171,7 @@ export class ExtractionSchemaDto {
   }
 }
 
-export class CreateReferralRequest {
+export class CreateReferralItemRequest {
   /** Original uploaded file name; must end in `.pdf`. Drives the S3 key. */
   @IsString()
   @IsNotEmpty({ message: 'fileName is required' })
@@ -179,8 +183,17 @@ export class CreateReferralRequest {
   @IsString()
   @IsNotEmpty({ message: 'patientName must not be empty when provided' })
   public readonly patientName?: string | null;
+}
 
-  /** Optional target extraction schema ID override. Falls back to the clinic's default. */
+export class CreateReferralsRequest {
+  /** One or more files to create referrals for, in one batch. */
+  @IsArray()
+  @ArrayNotEmpty({ message: 'At least one referral file is required' })
+  @ValidateNested({ each: true })
+  @Type(() => CreateReferralItemRequest)
+  public readonly files!: CreateReferralItemRequest[];
+
+  /** Optional target extraction schema ID override, shared across the whole batch. Falls back to the clinic's default. */
   @IsOptional()
   @IsUUID()
   public readonly extractionSchemaId?: string | null;

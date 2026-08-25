@@ -27,4 +27,6 @@ export interface ReferralRepositoryPort {
     options: ListReferralOptions,
   ): Promise<Paginated<Referral>>;
   saveReferral(referral: Referral): Promise<Referral>;
+  /** Persists all referrals atomically — either every row lands or none do. */
+  saveReferrals(referrals: Referral[]): Promise<Referral[]>;
 }

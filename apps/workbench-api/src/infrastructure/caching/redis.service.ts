@@ -7,11 +7,23 @@ import {
 import Redis from 'ioredis';
 import {
   CachedExtractionSchema,
+  CachedReferralView,
   CachingServicePort,
   ReferralCacheEntry,
 } from '../../application/ports/caching.port';
 
 const REFERRAL_KEY_PREFIX = 'referral:';
+const CLINIC_INDEX_KEY_PREFIX = 'clinic:';
+const CLINIC_INDEX_KEY_SUFFIX = ':referrals';
+const REFERRAL_VIEW_FIELD = 'referral';
+
+// Self-healing backstop for the clinic index. The index is kept current by
+// two writers (referral creation, and the LISTEN/NOTIFY refresh), but a set
+// that only ever grows can silently drift if both miss — and a *stale* index
+// is invisible to the cache-aside path, which only falls back to Postgres
+// when the key is absent entirely. Letting it expire guarantees a full
+// rebuild from Postgres at least this often, so drift is bounded.
+const CLINIC_INDEX_TTL_SECONDS = 10 * 60;
 
 // Fail fast, not fail eventually: ioredis's defaults queue commands and
 // retry reconnecting for up to `maxRetriesPerRequest` (20) attempts with
@@ -124,7 +136,122 @@ export class RedisService
     };
   }
 
+  public async setReferralView(view: CachedReferralView): Promise<void> {
+    await this.setManyReferralViews([view]);
+  }
+
+  public async setManyReferralViews(
+    views: CachedReferralView[],
+  ): Promise<void> {
+    if (views.length === 0) {
+      return;
+    }
+
+    const pipeline = this.client.pipeline();
+    for (const view of views) {
+      // HSET onto the referral's existing hash rather than a separate key —
+      // the worker's `fileName`/`extractionSchema` fields are left untouched.
+      pipeline.hset(this.buildKey(view.id), {
+        [REFERRAL_VIEW_FIELD]: JSON.stringify(view),
+      });
+    }
+
+    const results = await pipeline.exec();
+    const failures = (results ?? []).filter(([error]) => error !== null);
+    if (failures.length > 0) {
+      throw new Error(
+        `Failed to write ${failures.length} of ${views.length} referral views to Redis`,
+      );
+    }
+  }
+
+  public async getReferralView(
+    referralId: string,
+  ): Promise<CachedReferralView | null> {
+    const raw = await this.client.hget(
+      this.buildKey(referralId),
+      REFERRAL_VIEW_FIELD,
+    );
+    return this.parseReferralView(raw);
+  }
+
+  public async getManyReferralViews(
+    referralIds: string[],
+  ): Promise<(CachedReferralView | null)[]> {
+    if (referralIds.length === 0) {
+      return [];
+    }
+
+    // One pipelined round-trip for the whole page rather than N sequential
+    // HGETs — the point of the secondary index is that a dashboard load is
+    // a single hop, and N round-trips would give that back.
+    const pipeline = this.client.pipeline();
+    for (const referralId of referralIds) {
+      pipeline.hget(this.buildKey(referralId), REFERRAL_VIEW_FIELD);
+    }
+
+    const results = await pipeline.exec();
+    return referralIds.map((_, index) => {
+      const entry = results?.[index];
+      if (!entry || entry[0] !== null) {
+        // A per-command error is treated as a cache miss, not a hard failure:
+        // the caller's Postgres fallback covers it.
+        return null;
+      }
+      return this.parseReferralView(entry[1] as string | null);
+    });
+  }
+
+  public async addReferralIdsToClinicIndex(
+    clinicId: string,
+    referralIds: string[],
+  ): Promise<void> {
+    if (referralIds.length === 0) {
+      return;
+    }
+    const key = this.buildClinicIndexKey(clinicId);
+    await this.client
+      .multi()
+      .sadd(key, ...referralIds)
+      .expire(key, CLINIC_INDEX_TTL_SECONDS)
+      .exec();
+  }
+
+  public async getClinicReferralIds(
+    clinicId: string,
+  ): Promise<string[] | null> {
+    const key = this.buildClinicIndexKey(clinicId);
+    // EXISTS first: SMEMBERS returns [] both for "empty set" and "no such
+    // key", and those mean very different things — the latter must fall
+    // through to Postgres, the former must not.
+    const keyExists = await this.client.exists(key);
+    if (keyExists === 0) {
+      return null;
+    }
+    return this.client.smembers(key);
+  }
+
+  private parseReferralView(raw: string | null): CachedReferralView | null {
+    if (!raw) {
+      return null;
+    }
+    try {
+      return JSON.parse(raw) as CachedReferralView;
+    } catch (error) {
+      this.logger.error(
+        `Discarding unparseable cached referral view: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return null;
+    }
+  }
+
   private buildKey(referralId: string): string {
     return `${REFERRAL_KEY_PREFIX}${referralId}`;
+  }
+
+  private buildClinicIndexKey(clinicId: string): string {
+    return `${CLINIC_INDEX_KEY_PREFIX}${clinicId}${CLINIC_INDEX_KEY_SUFFIX}`;
   }
 }

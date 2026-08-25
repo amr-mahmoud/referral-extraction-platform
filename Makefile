@@ -9,7 +9,7 @@
 #   4. postgres/redis- Local data services (Docker Compose)
 # ==============================================================================
 
-.PHONY: help install dev dev-web dev-api dev-worker kill stop kill-all clean-dev-api kill-api build build-web build-api build-worker docker-up docker-dev docker-dev-backend docker-dev-api docker-down docker-logs docker-clean docker-give-perms fix-perms db-reset db-down-reset db-apply-migrations lint codegen-api clean
+.PHONY: help install dev dev-web dev-api dev-worker kill stop kill-all clean-dev-api kill-api build build-web build-api build-worker docker-up docker-dev docker-dev-backend docker-dev-api docker-down docker-logs docker-clean docker-give-perms fix-perms db-reset db-down-reset db-apply-migrations db-apply-notify lint codegen-api clean
 
 # Default target when running 'make'
 .DEFAULT_GOAL := help
@@ -125,16 +125,24 @@ db-down-reset: ## Remove DB container, purge data volume, spin up DB container, 
 	npm run prisma:push
 	@echo "--> Generating Prisma client..."
 	npm run prisma:generate
+	@$(MAKE) db-apply-notify
 	@echo "--> Database reset complete."
 
 db-reset: db-down-reset ## Alias for 'make db-down-reset'
 
-db-apply-migrations: ## Push Prisma schema changes and regenerate client while preserving existing database data
+db-apply-migrations: ## Push Prisma schema changes, regenerate client, and (re)apply the NOTIFY trigger, preserving existing data
 	@echo "--> Pushing Prisma schema to database..."
 	npm run prisma:push
 	@echo "--> Generating Prisma client..."
 	npm run prisma:generate
+	@$(MAKE) db-apply-notify
 	@echo "--> Database migrations applied successfully."
+
+db-apply-notify: ## (Re)apply the referral LISTEN/NOTIFY trigger to an already-running database
+	@echo "--> Applying referral NOTIFY trigger..."
+	@docker compose exec -T postgres psql -U $${POSTGRES_USER:-referral} -d $${POSTGRES_DB:-referral_extraction} \
+		< docker/postgres/init/002-referral-notify.sql
+	@echo "--> NOTIFY trigger applied."
 
 
 

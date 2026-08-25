@@ -9,6 +9,7 @@ import { ClinicId } from '../../domain/shared/ids/clinic-id.value-object';
 import { ReferralId } from '../../domain/shared/ids/referral-id.value-object';
 import { PrismaService } from './prisma.service';
 import { ReferralMapper } from './referral.mapper';
+import type { ReferralView } from '../../application/read-models/referral-view.read-model';
 
 @Injectable()
 export class PrismaReferralRepository implements ReferralRepositoryPort {
@@ -91,4 +92,88 @@ export class PrismaReferralRepository implements ReferralRepositoryPort {
 
     return rows.map((row) => ReferralMapper.toDomain(row));
   }
+
+  // ── Read-model queries ───────────────────────────────────────────────
+
+  public async findReferralViewsByClinicId(
+    clinicId: ClinicId,
+  ): Promise<ReferralView[]> {
+    const rows = await this.prisma.referral.findMany({
+      where: { clinicId: clinicId.value },
+      orderBy: { createdAt: 'desc' },
+      select: REFERRAL_VIEW_SELECT,
+    });
+    return rows.map(toReferralView);
+  }
+
+  public async findReferralViewsByIds(
+    referralIds: string[],
+  ): Promise<ReferralView[]> {
+    if (referralIds.length === 0) {
+      return [];
+    }
+    const rows = await this.prisma.referral.findMany({
+      where: { id: { in: referralIds } },
+      orderBy: { createdAt: 'desc' },
+      select: REFERRAL_VIEW_SELECT,
+    });
+    return rows.map(toReferralView);
+  }
+
+  public async findAllReferralViews(): Promise<ReferralView[]> {
+    const rows = await this.prisma.referral.findMany({
+      orderBy: { createdAt: 'desc' },
+      select: REFERRAL_VIEW_SELECT,
+    });
+    return rows.map(toReferralView);
+  }
+}
+
+/**
+ * One `select` shared by every read-model query so the three can never drift
+ * apart — a field added here reaches the list, the backfill, and the dev
+ * warm-up at once. The nested `extractionSchema` join is what supplies the
+ * dashboard's "Custom schema v3" label.
+ */
+const REFERRAL_VIEW_SELECT = {
+  id: true,
+  clinicId: true,
+  fileName: true,
+  patientName: true,
+  status: true,
+  extractionSchemaId: true,
+  errorMessage: true,
+  createdAt: true,
+  updatedAt: true,
+  extractionSchema: { select: { version: true } },
+} as const;
+
+interface ReferralViewRow {
+  id: string;
+  clinicId: string;
+  fileName: string;
+  patientName: string | null;
+  status: string;
+  extractionSchemaId: string | null;
+  errorMessage: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  extractionSchema: { version: number } | null;
+}
+
+function toReferralView(row: ReferralViewRow): ReferralView {
+  return {
+    id: row.id,
+    clinicId: row.clinicId,
+    fileName: row.fileName,
+    patientName: row.patientName,
+    status: row.status,
+    extractionSchemaId: row.extractionSchemaId,
+    extractionSchemaVersion: row.extractionSchema?.version ?? null,
+    errorMessage: row.errorMessage,
+    // ISO strings, not Date — this shape is JSON.stringify'd straight into
+    // Redis and must survive the round-trip unchanged.
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
 }

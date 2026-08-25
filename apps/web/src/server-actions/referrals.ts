@@ -4,10 +4,9 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 
 import { apiClient } from "@/client/api-client";
-import { fetchReferrals, fetchThroughputStats, type ThroughputStats } from "@/client/mock-api";
 import { ACCESS_TOKEN_COOKIE } from "@/constants/auth";
 import { getApiErrorMessage } from "@/lib/api-error";
-import { formatRelativeTime } from "@/lib/format";
+import { toReferralRowView } from "@/managers/referral-view.manager";
 import { ROUTES } from "@/routes";
 import { SCHEMA_SOURCES, type SchemaSelection } from "@/types/extraction-schemas/schema";
 import type { ActionResult } from "@/types/server-action";
@@ -18,24 +17,22 @@ import type { ReferralUploadSlot } from "@/managers/direct-upload.manager";
  * Read side of the dashboard. Relative timestamps are resolved here, at the
  * server boundary, so the table receives finished strings — a client component
  * re-deriving them from `Date.now()` would render one value on the server and a
- * different one on hydration.
- *
- * Still backed by the mock — `GET /referrals` is not implemented on the API
- * yet, so real referrals created via `createReferrals` below won't appear
- * here until that endpoint lands.
+ * different one on hydration. Live changes after the initial paint arrive
+ * separately over SSE (`useReferralStatusStream`), not by re-calling this.
  */
 export async function getReferralRows(): Promise<readonly ReferralRowView[]> {
-  const referrals = await fetchReferrals();
+  const cookieStore = await cookies();
+  const token = cookieStore.get(ACCESS_TOKEN_COOKIE)?.value;
+  if (!token) return [];
+
+  const { data, response } = await apiClient.GET("/referrals", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok || !data) return [];
+
   const now = Date.now();
-
-  return referrals.map(({ submittedAt, ...referral }) => ({
-    ...referral,
-    submittedLabel: formatRelativeTime(submittedAt, now),
-  }));
-}
-
-export async function getThroughputStats(): Promise<ThroughputStats> {
-  return fetchThroughputStats();
+  return data.map((referral) => toReferralRowView(referral, now));
 }
 
 export interface CreateReferralsInput {

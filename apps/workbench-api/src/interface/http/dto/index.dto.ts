@@ -16,6 +16,7 @@ import { Clinic } from '../../../domain/clinic/clinic.aggregate';
 import { ExtractionSchema } from '../../../domain/extraction-schema/extraction-schema.aggregate';
 import { Referral } from '../../../domain/referral/referral.aggregate';
 import type { ReferralWithPresignedUpload } from '../../../application/application.service';
+import type { ReferralView } from '../../../application/read-models/referral-view.read-model';
 
 export class SignupRequest {
   /** Full name or title of the clinic. */
@@ -302,6 +303,49 @@ export class ExtractedFieldDto {
 export class UpdateReferralRequest {
   /** Updated payload of extracted fields corrected by staff user. */
   public readonly extractedPayload!: ExtractedFieldDto[];
+}
+
+export class ReferralListItemDto {
+  /** Unique referral ID (UUID). */
+  public readonly id!: string;
+
+  /** Original uploaded file name. */
+  public readonly fileName!: string;
+
+  /** `null` until extraction resolves a patient. */
+  public readonly patientName!: string | null;
+
+  /** Current lifecycle status. */
+  public readonly status!: string;
+
+  /** Resolved extraction schema ID, or `null` for the default LLM schema. */
+  public readonly extractionSchemaId!: string | null;
+
+  /** Schema version behind `extractionSchemaId`, for the dashboard label. */
+  public readonly extractionSchemaVersion!: number | null;
+
+  /** Populated when the referral FAILED or was REJECTED. */
+  public readonly errorMessage!: string | null;
+
+  /** ISO-8601 creation timestamp. */
+  public readonly createdAt!: string;
+
+  /** ISO-8601 last-update timestamp. */
+  public readonly updatedAt!: string;
+
+  public static fromReadModel(view: ReferralView): ReferralListItemDto {
+    return {
+      id: view.id,
+      fileName: view.fileName,
+      patientName: view.patientName,
+      status: view.status,
+      extractionSchemaId: view.extractionSchemaId,
+      extractionSchemaVersion: view.extractionSchemaVersion,
+      errorMessage: view.errorMessage,
+      createdAt: view.createdAt,
+      updatedAt: view.updatedAt,
+    };
+  }
 }
 
 export class ListReferralsQueryDto {

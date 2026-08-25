@@ -1,8 +1,9 @@
-import { ValidationPipe } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { apiReference } from '@scalar/nestjs-api-reference';
 import { AppModule } from './app.module';
+import { ApplicationService } from './application/application.service';
 import { DomainExceptionFilter } from './interface/http/filters/domain-exception.filter';
 
 async function bootstrap() {
@@ -53,6 +54,28 @@ async function bootstrap() {
       theme: 'purple',
     }),
   );
+
+  // Dev-only cache warm-up: a `docker compose up` (or a bare `db-reset`) starts
+  // Redis empty, so the very first dashboard load would otherwise be an N-clinic
+  // cold-cache miss. Pre-loading every referral removes that from the demo path.
+  // Gated to non-production because at real scale this is exactly the full
+  // table scan the cache-aside pattern exists to avoid — production starts
+  // cold and lets normal traffic (or `refreshReferralViewCache`) warm it
+  // incrementally instead.
+  if (process.env.NODE_ENV !== 'production') {
+    const logger = new Logger('CacheWarmup');
+    try {
+      const applicationService = app.get(ApplicationService);
+      const warmedCount = await applicationService.warmAllReferralCaches();
+      logger.log(`Warmed Redis cache with ${warmedCount} referral(s)`);
+    } catch (error) {
+      logger.warn(
+        `Cache warm-up failed (continuing to boot): ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
 
   const port = process.env.PORT ?? 8001;
   await app.listen(port);

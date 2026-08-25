@@ -29,9 +29,20 @@ async function main(): Promise<void> {
 
   console.log('[Agent Worker] Background SQS consumer daemon starting...');
 
+  const pollLoopPromise = consumer.start();
+
   const shutdown = async (signal: string): Promise<void> => {
     console.log(`[Agent Worker] Received ${signal}. Gracefully shutting down...`);
     consumer.stop();
+    try {
+      await pollLoopPromise;
+    } catch (error) {
+      console.error(
+        `[Agent Worker] Poll loop ended with error during shutdown: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
     healthcheck.close();
     await prisma.disconnect();
     await redis.disconnect();
@@ -42,7 +53,7 @@ async function main(): Promise<void> {
   process.on('SIGTERM', () => void shutdown('SIGTERM'));
 
   try {
-    await consumer.start();
+    await pollLoopPromise;
   } catch (error) {
     console.error(
       `[Agent Worker] Fatal error in poll loop: ${

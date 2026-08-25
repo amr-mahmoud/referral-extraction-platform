@@ -95,10 +95,28 @@ export function buildGeminiExtractionSchema(
                 'The 1-indexed page number where the data was found (page 1 = first page).',
             },
             boundingBox: {
-              type: Type.ARRAY,
+              type: Type.OBJECT,
               description:
-                'Spatial coordinates [ymin, xmin, ymax, xmax] normalized between 0 and 1000.',
-              items: { type: Type.NUMBER },
+                'Normalized bounding box {xmin, ymin, xmax, ymax} between 0 and 1000.',
+              properties: {
+                xmin: {
+                  type: Type.NUMBER,
+                  description: 'Minimum X (left) coordinate, 0-1000.',
+                },
+                ymin: {
+                  type: Type.NUMBER,
+                  description: 'Minimum Y (top) coordinate, 0-1000.',
+                },
+                xmax: {
+                  type: Type.NUMBER,
+                  description: 'Maximum X (right) coordinate, 0-1000.',
+                },
+                ymax: {
+                  type: Type.NUMBER,
+                  description: 'Maximum Y (bottom) coordinate, 0-1000.',
+                },
+              },
+              required: ['xmin', 'ymin', 'xmax', 'ymax'],
               nullable: true,
             },
           },

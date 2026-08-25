@@ -9,6 +9,8 @@ export const REFERRAL_STATUSES = {
   PROCESSING: "PROCESSING",
   PENDING: "PENDING",
   FAILED: "FAILED",
+  /** Content-level rejection (not a valid referral) — set by the worker, distinct from a system FAILED. */
+  REJECTED: "REJECTED",
 } as const;
 
 export type ReferralStatus =

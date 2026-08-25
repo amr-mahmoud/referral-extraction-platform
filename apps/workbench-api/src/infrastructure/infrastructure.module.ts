@@ -51,6 +51,7 @@ import { S3StorageService } from './storage/s3-storage.service';
     ENCRYPTION_PORT,
     TOKEN_PORT,
     CACHING_SERVICE_PORT,
+    PostgresListenService,
   ],
 })
 export class InfrastructureModule {}

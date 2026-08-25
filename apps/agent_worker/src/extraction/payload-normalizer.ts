@@ -3,16 +3,15 @@ import type {
   ExtractedFieldPayload,
   NormalizedBoundingBox,
   NormalizedExtractionResult,
-  RawBoundingBoxArray,
   RawExtractedField,
   RawLlmOutput,
 } from '../types/extraction.types';
 
 const rawExtractedFieldSchema = z.object({
-  fieldName: z.string().min(1),
-  fieldValue: z.string(),
-  pageNumber: z.number().int().min(1),
-  boundingBox: z.array(z.number()).nullable().optional(),
+  fieldName: z.coerce.string().min(1),
+  fieldValue: z.coerce.string(),
+  pageNumber: z.coerce.number().int().min(1),
+  boundingBox: z.unknown().nullable().optional(),
 });
 
 const rawLlmOutputSchema = z.object({
@@ -21,16 +20,14 @@ const rawLlmOutputSchema = z.object({
   extractedFields: z.array(rawExtractedFieldSchema),
 });
 
-const PATIENT_NAME_FIELD_KEYS = new Set(['patient_name', 'patient name', 'patient']);
-
 export function normalizeExtractionOutput(raw: unknown): NormalizedExtractionResult {
-  const parsed = rawLlmOutputSchema.parse(raw) as RawLlmOutput;
+  const parsed = rawLlmOutputSchema.parse(raw) as unknown as RawLlmOutput;
 
   const extractedFields: ExtractedFieldPayload[] = parsed.extractedFields.map(
     (field) => ({
       value: field.fieldValue,
       pageNumber: field.pageNumber,
-      boundingBox: normalizeBoundingBox(field.boundingBox),
+      boundingBox: sanitizeBoundingBox(field.boundingBox),
     }),
   );
 
@@ -42,25 +39,36 @@ export function normalizeExtractionOutput(raw: unknown): NormalizedExtractionRes
   };
 }
 
-function normalizeBoundingBox(
-  rawBoundingBox: RawBoundingBoxArray | null | undefined,
-): NormalizedBoundingBox | null {
-  if (!rawBoundingBox || rawBoundingBox.length !== 4) {
+function sanitizeBoundingBox(raw: unknown): NormalizedBoundingBox | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     return null;
   }
-  const [ymin, xmin, ymax, xmax] = rawBoundingBox;
-  const isWithinNormalizedRange = [ymin, xmin, ymax, xmax].every(
-    (coordinate) => coordinate >= 0 && coordinate <= 1000,
+  const box = raw as Partial<NormalizedBoundingBox>;
+  const coordinates = [box.xmin, box.ymin, box.xmax, box.ymax];
+  const isWithinNormalizedRange = coordinates.every(
+    (coordinate) =>
+      typeof coordinate === 'number' &&
+      Number.isFinite(coordinate) &&
+      coordinate >= 0 &&
+      coordinate <= 1000,
   );
-  if (!isWithinNormalizedRange || ymin > ymax || xmin > xmax) {
+  if (!isWithinNormalizedRange || box.xmin! > box.xmax! || box.ymin! > box.ymax!) {
     return null;
   }
-  return { xmin, ymin, xmax, ymax };
+  return { xmin: box.xmin!, ymin: box.ymin!, xmax: box.xmax!, ymax: box.ymax! };
+}
+
+function isPatientNameField(fieldName: string): boolean {
+  const normalized = fieldName.toLowerCase();
+  return (
+    normalized === 'patient_name' ||
+    normalized === 'patient name' ||
+    normalized === 'patient' ||
+    (normalized.includes('patient') && normalized.includes('name'))
+  );
 }
 
 function derivePatientName(fields: RawExtractedField[]): string | null {
-  const patientNameField = fields.find((field) =>
-    PATIENT_NAME_FIELD_KEYS.has(field.fieldName.toLowerCase()),
-  );
+  const patientNameField = fields.find((field) => isPatientNameField(field.fieldName));
   return patientNameField?.fieldValue ?? null;
 }

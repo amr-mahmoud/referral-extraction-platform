@@ -5,7 +5,6 @@ import {
   Param,
   Patch,
   Post,
-  Query,
   Req,
   Sse,
   UseGuards,
@@ -19,10 +18,11 @@ import {
 } from '@nestjs/swagger';
 import { Request } from 'express';
 import { Observable } from 'rxjs';
+import { concatMap, filter, map } from 'rxjs/operators';
 import { ApplicationService } from '../../../application/application.service';
 import { NotImplementedError } from '../../../application/errors/not-implemented.error';
 import { TokenClaims } from '../../../application/ports/token.port';
-import { Paginated } from '../../../application/ports/referral-repository.port';
+import { PostgresListenService } from '../../../infrastructure/notifications/postgres-listen.service';
 import { Referral } from '../../../domain/referral/referral.aggregate';
 import { ClinicId } from '../../../domain/shared/ids/clinic-id.value-object';
 import { ExtractionSchemaId } from '../../../domain/shared/ids/extraction-schema-id.value-object';
@@ -33,7 +33,7 @@ import {
   CreateReferralResponseDto,
   CreateReferralsRequest,
   ExtractionSchemaDto,
-  ListReferralsQueryDto,
+  ReferralListItemDto,
   UpdateReferralRequest,
 } from '../dto/index.dto';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
@@ -45,7 +45,10 @@ interface AuthenticatedRequest extends Request {
 @ApiBearerAuth('JWT-auth')
 @Controller()
 export class ClinicsController {
-  public constructor(private readonly applicationService: ApplicationService) {}
+  public constructor(
+    private readonly applicationService: ApplicationService,
+    private readonly postgresListenService: PostgresListenService,
+  ) {}
 
   @ApiTags('Clinics')
   @UseGuards(JwtAuthGuard)
@@ -145,14 +148,59 @@ export class ClinicsController {
   @UseGuards(JwtAuthGuard)
   @Get('referrals')
   @ApiOperation({
-    summary: 'List paginated referrals for authenticated clinic',
+    summary: 'List all referrals for the authenticated clinic',
+    description:
+      'Served cache-aside from the per-clinic Redis index, falling back to Postgres on a miss.',
   })
-  @ApiResponse({ status: 200, description: 'Paginated list of referrals' })
-  public listReferrals(
-    @Query() query: ListReferralsQueryDto,
-  ): Promise<Paginated<Referral>> {
-    void query;
-    throw new NotImplementedError('ClinicsController.listReferrals');
+  @ApiResponse({
+    status: 200,
+    description: 'Referrals for the clinic, newest first',
+    type: [ReferralListItemDto],
+  })
+  public async listReferrals(
+    @Req() req: AuthenticatedRequest,
+  ): Promise<ReferralListItemDto[]> {
+    const clinicId = ClinicId.from(req.user.clinicId);
+    const views =
+      await this.applicationService.listReferralViewsByClinic(clinicId);
+    return views.map((view) => ReferralListItemDto.fromReadModel(view));
+  }
+
+  @ApiTags('Referrals')
+  @UseGuards(JwtAuthGuard)
+  @Sse('referrals/stream')
+  @ApiOperation({
+    summary:
+      'Server-Sent Events stream of referral changes for the authenticated clinic',
+    description:
+      'Design-doc step 9: a Postgres LISTEN/NOTIFY ping triggers a primary-key ' +
+      'SELECT, which refreshes the Redis cache and pushes the full referral down ' +
+      'this stream. The NOTIFY payload itself carries only ids and status — the ' +
+      '8KB channel limit cannot hold an extracted payload.',
+  })
+  @ApiResponse({ status: 200, description: 'SSE stream established' })
+  public streamClinicReferrals(
+    @Req() req: AuthenticatedRequest,
+  ): Observable<MessageEvent> {
+    const clinicId = req.user.clinicId;
+
+    return this.postgresListenService.observeReferralChanges().pipe(
+      // Tenant isolation on the stream: NOTIFY is database-wide, so every
+      // connected clinic sees every ping and must filter to its own before
+      // the fetch, not after.
+      filter((notification) => notification.clinicId === clinicId),
+      concatMap(async (notification) => {
+        const view = await this.applicationService.refreshReferralViewCache(
+          notification.referralId,
+        );
+        return view;
+      }),
+      filter((view): view is NonNullable<typeof view> => view !== null),
+      map((view) => ({
+        type: 'referral-changed',
+        data: ReferralListItemDto.fromReadModel(view),
+      })),
+    );
   }
 
   @ApiTags('Referrals')

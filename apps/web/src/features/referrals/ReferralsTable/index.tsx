@@ -8,11 +8,16 @@ import {
   REFERRAL_FILTERS,
   type ReferralFilter,
 } from "@/constants/referrals";
+import { useReferralStatusStream } from "@/hooks/use-referral-status-stream";
 import { cn } from "@/lib/utils";
 import {
   countReferralsByFilter,
   filterReferrals,
 } from "@/managers/referral-filter.manager";
+import {
+  mergeReferralRowView,
+  toReferralRowView,
+} from "@/managers/referral-view.manager";
 import { Tabs } from "@/shared/Tabs";
 import type { ReferralRowView } from "@/types/referrals/referral";
 
@@ -44,14 +49,33 @@ const ReferralsTable = React.forwardRef<HTMLElement, ReferralsTableProps>(
       REFERRAL_FILTERS.ALL,
     );
 
+    // Seeded from the server-rendered list, then kept live by SSE. Re-synced
+    // whenever the server list itself changes (e.g. `revalidatePath` after a
+    // new batch upload) so a fresh server fetch is never shadowed by stale
+    // client state.
+    const [liveReferrals, setLiveReferrals] =
+      React.useState<readonly ReferralRowView[]>(referrals);
+
+    React.useEffect(() => {
+      setLiveReferrals(referrals);
+    }, [referrals]);
+
+    useReferralStatusStream(
+      React.useCallback((changedReferral) => {
+        setLiveReferrals((current) =>
+          mergeReferralRowView(current, toReferralRowView(changedReferral)),
+        );
+      }, []),
+    );
+
     const counts = React.useMemo(
-      () => countReferralsByFilter(referrals),
-      [referrals],
+      () => countReferralsByFilter(liveReferrals),
+      [liveReferrals],
     );
 
     const visible = React.useMemo(
-      () => filterReferrals(referrals, filter),
-      [filter, referrals],
+      () => filterReferrals(liveReferrals, filter),
+      [filter, liveReferrals],
     );
 
     const items = React.useMemo(

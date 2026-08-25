@@ -6,6 +6,7 @@ export const REFERRAL_STATUS_LABELS: Record<ReferralStatus, string> = {
   [REFERRAL_STATUSES.PROCESSING]: "Processing",
   [REFERRAL_STATUSES.PENDING]: "Pending",
   [REFERRAL_STATUSES.FAILED]: "Failed",
+  [REFERRAL_STATUSES.REJECTED]: "Rejected",
 };
 
 export const REFERRAL_FILTERS = {
@@ -41,7 +42,14 @@ export const REFERRAL_FILTER_STATUSES: Partial<
     REFERRAL_STATUSES.PROCESSING,
     REFERRAL_STATUSES.PENDING,
   ],
-  [REFERRAL_FILTERS.FAILED]: [REFERRAL_STATUSES.FAILED],
+  // REJECTED (content-level: not a valid referral) groups with FAILED
+  // (system-level error) under one tab — both mean "didn't complete" from
+  // the clinic's point of view, and the design doc caps the UI at 3 pages,
+  // so a fourth filter tab just for the distinction isn't warranted.
+  [REFERRAL_FILTERS.FAILED]: [
+    REFERRAL_STATUSES.FAILED,
+    REFERRAL_STATUSES.REJECTED,
+  ],
 };
 
 /** Accepted upload types — the extractor only reads PDFs. */

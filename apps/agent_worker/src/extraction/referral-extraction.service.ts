@@ -21,8 +21,9 @@ export class ReferralExtractionService {
   ) {}
 
   public async processMessage(context: ReferralJobContext): Promise<ReferralJobResult> {
+    let isClaimed = false;
     try {
-      const isClaimed = await this.prisma.claimReferral(context.referralId);
+      isClaimed = await this.prisma.claimReferral(context.referralId);
       if (!isClaimed) {
         return {
           kind: 'SKIPPED',
@@ -41,6 +42,7 @@ export class ReferralExtractionService {
       }
 
       const schemaDefinition = metadata?.schemaDefinition ?? null;
+      const resolvedSchemaId = metadata?.id ?? null;
       const responseSchema = buildGeminiExtractionSchema(schemaDefinition);
       const fieldInstructions = buildFieldInstructions(schemaDefinition);
 
@@ -63,12 +65,15 @@ export class ReferralExtractionService {
         context.referralId,
         normalized.extractedFields,
         normalized.patientName,
+        resolvedSchemaId,
       );
       await this.indexReferralForClinicBestEffort(context.clinicId, context.referralId);
 
       return { kind: 'COMPLETED' };
     } catch (error) {
-      await this.markAsFailedBestEffort(context.referralId, error);
+      if (isClaimed) {
+        await this.markAsFailedBestEffort(context.referralId, error);
+      }
       throw error;
     }
   }
@@ -76,9 +81,17 @@ export class ReferralExtractionService {
   private async resolveReferralMetadata(
     referralId: string,
   ): Promise<CachedExtractionSchema | null> {
-    const cachedMetadata = await this.redis.getReferralMetadata(referralId);
-    if (cachedMetadata) {
-      return cachedMetadata.extractionSchema;
+    try {
+      const cachedMetadata = await this.redis.getReferralMetadata(referralId);
+      if (cachedMetadata) {
+        return cachedMetadata.extractionSchema;
+      }
+    } catch (error) {
+      console.error(
+        `[Worker] Redis metadata read failed for referral ${referralId}, falling back to Postgres: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
     }
 
     const fallbackMetadata =

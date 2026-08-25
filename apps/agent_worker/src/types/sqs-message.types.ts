@@ -10,12 +10,6 @@ export interface S3ObjectCreatedRecord {
   };
 }
 
-export interface ParsedSqsMessage {
-  bucket: string;
-  key: string;
-  receiptHandle: string;
-}
-
 export const REFERRAL_OBJECT_KEY_PATTERN = /^referrals\/([^/]+)\/([^.]+)\.pdf$/;
 
 export function parseReferralObjectKey(

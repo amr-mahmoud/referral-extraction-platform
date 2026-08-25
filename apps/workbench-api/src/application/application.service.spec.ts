@@ -9,6 +9,7 @@ import { ReferralRepositoryPort } from './ports/referral-repository.port';
 import { StoragePort } from './ports/storage.port';
 import { ClinicId } from '../domain/shared/ids/clinic-id.value-object';
 import { ExtractionSchemaId } from '../domain/shared/ids/extraction-schema-id.value-object';
+import type { ReferralView } from './read-models/referral-view.read-model';
 
 describe('ApplicationService.createNewReferralsWithAttachedPresignedUrls', () => {
   const clinicId = ClinicId.from('11111111-1111-1111-1111-111111111111');
@@ -38,6 +39,9 @@ describe('ApplicationService.createNewReferralsWithAttachedPresignedUrls', () =>
       findPaginatedReferralsByClinicId: jest.fn(),
       saveReferral: jest.fn(),
       saveReferrals: jest.fn((referrals) => Promise.resolve(referrals)),
+      findReferralViewsByClinicId: jest.fn().mockResolvedValue([]),
+      findReferralViewsByIds: jest.fn().mockResolvedValue([]),
+      findAllReferralViews: jest.fn().mockResolvedValue([]),
       ...overrides?.referralRepository,
     };
 
@@ -58,6 +62,12 @@ describe('ApplicationService.createNewReferralsWithAttachedPresignedUrls', () =>
     const cachingService: CachingServicePort = {
       setManyReferralCaches: jest.fn().mockResolvedValue(undefined),
       getReferralCache: jest.fn(),
+      setReferralView: jest.fn().mockResolvedValue(undefined),
+      setManyReferralViews: jest.fn().mockResolvedValue(undefined),
+      getReferralView: jest.fn().mockResolvedValue(null),
+      getManyReferralViews: jest.fn().mockResolvedValue([]),
+      addReferralIdsToClinicIndex: jest.fn().mockResolvedValue(undefined),
+      getClinicReferralIds: jest.fn().mockResolvedValue(null),
       ...overrides?.cachingService,
     };
 
@@ -218,5 +228,194 @@ describe('ApplicationService.createNewReferralsWithAttachedPresignedUrls', () =>
     // test documents that the failure surfaces to the caller (fail-closed),
     // not that persistence itself rolls back.
     expect(referralRepository.saveReferrals).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('ApplicationService.listReferralViewsByClinic', () => {
+  const clinicId = ClinicId.from('11111111-1111-1111-1111-111111111111');
+
+  function buildService(overrides?: {
+    referralRepository?: Partial<ReferralRepositoryPort>;
+    cachingService?: Partial<CachingServicePort>;
+  }) {
+    const clinicRepository: ClinicRepositoryPort = {
+      findById: jest.fn(),
+      findByUsername: jest.fn(),
+      save: jest.fn(),
+      saveExtractionSchema: jest.fn(),
+      findLatestSchemaVersion: jest.fn(),
+      findExtractionSchemaById: jest.fn(),
+      listExtractionSchemasByClinic: jest.fn(),
+    };
+
+    const referralRepository: ReferralRepositoryPort = {
+      findReferralById: jest.fn(),
+      findReferralByIdForClinic: jest.fn(),
+      findPaginatedReferralsByClinicId: jest.fn(),
+      saveReferral: jest.fn(),
+      saveReferrals: jest.fn(),
+      findReferralViewsByClinicId: jest.fn().mockResolvedValue([]),
+      findReferralViewsByIds: jest.fn().mockResolvedValue([]),
+      findAllReferralViews: jest.fn().mockResolvedValue([]),
+      ...overrides?.referralRepository,
+    };
+
+    const cachingService: CachingServicePort = {
+      setManyReferralCaches: jest.fn(),
+      getReferralCache: jest.fn(),
+      setReferralView: jest.fn().mockResolvedValue(undefined),
+      setManyReferralViews: jest.fn().mockResolvedValue(undefined),
+      getReferralView: jest.fn().mockResolvedValue(null),
+      getManyReferralViews: jest.fn().mockResolvedValue([]),
+      addReferralIdsToClinicIndex: jest.fn().mockResolvedValue(undefined),
+      getClinicReferralIds: jest.fn().mockResolvedValue(null),
+      ...overrides?.cachingService,
+    };
+
+    const service = new ApplicationService(
+      clinicRepository,
+      referralRepository,
+      {} as never,
+      {} as never,
+      {} as never,
+      cachingService,
+    );
+
+    return { service, referralRepository, cachingService };
+  }
+
+  function buildView(overrides?: Partial<ReferralView>): ReferralView {
+    return {
+      id: 'referral-1',
+      clinicId: clinicId.value,
+      fileName: 'a.pdf',
+      patientName: null,
+      status: 'AWAITING_UPLOAD',
+      extractionSchemaId: null,
+      extractionSchemaVersion: null,
+      errorMessage: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      ...overrides,
+    };
+  }
+
+  it('serves entirely from Redis on a full cache hit, without touching Postgres', async () => {
+    const view = buildView();
+    const { service, referralRepository } = buildService({
+      cachingService: {
+        getClinicReferralIds: jest.fn().mockResolvedValue([view.id]),
+        getManyReferralViews: jest.fn().mockResolvedValue([view]),
+      },
+    });
+
+    const results = await service.listReferralViewsByClinic(clinicId);
+
+    expect(results).toEqual([view]);
+    expect(
+      referralRepository.findReferralViewsByClinicId,
+    ).not.toHaveBeenCalled();
+    expect(referralRepository.findReferralViewsByIds).not.toHaveBeenCalled();
+  });
+
+  it('rebuilds from Postgres and backfills Redis when the clinic index key is entirely absent', async () => {
+    const view = buildView();
+    const { service, cachingService } = buildService({
+      cachingService: {
+        getClinicReferralIds: jest.fn().mockResolvedValue(null),
+      },
+      referralRepository: {
+        findReferralViewsByClinicId: jest.fn().mockResolvedValue([view]),
+      },
+    });
+
+    const results = await service.listReferralViewsByClinic(clinicId);
+
+    expect(results).toEqual([view]);
+    expect(cachingService.setManyReferralViews).toHaveBeenCalledWith([view]);
+    expect(cachingService.addReferralIdsToClinicIndex).toHaveBeenCalledWith(
+      clinicId.value,
+      [view.id],
+    );
+  });
+
+  it('returns an empty list without touching Postgres when the index exists but is empty', async () => {
+    const { service, referralRepository } = buildService({
+      cachingService: { getClinicReferralIds: jest.fn().mockResolvedValue([]) },
+    });
+
+    const results = await service.listReferralViewsByClinic(clinicId);
+
+    expect(results).toEqual([]);
+    expect(
+      referralRepository.findReferralViewsByClinicId,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('backfills only the ids that missed the cache on a partial miss', async () => {
+    const cachedView = buildView({ id: 'referral-cached' });
+    const missingView = buildView({ id: 'referral-missing' });
+    const { service, referralRepository, cachingService } = buildService({
+      cachingService: {
+        getClinicReferralIds: jest
+          .fn()
+          .mockResolvedValue([cachedView.id, missingView.id]),
+        getManyReferralViews: jest.fn().mockResolvedValue([cachedView, null]),
+      },
+      referralRepository: {
+        findReferralViewsByIds: jest.fn().mockResolvedValue([missingView]),
+      },
+    });
+
+    const results = await service.listReferralViewsByClinic(clinicId);
+
+    expect(referralRepository.findReferralViewsByIds).toHaveBeenCalledWith([
+      missingView.id,
+    ]);
+    expect(cachingService.setManyReferralViews).toHaveBeenCalledWith([
+      missingView,
+    ]);
+    expect(results.map((view) => view.id).sort()).toEqual(
+      [cachedView.id, missingView.id].sort(),
+    );
+  });
+
+  it('sorts results newest-first regardless of the (unordered) SET iteration order', async () => {
+    const older = buildView({
+      id: 'older',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    const newer = buildView({
+      id: 'newer',
+      createdAt: '2026-01-02T00:00:00.000Z',
+    });
+    const { service } = buildService({
+      cachingService: {
+        getClinicReferralIds: jest.fn().mockResolvedValue([older.id, newer.id]),
+        getManyReferralViews: jest.fn().mockResolvedValue([older, newer]),
+      },
+    });
+
+    const results = await service.listReferralViewsByClinic(clinicId);
+
+    expect(results.map((view) => view.id)).toEqual([newer.id, older.id]);
+  });
+
+  it('falls back to Postgres and does not throw when Redis itself errors', async () => {
+    const view = buildView();
+    const { service } = buildService({
+      cachingService: {
+        getClinicReferralIds: jest
+          .fn()
+          .mockRejectedValue(new Error('ECONNREFUSED')),
+      },
+      referralRepository: {
+        findReferralViewsByClinicId: jest.fn().mockResolvedValue([view]),
+      },
+    });
+
+    const results = await service.listReferralViewsByClinic(clinicId);
+
+    expect(results).toEqual([view]);
   });
 });

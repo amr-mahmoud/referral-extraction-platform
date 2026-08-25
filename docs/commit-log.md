@@ -636,3 +636,26 @@ This document serves as the centralized commit history and decision log for the 
 
 - **Modified:** `apps/agent_worker/src/**` (new `config/env.config.ts`, `types/*`, `clients/{aws,database,cache,ai}/*`, `extraction/*`, `server/healthcheck.ts`, rewritten `index.ts`), `apps/agent_worker/package.json`, `apps/agent_worker/plan.md` (new), `prisma/schema.prisma` (+`REJECTED`), `apps/workbench-api/src/domain/referral/referral-status.value-object.ts` (+`REJECTED`, +`PROCESSING → REJECTED`), `docker-compose.yml`, `docker/Dockerfile.dev`, `.env.example` (+`WORKER_PORT`), `Makefile`, `package-lock.json`
 - **Impact:** workbench-api must push the new enum (`make db-apply-migrations`) before any worker write can set `REJECTED`; the worker now requires `SQS_QUEUE_URL`, `S3_BUCKET_NAME`, `DATABASE_URL`, `GEMINI_API_KEY` at boot (zod fail-fast); the compose worker service exposes `8002/healthz`; the review UI now consumes 1-indexed `pageNumber` and `{xmin,ymin,xmax,ymax}` bboxes from `COMPLETED` referrals.
+
+---
+
+## v0.0.32 | 2026-08-26 | feat | REALTIME STREAM PIPELINE
+
+**Category:** System Architecture  
+**Summary:** Implement end-to-end real-time dashboard updates via Postgres LISTEN/NOTIFY triggers, NestJS SSE stream endpoint, Next.js SSE proxy, and Redis Cache-Aside clinic index with Postgres fallback.  
+**SuggestedCommitMessage:** feat: implement real-time SSE stream and Redis cache-aside dashboard pipeline | System Architecture
+
+### 🧠 Logic & Decisions
+
+- **The Why:** Per design doc steps 9 & 10, real-time dashboard status transitions and high-speed clinic listing require decoupling notification delivery from heavy data payloads and providing cache-aside O(1) reads with zero data loss.
+  - **Postgres Notify + Fetch (Step 9):** To respect Postgres's 8KB payload ceiling, `002-referral-notify.sql` fires a lightweight channel notification carrying only `id`, `clinic_id`, and `status`. `PostgresListenService` receives the event and streams it into NestJS `@Sse('referrals/stream')` with tenant isolation (`filter(notification.clinicId === clinicId)`). The service then fetches the full `ReferralView` read model from Postgres / Redis cache before pushing the `referral-changed` SSE event down to the client.
+  - **Next.js SSE Route Proxy:** Added `apps/web/src/app/api/referrals/stream/route.ts` to proxy the EventSource connection from the browser to `workbench-api`, attaching HTTP-only session JWT cookies server-side.
+  - **Client-Side Real-Time Reconciliation:** Built `useReferralStatusStream` hook and `referral-view.manager.ts` to seamlessly update the dashboard table on status changes (`AWAITING_UPLOAD` → `PROCESSING` → `COMPLETED` / `FAILED` / `REJECTED`) without requiring manual page refreshes.
+  - **Redis Secondary Index & Cache-Aside (Step 10):** Implemented `clinic:{id}:referrals` Set index and `referral_view:{id}` hashes in `RedisService`. `ApplicationService.listReferralViewsByClinic` resolves clinic views cache-aside and gracefully falls back to Postgres on cold start, eviction, or partial cache miss, backfilling Redis tolerantly without breaking request execution.
+  - **Agent Worker & Model Choice Hardening:** Made `GEMINI_MODEL` strictly sourced from `.env` in `apps/agent_worker/src/config/env.config.ts` (configured to `gemini-2.0-flash`), tuned poll timeout, and removed deleted mock files.
+- **State Change:** The dashboard now displays live referral lifecycle updates in real time via SSE without polling, and clinic referral listings are served in O(1) from Redis with full Postgres read fallback.
+
+### 🔗 Dependencies
+
+- **Modified:** `apps/workbench-api/src/application/application.service.ts`, `apps/workbench-api/src/application/ports/caching.port.ts`, `apps/workbench-api/src/application/ports/referral-repository.port.ts`, `apps/workbench-api/src/application/read-models/referral-view.read-model.ts`, `apps/workbench-api/src/infrastructure/caching/redis.service.ts`, `apps/workbench-api/src/infrastructure/notifications/postgres-listen.service.ts`, `apps/workbench-api/src/interface/http/clinics/clinics.controller.ts`, `apps/workbench-api/src/interface/http/dto/index.dto.ts`, `docker/postgres/init/002-referral-notify.sql`, `apps/web/src/app/api/referrals/stream/route.ts`, `apps/web/src/hooks/use-referral-status-stream.ts`, `apps/web/src/managers/referral-view.manager.ts`, `apps/web/src/apps/dashboard/index.tsx`, `apps/web/src/features/referrals/**`, `apps/agent_worker/src/**`, `.env.example`, `.gitignore`
+- **Impact:** Requires Postgres trigger `002-referral-notify.sql` loaded in database (handled on compose boot / migration); Next.js dashboard opens an SSE stream to `/api/referrals/stream`; Redis cache failures now log warnings and degrade to Postgres without throwing 500s.

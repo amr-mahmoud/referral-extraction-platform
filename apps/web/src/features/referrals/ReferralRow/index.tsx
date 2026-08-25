@@ -29,6 +29,7 @@ const STATUS_TONES: Record<ReferralStatus, StatusPillTone> = {
   [REFERRAL_STATUSES.PROCESSING]: "brand",
   [REFERRAL_STATUSES.PENDING]: "neutral",
   [REFERRAL_STATUSES.FAILED]: "danger",
+  [REFERRAL_STATUSES.REJECTED]: "danger",
 };
 
 export interface ReferralRowProps
@@ -40,7 +41,9 @@ export interface ReferralRowProps
 /** One referral in the list — the whole row is the affordance into review. */
 const ReferralRow = React.forwardRef<HTMLButtonElement, ReferralRowProps>(
   ({ className, onOpen, referral, ...props }, ref) => {
-    const isFailed = referral.status === REFERRAL_STATUSES.FAILED;
+    const isFailed =
+      referral.status === REFERRAL_STATUSES.FAILED ||
+      referral.status === REFERRAL_STATUSES.REJECTED;
 
     return (
       <button

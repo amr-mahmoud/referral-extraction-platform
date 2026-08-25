@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Clinic } from '../domain/clinic/clinic.aggregate';
 import {
   ClinicInvalidCredentialsError,
@@ -21,13 +21,13 @@ import {
   type CachingServicePort,
   type ReferralCacheEntry,
 } from './ports/caching.port';
+import type { ReferralView } from './read-models/referral-view.read-model';
 import {
   CLINIC_REPOSITORY_PORT,
   type ClinicRepositoryPort,
 } from './ports/clinic-repository.port';
 import { ENCRYPTION_PORT, type EncryptionPort } from './ports/encryption.port';
 import {
-  Paginated,
   REFERRAL_REPOSITORY_PORT,
   type ReferralRepositoryPort,
 } from './ports/referral-repository.port';
@@ -99,6 +99,8 @@ export interface CorrectReferralCommand {
 
 @Injectable()
 export class ApplicationService {
+  private readonly logger = new Logger(ApplicationService.name);
+
   public constructor(
     @Inject(CLINIC_REPOSITORY_PORT)
     private readonly clinicRepository: ClinicRepositoryPort,
@@ -332,7 +334,22 @@ export class ApplicationService {
         })),
       );
 
-      // 6. Zip by index — referrals/uploads/savedReferrals are all the same
+      // 6. Warm the serving caches (design-doc step 10) so the new rows show
+      //    up on the dashboard without a Postgres round-trip. Best-effort,
+      //    unlike step 5 above: these only accelerate reads that Postgres can
+      //    always answer, and the LISTEN/NOTIFY refresh repairs anything lost
+      //    here when the INSERT trigger fires.
+      await this.writeReferralViewsTolerantly(
+        savedReferrals.map((referral) =>
+          this.toReferralViewFromAggregate(referral, extractionSchema),
+        ),
+      );
+      await this.addToClinicIndexTolerantly(
+        command.clinicId.value,
+        savedReferrals.map((referral) => referral.id),
+      );
+
+      // 7. Zip by index — referrals/uploads/savedReferrals are all the same
       //    length and order as `command.files`.
       return savedReferrals.map((referral, index) => ({
         referral,
@@ -378,23 +395,216 @@ export class ApplicationService {
     );
   }
 
-  public async listReferralsByClinic(
-    query: ListReferralsQuery,
-  ): Promise<Paginated<Referral>> {
+  /**
+   * Design-doc step 10. Cache-aside over the per-clinic secondary index:
+   *
+   *   1. `SMEMBERS clinic:{id}:referrals` for the id set.
+   *   2. Pipelined `HGET` of each referral's cached view.
+   *   3. Any miss — a missing index key, or ids whose view is gone — falls back
+   *      to Postgres and backfills Redis.
+   *
+   * Redis is never the system of record: every path can be served entirely
+   * from Postgres, so a cold or evicted cache degrades latency, not
+   * correctness.
+   */
+  public async listReferralViewsByClinic(
+    clinicId: ClinicId,
+  ): Promise<ReferralView[]> {
     try {
-      void query;
-      throw new NotImplementedError('ApplicationService.listReferralsByClinic');
+      const cachedReferralIds = await this.readClinicIndexTolerantly(clinicId);
+
+      // No index key at all — the clinic has never been cached (cold start,
+      // eviction, flushed Redis). Rebuild the whole thing from Postgres.
+      if (cachedReferralIds === null) {
+        return this.rebuildClinicCacheFromDatabase(clinicId);
+      }
+
+      if (cachedReferralIds.length === 0) {
+        return [];
+      }
+
+      const cachedViews =
+        await this.readReferralViewsTolerantly(cachedReferralIds);
+
+      const viewsById = new Map<string, ReferralView>();
+      const missingReferralIds: string[] = [];
+      cachedReferralIds.forEach((referralId, index) => {
+        const view = cachedViews[index];
+        if (view) {
+          viewsById.set(referralId, view);
+          return;
+        }
+        missingReferralIds.push(referralId);
+      });
+
+      // Partial miss: the index knows about referrals whose view has expired
+      // or was never written. Fetch just those and backfill.
+      if (missingReferralIds.length > 0) {
+        const backfilled =
+          await this.referralRepository.findReferralViewsByIds(
+            missingReferralIds,
+          );
+        for (const view of backfilled) {
+          viewsById.set(view.id, view);
+        }
+        await this.writeReferralViewsTolerantly(backfilled);
+      }
+
+      return this.sortNewestFirst([...viewsById.values()]);
     } catch (error) {
-      if (
-        error instanceof DomainError ||
-        error instanceof NotImplementedError
-      ) {
+      if (error instanceof DomainError) {
         throw error;
       }
       throw new Error(
         `Failed to list referrals: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
+  }
+
+  /** Re-reads one referral from Postgres and refreshes its cache entry. */
+  public async refreshReferralViewCache(
+    referralId: string,
+  ): Promise<ReferralView | null> {
+    const [view] = await this.referralRepository.findReferralViewsByIds([
+      referralId,
+    ]);
+    if (!view) {
+      return null;
+    }
+    await this.writeReferralViewsTolerantly([view]);
+    await this.addToClinicIndexTolerantly(view.clinicId, [view.id]);
+    return view;
+  }
+
+  /** Dev-only warm-up: loads every referral into Redis so the cache starts hot. */
+  public async warmAllReferralCaches(): Promise<number> {
+    const views = await this.referralRepository.findAllReferralViews();
+    if (views.length === 0) {
+      return 0;
+    }
+
+    await this.writeReferralViewsTolerantly(views);
+
+    const referralIdsByClinicId = new Map<string, string[]>();
+    for (const view of views) {
+      const existing = referralIdsByClinicId.get(view.clinicId) ?? [];
+      existing.push(view.id);
+      referralIdsByClinicId.set(view.clinicId, existing);
+    }
+    for (const [clinicId, referralIds] of referralIdsByClinicId) {
+      await this.addToClinicIndexTolerantly(clinicId, referralIds);
+    }
+
+    return views.length;
+  }
+
+  private async rebuildClinicCacheFromDatabase(
+    clinicId: ClinicId,
+  ): Promise<ReferralView[]> {
+    const views =
+      await this.referralRepository.findReferralViewsByClinicId(clinicId);
+
+    await this.writeReferralViewsTolerantly(views);
+    await this.addToClinicIndexTolerantly(
+      clinicId.value,
+      views.map((view) => view.id),
+    );
+
+    return views;
+  }
+
+  private sortNewestFirst(views: ReferralView[]): ReferralView[] {
+    // The index is an unordered SET, so ordering is re-derived here rather
+    // than inherited from Redis. (A ZSET scored by createdAt would push this
+    // into Redis and enable real pagination — see the "future improvements"
+    // note in docs/product_solution_design.md.)
+    return [...views].sort((left, right) =>
+      right.createdAt.localeCompare(left.createdAt),
+    );
+  }
+
+  // ── Cache access, tolerant by design ─────────────────────────────────
+  // Reads and writes on the *serving* path never fail the request: Postgres
+  // is the system of record and can answer every one of these queries on its
+  // own. This is deliberately the opposite of the fail-closed policy on
+  // referral *creation*, where a lost cache write would strand a referral the
+  // worker could never resolve a schema for.
+
+  private async readClinicIndexTolerantly(
+    clinicId: ClinicId,
+  ): Promise<string[] | null> {
+    try {
+      return await this.cachingService.getClinicReferralIds(clinicId.value);
+    } catch (error) {
+      this.logCacheDegradation('read clinic index', error);
+      return null;
+    }
+  }
+
+  private async readReferralViewsTolerantly(
+    referralIds: string[],
+  ): Promise<(ReferralView | null)[]> {
+    try {
+      return await this.cachingService.getManyReferralViews(referralIds);
+    } catch (error) {
+      this.logCacheDegradation('read referral views', error);
+      return referralIds.map(() => null);
+    }
+  }
+
+  private async writeReferralViewsTolerantly(
+    views: ReferralView[],
+  ): Promise<void> {
+    try {
+      await this.cachingService.setManyReferralViews(views);
+    } catch (error) {
+      this.logCacheDegradation('write referral views', error);
+    }
+  }
+
+  private async addToClinicIndexTolerantly(
+    clinicId: string,
+    referralIds: string[],
+  ): Promise<void> {
+    try {
+      await this.cachingService.addReferralIdsToClinicIndex(
+        clinicId,
+        referralIds,
+      );
+    } catch (error) {
+      this.logCacheDegradation('write clinic index', error);
+    }
+  }
+
+  /**
+   * Projects a freshly-created aggregate into the cached read model without a
+   * second database read — everything the dashboard needs is already in hand
+   * at creation time, including the schema version resolved in step 1.
+   */
+  private toReferralViewFromAggregate(
+    referral: Referral,
+    extractionSchema: ExtractionSchema | null,
+  ): ReferralView {
+    return {
+      id: referral.id,
+      clinicId: referral.clinicId.value,
+      fileName: referral.fileName,
+      patientName: referral.patientName,
+      status: referral.status.value,
+      extractionSchemaId: referral.extractionSchemaId?.value ?? null,
+      extractionSchemaVersion: extractionSchema?.version ?? null,
+      errorMessage: referral.errorMessage,
+      createdAt: referral.createdAt.toISOString(),
+      updatedAt: referral.updatedAt.toISOString(),
+    };
+  }
+
+  private logCacheDegradation(operation: string, error: unknown): void {
+    this.logger.warn(
+      `Cache degraded (${operation}); serving from Postgres: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
   }
 
   public async getReferralByClinic(

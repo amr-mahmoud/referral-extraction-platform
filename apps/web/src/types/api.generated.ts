@@ -80,11 +80,34 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List paginated referrals for authenticated clinic */
+        /**
+         * List all referrals for the authenticated clinic
+         * @description Served cache-aside from the per-clinic Redis index, falling back to Postgres on a miss.
+         */
         get: operations["ClinicsController_listReferrals"];
         put?: never;
         /** Create new referrals in batch and issue presigned S3 upload URLs */
         post: operations["ClinicsController_createNewReferralsWithAttachedPresignedUrls"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/referrals/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Server-Sent Events stream of referral changes for the authenticated clinic
+         * @description Design-doc step 9: a Postgres LISTEN/NOTIFY ping triggers a primary-key SELECT, which refreshes the Redis cache and pushes the full referral down this stream. The NOTIFY payload itself carries only ids and status — the 8KB channel limit cannot hold an extracted payload.
+         */
+        get: operations["ClinicsController_streamClinicReferrals"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -263,6 +286,26 @@ export interface components {
             /** @description Presigned S3 upload slot for the referral PDF. */
             upload: components["schemas"]["PresignedUploadDto"];
         };
+        ReferralListItemDto: {
+            /** @description Unique referral ID (UUID). */
+            id: string;
+            /** @description Original uploaded file name. */
+            fileName: string;
+            /** @description `null` until extraction resolves a patient. */
+            patientName: string | null;
+            /** @description Current lifecycle status. */
+            status: string;
+            /** @description Resolved extraction schema ID, or `null` for the default LLM schema. */
+            extractionSchemaId: string | null;
+            /** @description Schema version behind `extractionSchemaId`, for the dashboard label. */
+            extractionSchemaVersion: number | null;
+            /** @description Populated when the referral FAILED or was REJECTED. */
+            errorMessage: string | null;
+            /** @description ISO-8601 creation timestamp. */
+            createdAt: string;
+            /** @description ISO-8601 last-update timestamp. */
+            updatedAt: string;
+        };
         BoundingBoxDto: {
             /** @description Normalized minimum X coordinate (0-1000). */
             xmin: number;
@@ -436,24 +479,21 @@ export interface operations {
     };
     ClinicsController_listReferrals: {
         parameters: {
-            query?: {
-                /** @description Page number for pagination (starts at 1). */
-                page?: number;
-                /** @description Page size limit (maximum 100). */
-                limit?: number;
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Paginated list of referrals */
+            /** @description Referrals for the clinic, newest first */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ReferralListItemDto"][];
+                };
             };
         };
     };
@@ -481,6 +521,24 @@ export interface operations {
             };
             /** @description Extraction schema not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ClinicsController_streamClinicReferrals: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description SSE stream established */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

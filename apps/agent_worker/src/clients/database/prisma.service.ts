@@ -31,6 +31,7 @@ export class PrismaService {
     referralId: string,
     extractedPayload: ExtractedFieldPayload[],
     patientName: string | null,
+    extractionSchemaId: string | null,
   ): Promise<void> {
     await this.client.referral.update({
       where: { id: referralId },
@@ -38,6 +39,7 @@ export class PrismaService {
         status: ReferralStatus.COMPLETED,
         extractedPayload: extractedPayload as unknown as Prisma.InputJsonValue,
         patientName,
+        extractionSchemaId,
       },
     });
   }

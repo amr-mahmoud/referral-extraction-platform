@@ -64,7 +64,7 @@ CRITICAL RULES:
 ${fieldInstructions}
 
 3. SPATIAL GROUNDING:
-   - For every extracted field, provide the normalized bounding box [ymin, xmin, ymax, xmax] between 0 and 1000.
+   - For every extracted field, provide the normalized bounding box object {xmin, ymin, xmax, ymax} with coordinates between 0 and 1000.
    - Provide the 1-indexed pageNumber where the value appears (page 1 = first page).
    - If you cannot determine a field's location, leave its boundingBox null rather than guessing.
 `;

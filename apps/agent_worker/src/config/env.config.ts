@@ -10,9 +10,9 @@ const workerEnvSchema = z.object({
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().min(1).default('redis://localhost:6379'),
   GEMINI_API_KEY: z.string().min(1),
-  GEMINI_MODEL: z.string().min(1).default('gemini-2.5-flash'),
+  GEMINI_MODEL: z.string().min(1),
   MAX_CONCURRENT_MESSAGES: z.coerce.number().int().positive().default(5),
-  POLL_WAIT_SECONDS: z.coerce.number().int().positive().default(20),
+  POLL_WAIT_SECONDS: z.coerce.number().int().positive().default(15),
   HEALTHCHECK_PORT: z.coerce.number().int().positive().default(8002),
 });
 

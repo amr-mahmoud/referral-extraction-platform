@@ -5,6 +5,16 @@ const REFERRAL_KEY_PREFIX = 'referral:';
 const CLINIC_REFERRALS_KEY_PREFIX = 'clinic:';
 const CLINIC_REFERRALS_KEY_SUFFIX = ':referrals';
 
+// Must match workbench-api's RedisService CLINIC_INDEX_TTL_SECONDS — both
+// sides write the same clinic:{id}:referrals SET. If this SADD lands after
+// the API's index has expired, a plain SADD with no TTL would silently
+// recreate the key containing ONLY this one referral id, and the API's
+// cache-aside read would then wrongly trust that partial key as "the whole
+// clinic index" until it separately expired on its own. Applying the same
+// TTL here bounds that incorrect state to the same self-healing window
+// instead of letting it persist indefinitely.
+const CLINIC_INDEX_TTL_SECONDS = 10 * 60;
+
 export interface ReferralMetadataFromCache {
   fileName: string;
   extractionSchema: CachedExtractionSchema | null;
@@ -42,10 +52,12 @@ export class RedisService {
     clinicId: string,
     referralId: string,
   ): Promise<void> {
-    await this.client.sadd(
-      `${CLINIC_REFERRALS_KEY_PREFIX}${clinicId}${CLINIC_REFERRALS_KEY_SUFFIX}`,
-      referralId,
-    );
+    const key = `${CLINIC_REFERRALS_KEY_PREFIX}${clinicId}${CLINIC_REFERRALS_KEY_SUFFIX}`;
+    await this.client
+      .multi()
+      .sadd(key, referralId)
+      .expire(key, CLINIC_INDEX_TTL_SECONDS)
+      .exec();
   }
 
   public async disconnect(): Promise<void> {

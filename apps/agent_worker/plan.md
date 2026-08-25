@@ -63,10 +63,9 @@ Persisted shape is an array of `ExtractedField` objects — exactly what workben
 
 > **`pageNumber` is 1-indexed — hard contract, not a detail.** workbench-api's `ExtractedField` VO rejects `pageNumber < 1` (`extracted-field.value-object.ts:23`), and the API re-hydrates the stored JSONB through that VO on every read — persisting 0-indexed pages would make every `COMPLETED` referral throw `InvalidExtractedFieldError` on read. 1-indexed also matches pdf.js/react-pdf page numbering, so the review UI consumes it without offset math. Consequences for this service: the Gemini prompt must request **1-indexed** pages (the old `src/agent.ts` prompt says 0-indexed — do not carry that over), and `payload-normalizer.ts` validates `pageNumber` as `int ≥ 1` via zod. Satisfying the existing VO means **no workbench-api change is needed** for this contract.
 
-### 2.3 Bounding-box coordinate order — do not transpose
-- Gemini's `responseSchema` emits `[ymin, xmin, ymax, xmax]` (0–1000 normalized).
-- The DB/API/UI consume `{ xmin, ymin, xmax, ymax }` (`bounding-box.value-object.ts` ctor order).
-- The worker **must** re-map LLM arrays → object fields in `payload-normalizer.ts`. Persisting the raw array would transpose every highlight in the review UI.
+### 2.3 Bounding-box shape — standardized, no translation
+- The Gemini `responseSchema` emits the **canonical object shape directly** — `{ xmin, ymin, xmax, ymax }` (0–1000 normalized), identical to what the DB/API/UI consume (`bounding-box.value-object.ts` ctor order).
+- Because the LLM emits the persisted shape, there is **no coordinate re-mapping** — `payload-normalizer.ts` only validates/sanitizes (range, min ≤ max) and nulls a malformed box. Do not reintroduce a `[ymin, xmin, ymax, xmax]` tuple anywhere.
 
 ### 2.4 Redis keys — who writes what
 - `referral:{referral_id}` — **written by workbench-api, read-only for the worker.** Hash with fields `fileName` and `extractionSchema` (JSON string of `{ id, version, schemaDefinition: { key, label, description }[] }`, or `''` when the clinic has no default schema). Read in O(1); do not mutate. On a cache miss, fall back to Postgres (§4C.2) — never fail a job on a miss.
@@ -182,8 +181,8 @@ Validates all required environment variables at process startup with `dotenv` + 
    - Document the schema-resolution chain: **referral-specific override → clinic `default_extraction_schema_id` → null (LLM default)**. Persist the resolved id on the referral row.
 2. **`pre-validator.service.ts`** — cheap, no LLM: PDF magic header `%PDF-`, byte size ≤ 20MB, reject empty/corrupt buffers. Content-level "is this a referral?" is delegated to Gemini's `isValidDocument`.
 3. **`payload-normalizer.ts`** — pure function:
-   - Validates the raw LLM output with **zod** (reusing the `env.config.ts` schema dependency): `isValidDocument` boolean, `boundingBox` length 4 & 0–1000, `pageNumber` int **≥ 1** (§2.2), strings non-empty.
-   - Re-maps each `[ymin, xmin, ymax, xmax]` → `{ xmin, ymin, xmax, ymax }` (§2.3), nulling any invalid/missing bbox.
+   - Validates the raw LLM output with **zod** (reusing the `env.config.ts` schema dependency): `isValidDocument` boolean, `boundingBox` object with finite 0–1000 coordinates and `min ≤ max`, `pageNumber` int **≥ 1** (§2.2), strings non-empty.
+   - The LLM emits the canonical `{xmin, ymin, xmax, ymax}` shape (§2.3) — no re-mapping; invalid/missing bboxes are sanitized to `null`.
    - Produces the persisted `ExtractedField[]` shape (§2.2) and derives `patientName`.
 4. **`referral-extraction.service.ts`** — pipeline orchestrator:
    1. `claimReferral` — if unclaimed (count 0), return success-with-no-op so the SQS message can be deleted.

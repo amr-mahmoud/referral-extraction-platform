@@ -29,10 +29,10 @@ function logRawModelOutput(
   );
   rawOutput.extractedFields.forEach((field, index) => {
     const bbox = field.boundingBox
-      ? `[${field.boundingBox.join(', ')}]`
+      ? `{ xmin: ${field.boundingBox.xmin}, ymin: ${field.boundingBox.ymin}, xmax: ${field.boundingBox.xmax}, ymax: ${field.boundingBox.ymax} }`
       : 'null';
     console.log(
-      `    ${(index + 1).toString().padStart(2, ' ')}. ${field.fieldName}: "${field.fieldValue}" | page=${field.pageNumber} | bbox=[ymin,xmin,ymax,xmax] ${bbox}`,
+      `    ${(index + 1).toString().padStart(2, ' ')}. ${field.fieldName}: "${field.fieldValue}" | page=${field.pageNumber} | bbox=${bbox}`,
     );
   });
 }

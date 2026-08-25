@@ -135,6 +135,7 @@ export class ClinicsController {
             : null,
         },
       );
+
     return results.map((result) =>
       CreateReferralResponseDto.fromDomain(result),
     );

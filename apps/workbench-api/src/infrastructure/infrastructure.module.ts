@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { CACHING_SERVICE_PORT } from '../application/ports/caching.port';
 import { CLINIC_REPOSITORY_PORT } from '../application/ports/clinic-repository.port';
 import { ENCRYPTION_PORT } from '../application/ports/encryption.port';
 import { REFERRAL_REPOSITORY_PORT } from '../application/ports/referral-repository.port';
@@ -6,6 +7,7 @@ import { STORAGE_PORT } from '../application/ports/storage.port';
 import { TOKEN_PORT } from '../application/ports/token.port';
 import { BcryptEncryptionService } from './auth/bcrypt-password-hasher.service';
 import { JwtTokenService } from './auth/jwt-token.service';
+import { RedisService } from './caching/redis.service';
 import { PostgresListenService } from './notifications/postgres-listen.service';
 import { PrismaClinicRepository } from './repository/clinic.repository';
 import { PrismaReferralRepository } from './repository/referral.repository';
@@ -35,6 +37,10 @@ import { S3StorageService } from './storage/s3-storage.service';
       provide: TOKEN_PORT,
       useClass: JwtTokenService,
     },
+    {
+      provide: CACHING_SERVICE_PORT,
+      useClass: RedisService,
+    },
     PostgresListenService,
   ],
   exports: [
@@ -44,6 +50,7 @@ import { S3StorageService } from './storage/s3-storage.service';
     STORAGE_PORT,
     ENCRYPTION_PORT,
     TOKEN_PORT,
+    CACHING_SERVICE_PORT,
   ],
 })
 export class InfrastructureModule {}

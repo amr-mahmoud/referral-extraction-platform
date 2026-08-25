@@ -9,7 +9,7 @@
 #   4. postgres/redis- Local data services (Docker Compose)
 # ==============================================================================
 
-.PHONY: help install dev dev-web dev-api dev-worker kill stop kill-all clean-dev-api kill-api build build-web build-api build-worker docker-up docker-dev docker-dev-backend docker-dev-api docker-down docker-logs docker-clean docker-give-perms fix-perms db-reset lint codegen-api clean
+.PHONY: help install dev dev-web dev-api dev-worker kill stop kill-all clean-dev-api kill-api build build-web build-api build-worker docker-up docker-dev docker-dev-backend docker-dev-api docker-down docker-logs docker-clean docker-give-perms fix-perms db-reset db-down-reset db-apply-migrations run-agent run-agent-examples lint codegen-api clean
 
 # Default target when running 'make'
 .DEFAULT_GOAL := help
@@ -111,54 +111,30 @@ docker-give-perms: ## Fix ownership permissions on ~/.docker and repository work
 	@echo "--> Restoring user file ownership on ~/.docker and workspace..."
 	sudo chown -R $$(whoami) ~/.docker .
 
-db-reset: ## Remove DB container, purge data volume, spin up DB container at port 5434, and apply schema
+db-down-reset: ## Remove DB container, purge data volume, spin up DB container, push Prisma schema, and regenerate client
 	@echo "--> Resetting database container and purging volume..."
 	-docker compose stop postgres 2>/dev/null || true
 	-docker compose rm -f -v postgres 2>/dev/null || true
 	-docker volume rm -f referral-extraction-platform_postgres_data 2>/dev/null || true
-	@echo "--> Starting database container on port 5434..."
+	@echo "--> Starting database container..."
 	docker compose up -d postgres
 	@echo "--> Waiting for Postgres database to become healthy..."
 	@until [ "$$(docker inspect --format='{{.State.Health.Status}}' referral-postgres 2>/dev/null)" = "healthy" ]; do sleep 1; done
-	@sleep 2
-	@echo "--> Applying database schema on port 5434..."
-	@docker compose exec -T postgres psql -U referral -d referral_extraction -c '\
-		CREATE TABLE IF NOT EXISTS "clinics" (\
-			"id" TEXT NOT NULL,\
-			"clinic_name" TEXT NOT NULL,\
-			"username" TEXT NOT NULL,\
-			"password_hash" TEXT NOT NULL,\
-			"default_extraction_schema_id" TEXT,\
-			"created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,\
-			"updated_at" TIMESTAMP(3) NOT NULL,\
-			CONSTRAINT "clinics_pkey" PRIMARY KEY ("id")\
-		);\
-		CREATE TABLE IF NOT EXISTS "referrals" (\
-			"id" TEXT NOT NULL,\
-			"patient_name" TEXT NOT NULL,\
-			"clinic_id" TEXT NOT NULL,\
-			"extraction_schema_id" TEXT,\
-			"status" TEXT NOT NULL DEFAULT '\''PENDING'\'',\
-			"s3_bucket" TEXT NOT NULL,\
-			"s3_object_key" TEXT NOT NULL,\
-			"extracted_payload" JSONB,\
-			"failed_reason" TEXT,\
-			"created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,\
-			"updated_at" TIMESTAMP(3) NOT NULL,\
-			CONSTRAINT "referrals_pkey" PRIMARY KEY ("id")\
-		);\
-		CREATE TABLE IF NOT EXISTS "extraction_schemas" (\
-			"id" TEXT NOT NULL,\
-			"clinic_id" TEXT NOT NULL,\
-			"version" INTEGER NOT NULL DEFAULT 1,\
-			"schema_definition" JSONB NOT NULL,\
-			"created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,\
-			"updated_at" TIMESTAMP(3) NOT NULL,\
-			CONSTRAINT "extraction_schemas_pkey" PRIMARY KEY ("id")\
-		);\
-		CREATE UNIQUE INDEX IF NOT EXISTS "clinics_username_key" ON "clinics"("username");\
-	'
-	@echo "--> Database reset complete. Postgres is running on port 5434."
+	@sleep 1
+	@echo "--> Pushing Prisma schema to database..."
+	npm run prisma:push
+	@echo "--> Generating Prisma client..."
+	npm run prisma:generate
+	@echo "--> Database reset complete."
+
+db-reset: db-down-reset ## Alias for 'make db-down-reset'
+
+db-apply-migrations: ## Push Prisma schema changes and regenerate client while preserving existing database data
+	@echo "--> Pushing Prisma schema to database..."
+	npm run prisma:push
+	@echo "--> Generating Prisma client..."
+	npm run prisma:generate
+	@echo "--> Database migrations applied successfully."
 
 
 
@@ -195,3 +171,15 @@ codegen-api: ## Regenerate apps/web's typed API client from the running Workbenc
 clean: ## Clean node_modules, .next, and dist build outputs
 	@echo "--> Cleaning build artifacts and node_modules..."
 	rm -rf node_modules apps/web/.next apps/web/dist apps/workbench-api/dist apps/agent_worker/dist
+
+# ------------------------------------------------------------------------------
+# 8. AGENT WORKER & EXTRACTION AGENT
+# ------------------------------------------------------------------------------
+run-agent: ## Run Plena extraction agent on example PDF (e.g. make run-agent or FILE="Linda Carter (2).pdf" make run-agent)
+	@echo "--> Running Plena Referral Extraction Agent..."
+	@npm run run:agent --workspace apps/agent_worker $(if $(FILE),-- "$(FILE)",)
+
+run-agent-examples: ## List all available example referral PDFs
+	@echo "--> Available Example PDFs in apps/agent_worker/examples:"
+	@npm run run:agent --workspace apps/agent_worker -- --list-only 2>/dev/null || ls -la apps/agent_worker/examples
+

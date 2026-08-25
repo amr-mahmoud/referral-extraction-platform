@@ -1,6 +1,7 @@
 import { REFERRAL_STATUSES, type ReferralStatus } from "@/types/referrals/referral";
 
 export const REFERRAL_STATUS_LABELS: Record<ReferralStatus, string> = {
+  [REFERRAL_STATUSES.AWAITING_UPLOAD]: "Awaiting upload",
   [REFERRAL_STATUSES.COMPLETED]: "Completed",
   [REFERRAL_STATUSES.PROCESSING]: "Processing",
   [REFERRAL_STATUSES.PENDING]: "Pending",

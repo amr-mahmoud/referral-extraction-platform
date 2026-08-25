@@ -10,6 +10,7 @@ import type {
   DropzoneHandlers,
   DropzoneInputProps,
 } from "@/hooks/use-file-dropzone";
+import type { FileUploadProgress } from "@/hooks/use-custom-upload-files-to-presigned-urls-with-progress";
 import { cn } from "@/lib/utils";
 import type { UploadCandidate } from "@/managers/upload-candidate.manager";
 import { Button } from "@/shared/Button";
@@ -35,6 +36,8 @@ export interface ReferralDropzoneProps
   onRemoveCandidate: (id: string) => void;
   /** Locks the zone while a batch is in flight. */
   disabled?: boolean;
+  /** Per-candidate upload progress, keyed by candidate id. */
+  fileStatus?: Record<string, FileUploadProgress>;
 }
 
 /**
@@ -48,6 +51,7 @@ const ReferralDropzone = React.forwardRef<HTMLDivElement, ReferralDropzoneProps>
       className,
       disabled,
       dropzoneProps,
+      fileStatus,
       inputProps,
       isDragging,
       onBrowse,
@@ -108,6 +112,7 @@ const ReferralDropzone = React.forwardRef<HTMLDivElement, ReferralDropzoneProps>
                 key={candidate.id}
                 candidate={candidate}
                 onRemove={disabled ? undefined : onRemoveCandidate}
+                uploadStatus={fileStatus?.[candidate.id]}
               />
             ))}
           </div>

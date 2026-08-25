@@ -13,11 +13,14 @@ import { Button } from "@/shared/Button";
 import { PlusIcon } from "@/shared/Icon";
 import { RadioCard } from "@/shared/RadioCard";
 import { Select } from "@/shared/Select";
+import type { UploadPhase } from "@/server-hooks/referrals/use-create-referrals";
 import {
   SCHEMA_SOURCES,
   type SavedSchema,
   type SchemaSource,
 } from "@/types/extraction-schemas/schema";
+
+import { UploadProgressButton } from "@/features/referrals/UploadProgressButton";
 
 import { SchemaJsonDrop } from "../SchemaJsonDrop";
 import {
@@ -44,7 +47,12 @@ export interface SchemaSelectorProps
   onSubmit: () => void;
   /** Drives the submit label: "Upload & extract 3 files". */
   fileCount: number;
-  isSubmitting?: boolean;
+  /** Drives the submit button's idle / progress-bar / complete presentation. */
+  phase?: UploadPhase;
+  /** 0-100, while `phase` is "creating" or "uploading". */
+  progressPercent?: number;
+  /** Tints the completed progress bar red instead of green. */
+  hasErrors?: boolean;
   submitDisabled?: boolean;
   error?: string | null;
 }
@@ -56,12 +64,14 @@ const SchemaSelector = React.forwardRef<HTMLElement, SchemaSelectorProps>(
       className,
       error,
       fileCount,
-      isSubmitting,
+      hasErrors,
       onBuildFields,
       onSavedSchemaChange,
       onSchemaUploaded,
       onSourceChange,
       onSubmit,
+      phase = "idle",
+      progressPercent = 0,
       savedSchemaId,
       savedSchemas,
       uploadedSchema,
@@ -145,14 +155,14 @@ const SchemaSelector = React.forwardRef<HTMLElement, SchemaSelectorProps>(
             </p>
           ) : null}
 
-          <Button
-            variant="dark"
-            className="h-11 w-full"
-            disabled={submitDisabled || isSubmitting}
+          <UploadProgressButton
+            phase={phase}
+            percent={progressPercent}
+            hasErrors={hasErrors}
+            idleLabel={submitLabel}
+            disabled={submitDisabled || phase !== "idle"}
             onClick={onSubmit}
-          >
-            {isSubmitting ? "Uploading…" : submitLabel}
-          </Button>
+          />
         </div>
       </section>
     );

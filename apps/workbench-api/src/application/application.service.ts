@@ -17,6 +17,11 @@ import { ReferralId } from '../domain/shared/ids/referral-id.value-object';
 import { DomainError } from '../domain/shared/domain.error';
 import { NotImplementedError } from './errors/not-implemented.error';
 import {
+  CACHING_SERVICE_PORT,
+  type CachingServicePort,
+  type ReferralCacheEntry,
+} from './ports/caching.port';
+import {
   CLINIC_REPOSITORY_PORT,
   type ClinicRepositoryPort,
 } from './ports/clinic-repository.port';
@@ -105,6 +110,8 @@ export class ApplicationService {
     private readonly tokenService: TokenPort,
     @Inject(STORAGE_PORT)
     private readonly storageService: StoragePort,
+    @Inject(CACHING_SERVICE_PORT)
+    private readonly cachingService: CachingServicePort,
   ) {}
 
   // ── Auth ─────────────────────────────────────────────────────────
@@ -256,11 +263,18 @@ export class ApplicationService {
         );
       }
 
-      // 1. Resolve schema ONCE — clinic-scoped, not file-scoped.
-      const extractionSchemaId = await this.resolveExtractionSchemaId(
+      // 1. Resolve the FULL schema aggregate ONCE — clinic-scoped, not
+      //    file-scoped. Returning the aggregate (rather than just its id)
+      //    is what lets the Redis cache-aside write below carry the actual
+      //    field definitions, not just a pointer the worker would have to
+      //    re-fetch from Postgres.
+      const extractionSchema = await this.resolveExtractionSchema(
         command.clinicId,
         command.extractionSchemaId,
       );
+      const extractionSchemaId = extractionSchema
+        ? ExtractionSchemaId.from(extractionSchema.id)
+        : null;
 
       // 2. Construct ALL aggregates up front — one bad fileName fails the
       //    whole batch before anything is persisted or presigned (fail-fast).
@@ -291,7 +305,34 @@ export class ApplicationService {
       const savedReferrals =
         await this.referralRepository.saveReferrals(referrals);
 
-      // 5. Zip by index — referrals/uploads/savedReferrals are all the same
+      // 5. Cache-aside write (design-doc step 3): one Redis hash per
+      //    referral, `{ fileName, extractionSchema }`, so the worker can
+      //    recover both in one O(1) lookup — neither survives into the S3
+      //    key or the SQS message built from it. Fail-closed: a cache write
+      //    failure fails the whole request (falls through to the catch
+      //    below) rather than silently leaving referrals the worker can
+      //    never resolve a schema for.
+      await this.cachingService.setManyReferralCaches(
+        savedReferrals.map((referral): ReferralCacheEntry => ({
+          referralId: referral.id,
+          fileName: referral.fileName,
+          extractionSchema: extractionSchema
+            ? {
+                id: extractionSchema.id,
+                version: extractionSchema.version,
+                schemaDefinition: extractionSchema.schemaDefinition.map(
+                  (field) => ({
+                    key: field.key,
+                    label: field.label,
+                    description: field.description,
+                  }),
+                ),
+              }
+            : null,
+        })),
+      );
+
+      // 6. Zip by index — referrals/uploads/savedReferrals are all the same
       //    length and order as `command.files`.
       return savedReferrals.map((referral, index) => ({
         referral,
@@ -307,10 +348,10 @@ export class ApplicationService {
     }
   }
 
-  private async resolveExtractionSchemaId(
+  private async resolveExtractionSchema(
     clinicId: ClinicId,
     requestedExtractionSchemaId: ExtractionSchemaId | null | undefined,
-  ): Promise<ExtractionSchemaId | null> {
+  ): Promise<ExtractionSchema | null> {
     if (requestedExtractionSchemaId) {
       const schema = await this.clinicRepository.findExtractionSchemaById(
         requestedExtractionSchemaId,
@@ -322,14 +363,19 @@ export class ApplicationService {
           requestedExtractionSchemaId.value,
         );
       }
-      return requestedExtractionSchemaId;
+      return schema;
     }
 
     const clinic = await this.clinicRepository.findById(clinicId);
     if (!clinic) {
       throw new ClinicNotFoundError(clinicId.value);
     }
-    return clinic.defaultExtractionSchemaId;
+    if (!clinic.defaultExtractionSchemaId) {
+      return null;
+    }
+    return this.clinicRepository.findExtractionSchemaById(
+      clinic.defaultExtractionSchemaId,
+    );
   }
 
   public async listReferralsByClinic(

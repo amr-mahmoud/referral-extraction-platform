@@ -15,8 +15,7 @@ import type { SavedSchema } from "@/types/extraction-schemas/schema";
 import { ReferralDropzone } from "../ReferralDropzone";
 import { uploadWorkspaceVariants } from "./UploadWorkspace.styles";
 
-export interface UploadWorkspaceProps
-  extends React.HTMLAttributes<HTMLDivElement> {
+export interface UploadWorkspaceProps extends React.HTMLAttributes<HTMLDivElement> {
   savedSchemas: readonly SavedSchema[];
 }
 
@@ -49,14 +48,14 @@ const UploadWorkspace = React.forwardRef<HTMLDivElement, UploadWorkspaceProps>(
     });
 
     const upload = useCreateReferrals({
-      onSuccess: () => dropzone.clear(),
+      onFileUploaded: (candidateId) => dropzone.removeCandidate(candidateId),
     });
 
     const fileCount = dropzone.accepted.length;
 
     const handleSubmit = () => {
       upload.execute({
-        fileNames: dropzone.accepted.map((candidate) => candidate.name),
+        candidates: dropzone.accepted,
         schema: schema.selection,
       });
     };
@@ -76,6 +75,7 @@ const UploadWorkspace = React.forwardRef<HTMLDivElement, UploadWorkspaceProps>(
           onBrowse={dropzone.openFilePicker}
           onRemoveCandidate={dropzone.removeCandidate}
           disabled={upload.isLoading}
+          fileStatus={upload.fileStatus}
         />
 
         <SchemaSelector
@@ -95,7 +95,9 @@ const UploadWorkspace = React.forwardRef<HTMLDivElement, UploadWorkspaceProps>(
           onBuildFields={() => setIsBuilderOpen(true)}
           onSubmit={handleSubmit}
           fileCount={fileCount}
-          isSubmitting={upload.isLoading}
+          phase={upload.phase}
+          progressPercent={upload.progressPercent}
+          hasErrors={upload.hasErrors}
           submitDisabled={fileCount === 0 || !schema.isComplete}
           error={upload.error}
         />

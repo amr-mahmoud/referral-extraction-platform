@@ -83,8 +83,8 @@ export interface paths {
         /** List paginated referrals for authenticated clinic */
         get: operations["ClinicsController_listReferrals"];
         put?: never;
-        /** Create new referral and issue presigned S3 upload URL */
-        post: operations["ClinicsController_createReferral"];
+        /** Create new referrals in batch and issue presigned S3 upload URLs */
+        post: operations["ClinicsController_createNewReferralsWithAttachedPresignedUrls"];
         delete?: never;
         options?: never;
         head?: never;
@@ -205,11 +205,63 @@ export interface components {
              */
             createdAt: string;
         };
-        CreateReferralRequest: {
-            /** @description Name of the patient associated with referral. */
-            patientName: string;
-            /** @description Optional target extraction schema ID override. */
+        CreateReferralItemRequest: {
+            /** @description Original uploaded file name; must end in `.pdf`. Drives the S3 key. */
+            fileName: string;
+            /** @description Optional patient name; usually unknown until extraction resolves one. */
+            patientName?: string | null;
+        };
+        CreateReferralsRequest: {
+            /** @description One or more files to create referrals for, in one batch. */
+            files: components["schemas"]["CreateReferralItemRequest"][];
+            /**
+             * Format: uuid
+             * @description Optional target extraction schema ID override, shared across the whole batch. Falls back to the clinic's default.
+             */
             extractionSchemaId?: string | null;
+        };
+        ReferralDto: {
+            /** @description Unique referral ID (UUID). */
+            id: string;
+            /** @description Owning clinic ID (UUID). */
+            clinicId: string;
+            /** @description Original uploaded file name. */
+            fileName: string;
+            /** @description `null` until extraction resolves a patient. */
+            patientName: string | null;
+            /** @description Current lifecycle status. */
+            status: string;
+            /** @description Resolved extraction schema ID, or `null` for the default LLM schema. */
+            extractionSchemaId: string | null;
+            /** @description S3 bucket the referral PDF is (or will be) stored in. */
+            s3Bucket: string;
+            /** @description S3 object key the referral PDF is (or will be) stored at. */
+            s3Key: string;
+            /**
+             * Format: date-time
+             * @description Creation timestamp.
+             */
+            createdAt: string;
+            /**
+             * Format: date-time
+             * @description Last update timestamp.
+             */
+            updatedAt: string;
+        };
+        PresignedUploadDto: {
+            /** @description Short-lived presigned S3 PUT URL to upload the referral PDF to. */
+            url: string;
+            /**
+             * Format: date-time
+             * @description When the presigned URL expires.
+             */
+            expiresAt: string;
+        };
+        CreateReferralResponseDto: {
+            /** @description The newly created referral, in `AWAITING_UPLOAD` status. */
+            referral: components["schemas"]["ReferralDto"];
+            /** @description Presigned S3 upload slot for the referral PDF. */
+            upload: components["schemas"]["PresignedUploadDto"];
         };
         BoundingBoxDto: {
             /** @description Normalized minimum X coordinate (0-1000). */
@@ -405,7 +457,7 @@ export interface operations {
             };
         };
     };
-    ClinicsController_createReferral: {
+    ClinicsController_createNewReferralsWithAttachedPresignedUrls: {
         parameters: {
             query?: never;
             header?: never;
@@ -414,12 +466,21 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CreateReferralRequest"];
+                "application/json": components["schemas"]["CreateReferralsRequest"];
             };
         };
         responses: {
-            /** @description Referral created and presigned S3 URL issued */
+            /** @description Referrals created and presigned S3 URLs issued, in request order */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateReferralResponseDto"][];
+                };
+            };
+            /** @description Extraction schema not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

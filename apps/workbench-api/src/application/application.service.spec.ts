@@ -3,10 +3,12 @@
 import { ApplicationService } from './application.service';
 import { ReferralFileNameError } from '../domain/referral/referral.errors';
 import { ReferralValidationError } from '../domain/referral/referral.errors';
+import { CachingServicePort } from './ports/caching.port';
 import { ClinicRepositoryPort } from './ports/clinic-repository.port';
 import { ReferralRepositoryPort } from './ports/referral-repository.port';
 import { StoragePort } from './ports/storage.port';
 import { ClinicId } from '../domain/shared/ids/clinic-id.value-object';
+import { ExtractionSchemaId } from '../domain/shared/ids/extraction-schema-id.value-object';
 
 describe('ApplicationService.createNewReferralsWithAttachedPresignedUrls', () => {
   const clinicId = ClinicId.from('11111111-1111-1111-1111-111111111111');
@@ -15,6 +17,7 @@ describe('ApplicationService.createNewReferralsWithAttachedPresignedUrls', () =>
     clinicRepository?: Partial<ClinicRepositoryPort>;
     referralRepository?: Partial<ReferralRepositoryPort>;
     storageService?: Partial<StoragePort>;
+    cachingService?: Partial<CachingServicePort>;
   }) {
     const clinicRepository: ClinicRepositoryPort = {
       findById: jest.fn().mockResolvedValue({
@@ -52,6 +55,12 @@ describe('ApplicationService.createNewReferralsWithAttachedPresignedUrls', () =>
       ...overrides?.storageService,
     };
 
+    const cachingService: CachingServicePort = {
+      setManyReferralCaches: jest.fn().mockResolvedValue(undefined),
+      getReferralCache: jest.fn(),
+      ...overrides?.cachingService,
+    };
+
     const service = new ApplicationService(
       clinicRepository,
       referralRepository,
@@ -59,9 +68,16 @@ describe('ApplicationService.createNewReferralsWithAttachedPresignedUrls', () =>
       {} as never,
       {} as never,
       storageService,
+      cachingService,
     );
 
-    return { service, clinicRepository, referralRepository, storageService };
+    return {
+      service,
+      clinicRepository,
+      referralRepository,
+      storageService,
+      cachingService,
+    };
   }
 
   it('creates a batch of referrals with correctly-matched presigned URLs', async () => {
@@ -118,8 +134,9 @@ describe('ApplicationService.createNewReferralsWithAttachedPresignedUrls', () =>
     expect(clinicRepository.findById).toHaveBeenCalledTimes(1);
   });
 
-  it('rejects an empty file list before any repository or storage call', async () => {
-    const { service, referralRepository, storageService } = buildService();
+  it('rejects an empty file list before any repository, storage, or cache call', async () => {
+    const { service, referralRepository, storageService, cachingService } =
+      buildService();
 
     await expect(
       service.createNewReferralsWithAttachedPresignedUrls({
@@ -130,5 +147,76 @@ describe('ApplicationService.createNewReferralsWithAttachedPresignedUrls', () =>
 
     expect(referralRepository.saveReferrals).not.toHaveBeenCalled();
     expect(storageService.presignReferralUpload).not.toHaveBeenCalled();
+    expect(cachingService.setManyReferralCaches).not.toHaveBeenCalled();
+  });
+
+  it('caches one entry per referral, matching referralId, fileName, and the resolved schema', async () => {
+    const schemaId = '22222222-2222-2222-2222-222222222222';
+    const { service, cachingService, clinicRepository } = buildService({
+      clinicRepository: {
+        findExtractionSchemaById: jest.fn().mockResolvedValue({
+          id: schemaId,
+          version: 2,
+          clinicId,
+          schemaDefinition: [
+            {
+              key: 'patient_name',
+              label: 'Patient Name',
+              description: 'Full name',
+            },
+          ],
+        }),
+      },
+    });
+
+    const results = await service.createNewReferralsWithAttachedPresignedUrls({
+      clinicId,
+      files: [{ fileName: 'a.pdf' }, { fileName: 'b.pdf' }],
+      extractionSchemaId: ExtractionSchemaId.from(schemaId),
+    });
+
+    expect(clinicRepository.findExtractionSchemaById).toHaveBeenCalledTimes(1);
+    expect(cachingService.setManyReferralCaches).toHaveBeenCalledTimes(1);
+
+    const entries = jest.mocked(cachingService.setManyReferralCaches).mock
+      .calls[0][0];
+    expect(entries).toHaveLength(2);
+    entries.forEach((entry, index) => {
+      expect(entry.referralId).toBe(results[index].referral.id);
+      expect(entry.fileName).toBe(results[index].referral.fileName);
+    });
+    expect(entries[0].extractionSchema).toEqual({
+      id: schemaId,
+      version: 2,
+      schemaDefinition: [
+        {
+          key: 'patient_name',
+          label: 'Patient Name',
+          description: 'Full name',
+        },
+      ],
+    });
+  });
+
+  it('fails the whole request when the cache write fails (fail-closed)', async () => {
+    const { service, referralRepository } = buildService({
+      cachingService: {
+        setManyReferralCaches: jest
+          .fn()
+          .mockRejectedValue(new Error('ECONNREFUSED')),
+      },
+    });
+
+    await expect(
+      service.createNewReferralsWithAttachedPresignedUrls({
+        clinicId,
+        files: [{ fileName: 'a.pdf' }],
+      }),
+    ).rejects.toThrow('Failed to create referrals');
+
+    // The referrals were already persisted before the cache write — this
+    // test documents that the failure surfaces to the caller (fail-closed),
+    // not that persistence itself rolls back.
+    expect(referralRepository.saveReferrals).toHaveBeenCalledTimes(1);
   });
 });

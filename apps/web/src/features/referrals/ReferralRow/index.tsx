@@ -24,6 +24,7 @@ import {
 } from "./ReferralRow.styles";
 
 const STATUS_TONES: Record<ReferralStatus, StatusPillTone> = {
+  [REFERRAL_STATUSES.AWAITING_UPLOAD]: "neutral",
   [REFERRAL_STATUSES.COMPLETED]: "success",
   [REFERRAL_STATUSES.PROCESSING]: "brand",
   [REFERRAL_STATUSES.PENDING]: "neutral",

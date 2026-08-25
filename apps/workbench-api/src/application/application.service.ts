@@ -6,6 +6,7 @@ import {
   ClinicUsernameTakenError,
 } from '../domain/clinic/clinic.errors';
 import type { FieldDefinitionInput } from '../domain/domain-types/extraction-schema.input';
+import { ExtractionSchemaNotFoundError } from '../domain/extraction-schema/extraction-schema.errors';
 import { ExtractionSchema } from '../domain/extraction-schema/extraction-schema.aggregate';
 import { ExtractedField } from '../domain/referral/extracted-field.value-object';
 import { Referral } from '../domain/referral/referral.aggregate';
@@ -24,7 +25,11 @@ import {
   REFERRAL_REPOSITORY_PORT,
   type ReferralRepositoryPort,
 } from './ports/referral-repository.port';
-import { STORAGE_PORT, type StoragePort } from './ports/storage.port';
+import {
+  PresignedUrl,
+  STORAGE_PORT,
+  type StoragePort,
+} from './ports/storage.port';
 import { TOKEN_PORT, type TokenPort } from './ports/token.port';
 
 // ── Auth Commands & Results ──────────────────────────────────────────
@@ -55,10 +60,17 @@ export interface CreateExtractionSchemaCommand {
 
 // ── Referral Commands & Queries ──────────────────────────────────────
 
-export interface CreateReferralCommand {
+export interface CreateNewReferralWithAttachedPresignedUrlCommand {
   clinicId: ClinicId;
-  patientName: string;
+  fileName: string;
+  patientName?: string | null;
+  /** Explicit override. Falls back to the clinic's default, then `null`. */
   extractionSchemaId?: ExtractionSchemaId | null;
+}
+
+export interface ReferralWithPresignedUpload {
+  referral: Referral;
+  upload: PresignedUrl;
 }
 
 export interface ListReferralsQuery {
@@ -227,23 +239,66 @@ export class ApplicationService {
 
   // ── Referrals ────────────────────────────────────────────────────
 
-  public async createReferral(
-    command: CreateReferralCommand,
-  ): Promise<Referral> {
+  public async createNewReferralWithAttachedPresignedUrl(
+    command: CreateNewReferralWithAttachedPresignedUrlCommand,
+  ): Promise<ReferralWithPresignedUpload> {
     try {
-      void command;
-      throw new NotImplementedError('ApplicationService.createReferral');
+      const extractionSchemaId = await this.resolveExtractionSchemaId(
+        command.clinicId,
+        command.extractionSchemaId,
+      );
+
+      const referral = new Referral({
+        clinicId: command.clinicId,
+        fileName: command.fileName,
+        patientName: command.patientName ?? null,
+
+        extractionSchemaId,
+      });
+
+      const upload = await this.storageService.presignReferralUpload(
+        command.clinicId,
+        referral.id,
+      );
+
+      const savedReferral =
+        await this.referralRepository.saveReferral(referral);
+
+      return { referral: savedReferral, upload };
     } catch (error) {
-      if (
-        error instanceof DomainError ||
-        error instanceof NotImplementedError
-      ) {
+      if (error instanceof DomainError) {
         throw error;
       }
       throw new Error(
         `Failed to create referral: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
+  }
+
+  private async resolveExtractionSchemaId(
+    clinicId: ClinicId,
+    requestedExtractionSchemaId: ExtractionSchemaId | null | undefined,
+  ): Promise<ExtractionSchemaId | null> {
+    if (requestedExtractionSchemaId) {
+      
+      const schema = await this.clinicRepository.findExtractionSchemaById(
+        requestedExtractionSchemaId,
+      );
+      // Treat "belongs to another clinic" the same as "not found" — a valid
+      // but foreign id must not leak whether it exists.
+      if (!schema || !schema.clinicId.equals(clinicId)) {
+        throw new ExtractionSchemaNotFoundError(
+          requestedExtractionSchemaId.value,
+        );
+      }
+      return requestedExtractionSchemaId;
+    }
+
+    const clinic = await this.clinicRepository.findById(clinicId);
+    if (!clinic) {
+      throw new ClinicNotFoundError(clinicId.value);
+    }
+    return clinic.defaultExtractionSchemaId;
   }
 
   public async listReferralsByClinic(

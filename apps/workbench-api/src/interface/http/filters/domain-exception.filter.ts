@@ -32,6 +32,15 @@ export class DomainExceptionFilter implements ExceptionFilter {
       case 'INVALID_PASSWORD_HASH':
         status = HttpStatus.BAD_REQUEST;
         break;
+      case 'SCHEMA_NOT_FOUND':
+      case 'REFERRAL_NOT_FOUND':
+        status = HttpStatus.NOT_FOUND;
+        break;
+      case 'SCHEMA_ALREADY_FIXED':
+      case 'CORRECTION_NOT_ALLOWED':
+      case 'INVALID_REFERRAL_STATUS_TRANSITION':
+        status = HttpStatus.CONFLICT;
+        break;
       default:
         status = HttpStatus.BAD_REQUEST;
         break;

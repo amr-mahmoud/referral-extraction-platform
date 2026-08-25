@@ -1,10 +1,22 @@
-import { S3Object } from '../../domain/referral/s3-object.value-object';
+import { ClinicId } from '../../domain/shared/ids/clinic-id.value-object';
+import { ReferralId } from '../../domain/shared/ids/referral-id.value-object';
 
 export const STORAGE_PORT = 'STORAGE_PORT';
 
+export interface S3Object {
+  bucket: string;
+  key: string;
+}
+
 export interface PresignPutOptions {
-  contentType: string;
-  maxContentLength: number;
+  contentType?: string;
+  expiresInSeconds?: number;
+  /**
+   * Not yet signed into the request — see `S3StorageService.presignPut`.
+   * The 20MB ceiling is currently enforced client-side (upload-candidate
+   * manager) and by the worker's pre-extraction sanity check.
+   */
+  maxContentLength?: number;
 }
 
 export interface PresignedUrl {
@@ -13,9 +25,20 @@ export interface PresignedUrl {
 }
 
 export interface StoragePort {
+  presignReferralUpload(
+    clinicId: ClinicId,
+    referralId: ReferralId,
+    options?: PresignPutOptions,
+  ): Promise<PresignedUrl>;
   presignPut(
     object: S3Object,
-    options: PresignPutOptions,
+    options?: PresignPutOptions,
   ): Promise<PresignedUrl>;
   presignGet(object: S3Object): Promise<PresignedUrl>;
+  /** The bucket this adapter is configured against — the domain must not read `process.env` itself. */
+  getConfiguredBucketName(): string;
+  /**
+   * The referral PDF key convention: `referrals/{clinicId}/{referralId}.pdf`.
+   */
+  buildReferralPdfKey(clinicId: ClinicId, referralId: ReferralId): string;
 }

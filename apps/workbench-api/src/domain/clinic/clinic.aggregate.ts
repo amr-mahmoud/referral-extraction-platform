@@ -38,7 +38,10 @@ export class Clinic {
       throw new ClinicValidationError('Clinic properties are required');
     }
 
-    if (typeof props.clinicName !== 'string' || props.clinicName.trim() === '') {
+    if (
+      typeof props.clinicName !== 'string' ||
+      props.clinicName.trim() === ''
+    ) {
       throw new ClinicValidationError('Clinic name must be a non-empty string');
     }
 
@@ -67,7 +70,9 @@ export class Clinic {
     } else if (props.hashedPassword) {
       passwordHash = PasswordHash.from(props.hashedPassword);
     } else {
-      throw new ClinicValidationError('Password hash must be a valid PasswordHash');
+      throw new ClinicValidationError(
+        'Password hash must be a valid PasswordHash',
+      );
     }
 
     if (!(passwordHash instanceof PasswordHash)) {

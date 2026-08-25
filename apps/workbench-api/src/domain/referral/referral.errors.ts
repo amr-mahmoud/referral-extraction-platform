@@ -2,6 +2,7 @@ import { DomainError } from '../shared/domain.error';
 
 export enum ReferralErrorCode {
   INVALID_PATIENT_NAME = 'INVALID_PATIENT_NAME',
+  INVALID_FILE_NAME = 'INVALID_FILE_NAME',
   REFERRAL_NOT_FOUND = 'REFERRAL_NOT_FOUND',
   SCHEMA_ALREADY_FIXED = 'SCHEMA_ALREADY_FIXED',
   CORRECTION_NOT_ALLOWED = 'CORRECTION_NOT_ALLOWED',
@@ -9,6 +10,14 @@ export enum ReferralErrorCode {
 
 export class ReferralValidationError extends DomainError {
   public readonly code = ReferralErrorCode.INVALID_PATIENT_NAME;
+
+  constructor(message: string) {
+    super(message);
+  }
+}
+
+export class ReferralFileNameError extends DomainError {
+  public readonly code = ReferralErrorCode.INVALID_FILE_NAME;
 
   constructor(message: string) {
     super(message);

@@ -2,12 +2,16 @@ import { ApiProperty } from '@nestjs/swagger';
 import {
   IsDefined,
   IsNotEmpty,
+  IsOptional,
   IsString,
+  IsUUID,
   Matches,
   MinLength,
 } from 'class-validator';
 import { Clinic } from '../../../domain/clinic/clinic.aggregate';
 import { ExtractionSchema } from '../../../domain/extraction-schema/extraction-schema.aggregate';
+import { Referral } from '../../../domain/referral/referral.aggregate';
+import type { ReferralWithPresignedUpload } from '../../../application/application.service';
 
 export class SignupRequest {
   /** Full name or title of the clinic. */
@@ -164,11 +168,97 @@ export class ExtractionSchemaDto {
 }
 
 export class CreateReferralRequest {
-  /** Name of the patient associated with referral. */
-  public readonly patientName!: string;
+  /** Original uploaded file name; must end in `.pdf`. Drives the S3 key. */
+  @IsString()
+  @IsNotEmpty({ message: 'fileName is required' })
+  @Matches(/\.pdf$/i, { message: 'fileName must be a .pdf file' })
+  public readonly fileName!: string;
 
-  /** Optional target extraction schema ID override. */
+  /** Optional patient name; usually unknown until extraction resolves one. */
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty({ message: 'patientName must not be empty when provided' })
+  public readonly patientName?: string | null;
+
+  /** Optional target extraction schema ID override. Falls back to the clinic's default. */
+  @IsOptional()
+  @IsUUID()
   public readonly extractionSchemaId?: string | null;
+}
+
+export class ReferralDto {
+  /** Unique referral ID (UUID). */
+  public readonly id!: string;
+
+  /** Owning clinic ID (UUID). */
+  public readonly clinicId!: string;
+
+  /** Original uploaded file name. */
+  public readonly fileName!: string;
+
+  /** `null` until extraction resolves a patient. */
+  public readonly patientName!: string | null;
+
+  /** Current lifecycle status. */
+  public readonly status!: string;
+
+  /** Resolved extraction schema ID, or `null` for the default LLM schema. */
+  public readonly extractionSchemaId!: string | null;
+
+  /** S3 bucket the referral PDF is (or will be) stored in. */
+  public readonly s3Bucket!: string;
+
+  /** S3 object key the referral PDF is (or will be) stored at. */
+  public readonly s3Key!: string;
+
+  /** Creation timestamp. */
+  public readonly createdAt!: Date;
+
+  /** Last update timestamp. */
+  public readonly updatedAt!: Date;
+
+  public static fromDomain(referral: Referral): ReferralDto {
+    return {
+      id: referral.id,
+      clinicId: referral.clinicId.value,
+      fileName: referral.fileName,
+      patientName: referral.patientName,
+      status: referral.status.value,
+      extractionSchemaId: referral.extractionSchemaId?.value ?? null,
+      s3Bucket: process.env.S3_BUCKET_NAME ?? 'plena-referrals',
+      s3Key: `referrals/${referral.clinicId.value}/${referral.id}.pdf`,
+      createdAt: referral.createdAt,
+      updatedAt: referral.updatedAt,
+    };
+  }
+}
+
+export class PresignedUploadDto {
+  /** Short-lived presigned S3 PUT URL to upload the referral PDF to. */
+  public readonly url!: string;
+
+  /** When the presigned URL expires. */
+  public readonly expiresAt!: Date;
+}
+
+export class CreateReferralResponseDto {
+  /** The newly created referral, in `AWAITING_UPLOAD` status. */
+  public readonly referral!: ReferralDto;
+
+  /** Presigned S3 upload slot for the referral PDF. */
+  public readonly upload!: PresignedUploadDto;
+
+  public static fromDomain(
+    result: ReferralWithPresignedUpload,
+  ): CreateReferralResponseDto {
+    return {
+      referral: ReferralDto.fromDomain(result.referral),
+      upload: {
+        url: result.upload.url,
+        expiresAt: result.upload.expiresAt,
+      },
+    };
+  }
 }
 
 export class BoundingBoxDto {

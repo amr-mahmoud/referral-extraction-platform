@@ -1,24 +1,9 @@
-import { DomainError } from '../domain.error';
+import { InvalidReferralIdError, Referral } from '../../referral/referral.aggregate';
 
-export class InvalidReferralIdError extends DomainError {
-  public readonly code = 'INVALID_REFERRAL_ID';
+export { InvalidReferralIdError };
 
-  constructor(id: unknown) {
-    super(`Invalid referral id: '${String(id)}'`);
-  }
-}
-
-export class ReferralId {
-  private constructor(public readonly value: string) {}
-
-  public static from(value: string): ReferralId {
-    if (typeof value !== 'string' || value.trim() === '') {
-      throw new InvalidReferralIdError(value);
-    }
-    return new ReferralId(value);
-  }
-
-  public equals(other: ReferralId): boolean {
-    return this.value === other.value;
-  }
-}
+export type ReferralId = string;
+export const ReferralId = {
+  from: (id: string): string => Referral.validateId(id),
+  generate: (): string => Referral.generateId(),
+};

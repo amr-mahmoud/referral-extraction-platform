@@ -25,11 +25,13 @@ import { TokenClaims } from '../../../application/ports/token.port';
 import { Paginated } from '../../../application/ports/referral-repository.port';
 import { Referral } from '../../../domain/referral/referral.aggregate';
 import { ClinicId } from '../../../domain/shared/ids/clinic-id.value-object';
+import { ExtractionSchemaId } from '../../../domain/shared/ids/extraction-schema-id.value-object';
 import { normalizeExtractionSchemaFields } from '../dto/extraction-schema-input.mapper';
 import {
   ClinicDto,
   CreateExtractionSchemaRequest,
   CreateReferralRequest,
+  CreateReferralResponseDto,
   ExtractionSchemaDto,
   ListReferralsQueryDto,
   UpdateReferralRequest,
@@ -111,12 +113,24 @@ export class ClinicsController {
   @ApiResponse({
     status: 201,
     description: 'Referral created and presigned S3 URL issued',
+    type: CreateReferralResponseDto,
   })
-  public createReferral(
+  @ApiResponse({ status: 404, description: 'Extraction schema not found' })
+  public async createNewReferralWithAttachedPresignedUrl(
+    @Req() req: AuthenticatedRequest,
     @Body() body: CreateReferralRequest,
-  ): Promise<Referral> {
-    void body;
-    throw new NotImplementedError('ClinicsController.createReferral');
+  ): Promise<CreateReferralResponseDto> {
+    const clinicId = ClinicId.from(req.user.clinicId);
+    const result =
+      await this.applicationService.createNewReferralWithAttachedPresignedUrl({
+        clinicId,
+        fileName: body.fileName,
+
+        extractionSchemaId: body.extractionSchemaId
+          ? ExtractionSchemaId.from(body.extractionSchemaId)
+          : null,
+      });
+    return CreateReferralResponseDto.fromDomain(result);
   }
 
   @ApiTags('Referrals')

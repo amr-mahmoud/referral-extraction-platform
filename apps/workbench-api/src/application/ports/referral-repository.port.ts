@@ -17,14 +17,14 @@ export interface ListReferralOptions {
 }
 
 export interface ReferralRepositoryPort {
-  findById(id: ReferralId): Promise<Referral | null>;
-  findByIdForClinic(
+  findReferralById(id: ReferralId): Promise<Referral | null>;
+  findReferralByIdForClinic(
     id: ReferralId,
     clinicId: ClinicId,
   ): Promise<Referral | null>;
-  listByClinicId(
+  findPaginatedReferralsByClinicId(
     clinicId: ClinicId,
     options: ListReferralOptions,
   ): Promise<Paginated<Referral>>;
-  save(referral: Referral): Promise<Referral>;
+  saveReferral(referral: Referral): Promise<Referral>;
 }

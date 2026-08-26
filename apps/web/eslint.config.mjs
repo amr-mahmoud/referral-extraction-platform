@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Committed third-party / design-reference assets — not source.
+    "public/pdf.worker.min.mjs",
+    "document_page_wire_frame/**",
   ]),
 ]);
 

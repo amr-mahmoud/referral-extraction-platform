@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 
 import {
   REFERRAL_FILTER_LABELS,
@@ -18,6 +19,7 @@ import {
   mergeReferralRowView,
   toReferralRowView,
 } from "@/managers/referral-view.manager";
+import { referralDetailRoute } from "@/routes";
 import { Tabs } from "@/shared/Tabs";
 import type { ReferralRowView } from "@/types/referrals/referral";
 
@@ -36,15 +38,14 @@ import {
 
 const PANEL_ID = "referrals-panel";
 
-export interface ReferralsTableProps
-  extends React.HTMLAttributes<HTMLElement> {
+export interface ReferralsTableProps extends React.HTMLAttributes<HTMLElement> {
   referrals: readonly ReferralRowView[];
-  onOpenReferral?: (id: string) => void;
 }
 
 /** Tabbed list of every referral the clinic has submitted. */
 const ReferralsTable = React.forwardRef<HTMLElement, ReferralsTableProps>(
-  ({ className, onOpenReferral, referrals, ...props }, ref) => {
+  ({ className, referrals, ...props }, ref) => {
+    const router = useRouter();
     const [filter, setFilter] = React.useState<ReferralFilter>(
       REFERRAL_FILTERS.ALL,
     );
@@ -112,8 +113,8 @@ const ReferralsTable = React.forwardRef<HTMLElement, ReferralsTableProps>(
                 Nothing here yet
               </p>
               <p className={cn(referralsTableEmptyHintVariants())}>
-                Referrals matching “{REFERRAL_FILTER_LABELS[filter]}” will appear
-                as soon as extraction reports back.
+                Referrals matching “{REFERRAL_FILTER_LABELS[filter]}” will
+                appear as soon as extraction reports back.
               </p>
             </div>
           ) : (
@@ -127,16 +128,23 @@ const ReferralsTable = React.forwardRef<HTMLElement, ReferralsTableProps>(
                 )}
               >
                 <span />
-                <span className={cn(referralsTableHeadCellVariants())}>Patient</span>
+                <span className={cn(referralsTableHeadCellVariants())}>
+                  Patient
+                </span>
                 <span className={cn(referralsTableSecondaryHeadCellVariants())}>
                   File
                 </span>
                 <span className={cn(referralsTableSecondaryHeadCellVariants())}>
                   Schema
                 </span>
-                <span className={cn(referralsTableHeadCellVariants())}>Status</span>
+                <span className={cn(referralsTableHeadCellVariants())}>
+                  Status
+                </span>
                 <span className={cn(referralsTableSecondaryHeadCellVariants())}>
                   Submitted
+                </span>
+                <span className={cn(referralsTableSecondaryHeadCellVariants())}>
+                  # extractions
                 </span>
                 <span />
               </div>
@@ -146,7 +154,7 @@ const ReferralsTable = React.forwardRef<HTMLElement, ReferralsTableProps>(
                   <ReferralRow
                     key={referral.id}
                     referral={referral}
-                    onOpen={onOpenReferral}
+                    onOpen={(id) => router.push(referralDetailRoute(id))}
                   />
                 ))}
               </div>

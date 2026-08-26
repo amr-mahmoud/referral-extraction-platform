@@ -6,6 +6,10 @@ import type {
   RawExtractedField,
   RawLlmOutput,
 } from '../types/extraction.types';
+import {
+  DEFAULT_EXTRACTION_FIELDS,
+  type FieldDefinition,
+} from './extraction-schema';
 
 const rawExtractedFieldSchema = z.object({
   fieldName: z.coerce.string().min(1),
@@ -20,11 +24,17 @@ const rawLlmOutputSchema = z.object({
   extractedFields: z.array(rawExtractedFieldSchema),
 });
 
-export function normalizeExtractionOutput(raw: unknown): NormalizedExtractionResult {
+export function normalizeExtractionOutput(
+  raw: unknown,
+  schemaDefinition: FieldDefinition[] | null,
+): NormalizedExtractionResult {
   const parsed = rawLlmOutputSchema.parse(raw) as unknown as RawLlmOutput;
+  const labelByKey = buildLabelByKeyMap(schemaDefinition);
 
   const extractedFields: ExtractedFieldPayload[] = parsed.extractedFields.map(
     (field) => ({
+      key: field.fieldName,
+      label: labelByKey.get(field.fieldName) ?? field.fieldName,
       value: field.fieldValue,
       pageNumber: field.pageNumber,
       boundingBox: sanitizeBoundingBox(field.boundingBox),
@@ -37,6 +47,13 @@ export function normalizeExtractionOutput(raw: unknown): NormalizedExtractionRes
     extractedFields,
     patientName: derivePatientName(parsed.extractedFields),
   };
+}
+
+function buildLabelByKeyMap(
+  schemaDefinition: FieldDefinition[] | null,
+): Map<string, string> {
+  const fields = schemaDefinition ?? DEFAULT_EXTRACTION_FIELDS;
+  return new Map(fields.map((field) => [field.key, field.label]));
 }
 
 function sanitizeBoundingBox(raw: unknown): NormalizedBoundingBox | null {

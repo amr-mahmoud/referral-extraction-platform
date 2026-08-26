@@ -23,6 +23,12 @@ export interface ReferralSummary {
   fileName: string;
   schemaLabel: string;
   status: ReferralStatus;
+  /**
+   * Number of extracted fields once extraction completed. `null` (rendered as
+   * "N/A") until the worker reports back — there is no count to show while a
+   * referral is awaiting upload, pending, or processing.
+   */
+  extractionCount: number | null;
   /** ISO-8601. Formatted for display at the server boundary, not in the table. */
   submittedAt: string;
 }
@@ -33,4 +39,45 @@ export interface ReferralSummary {
  */
 export interface ReferralRowView extends Omit<ReferralSummary, "submittedAt"> {
   submittedLabel: string;
+}
+
+/**
+ * Normalized spatial source coordinates for one extracted field, on a 0–1000
+ * grid in both axes, top-left origin — the coordinate space Gemini's grounded
+ * bounding boxes are produced in. Scaled to rendered PDF pixels by
+ * `bounding-box.manager.ts`.
+ */
+export interface BoundingBox {
+  xmin: number;
+  ymin: number;
+  xmax: number;
+  ymax: number;
+}
+
+/** One extracted field as served by the API, ready for the review panel. */
+export interface ExtractedFieldView {
+  key: string;
+  label: string;
+  value: string;
+  pageNumber: number;
+  boundingBox: BoundingBox | null;
+}
+
+/**
+ * Standalone read model for `/referrals/[id]`. Deliberately NOT derived from
+ * `ReferralRowView` — the list row and the detail screen serve different
+ * purposes, and deriving one from the other would couple the list shape to
+ * detail-only fields like `documentUrl`/`extractedPayload`.
+ */
+export interface ReferralDetailView {
+  id: string;
+  patientName: string | null;
+  fileName: string;
+  schemaLabel: string;
+  status: ReferralStatus;
+  submittedLabel: string;
+  errorMessage: string | null;
+  /** Presigned S3 GET URL for the source PDF (re-signed by the API per serve). */
+  documentUrl: string;
+  extractedPayload: ExtractedFieldView[];
 }

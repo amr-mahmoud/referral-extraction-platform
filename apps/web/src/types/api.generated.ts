@@ -301,6 +301,10 @@ export interface components {
             extractionSchemaVersion: number | null;
             /** @description Populated when the referral FAILED or was REJECTED. */
             errorMessage: string | null;
+            /** @description Extracted fields for the review UI, with spatial bounding boxes. */
+            extractedPayload: components["schemas"]["ExtractedFieldDto"][];
+            /** @description Short-lived presigned S3 GET URL for the source PDF, refreshed per serve. */
+            documentUrl: string;
             /** @description ISO-8601 creation timestamp. */
             createdAt: string;
             /** @description ISO-8601 last-update timestamp. */
@@ -317,6 +321,10 @@ export interface components {
             ymax: number;
         };
         ExtractedFieldDto: {
+            /** @description Schema key identifying the extracted field (e.g. `patient_name`). */
+            key: string;
+            /** @description Human-readable label for the extracted field. */
+            label: string;
             /** @description Extracted text value. */
             value: string;
             /** @description 1-indexed page number in PDF document. */

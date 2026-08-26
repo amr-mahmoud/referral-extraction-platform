@@ -11,10 +11,22 @@ export class InvalidExtractedFieldError extends DomainError {
 
 export class ExtractedField {
   public constructor(
+    public readonly key: string,
+    public readonly label: string,
     public readonly value: string,
     public readonly pageNumber: number,
     public readonly boundingBox: BoundingBox | null,
   ) {
+    if (typeof key !== 'string' || key.length === 0) {
+      throw new InvalidExtractedFieldError(
+        'Extracted field key must be a non-empty string',
+      );
+    }
+    if (typeof label !== 'string' || label.length === 0) {
+      throw new InvalidExtractedFieldError(
+        'Extracted field label must be a non-empty string',
+      );
+    }
     if (typeof value !== 'string') {
       throw new InvalidExtractedFieldError(
         'Extracted field value must be a string',

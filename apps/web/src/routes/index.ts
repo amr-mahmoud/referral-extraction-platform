@@ -1,6 +1,7 @@
 export const ROUTES = {
   AUTH: "/auth",
   DASHBOARD: "/dashboard",
+  REFERRALS: "/referrals",
 } as const;
 
 export type Route = (typeof ROUTES)[keyof typeof ROUTES];
@@ -12,6 +13,11 @@ export function isPublicRoute(pathname: string): boolean {
   return PUBLIC_ROUTES.some(
     (route) => pathname === route || pathname.startsWith(`${route}/`),
   );
+}
+
+/** Dynamic review-screen path: `/referrals/{id}`. */
+export function referralDetailRoute(referralId: string): string {
+  return `${ROUTES.REFERRALS}/${encodeURIComponent(referralId)}`;
 }
 
 export interface NavItem {

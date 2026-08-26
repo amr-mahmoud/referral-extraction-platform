@@ -1,6 +1,11 @@
 import { formatRelativeTime } from "@/lib/format";
 import type { components } from "@/types/api.generated";
-import type { ReferralRowView, ReferralStatus } from "@/types/referrals/referral";
+import { REFERRAL_STATUSES } from "@/types/referrals/referral";
+import type {
+  ReferralDetailView,
+  ReferralRowView,
+  ReferralStatus,
+} from "@/types/referrals/referral";
 
 export type ReferralListItemDto = components["schemas"]["ReferralListItemDto"];
 
@@ -8,6 +13,20 @@ function toSchemaLabel(dto: ReferralListItemDto): string {
   return dto.extractionSchemaVersion != null
     ? `Custom schema v${dto.extractionSchemaVersion}`
     : "Default (LLM)";
+}
+
+function toStatus(dto: ReferralListItemDto): ReferralStatus {
+  return dto.status as ReferralStatus;
+}
+
+/**
+ * The "# extractions" column value: populated only once extraction completed —
+ * before that there is no count to report, and the row renders "N/A".
+ */
+function toExtractionCount(dto: ReferralListItemDto): number | null {
+  return dto.status === REFERRAL_STATUSES.COMPLETED
+    ? dto.extractedPayload.length
+    : null;
 }
 
 /**
@@ -26,8 +45,32 @@ export function toReferralRowView(
     patientName: dto.patientName,
     fileName: dto.fileName,
     schemaLabel: toSchemaLabel(dto),
-    status: dto.status as ReferralStatus,
+    status: toStatus(dto),
+    extractionCount: toExtractionCount(dto),
     submittedLabel: formatRelativeTime(dto.createdAt, now),
+  };
+}
+
+/**
+ * Maps the API's read model to the detail screen's view. Served from the SAME
+ * list/SSE payload as the dashboard — no per-id fetch exists (see
+ * `getReferralDetailById`), which is why the status is re-derived here the same
+ * way the row mapper does rather than read from a dedicated endpoint.
+ */
+export function toReferralDetailView(
+  dto: ReferralListItemDto,
+  now: number = Date.now(),
+): ReferralDetailView {
+  return {
+    id: dto.id,
+    patientName: dto.patientName,
+    fileName: dto.fileName,
+    schemaLabel: toSchemaLabel(dto),
+    status: toStatus(dto),
+    submittedLabel: formatRelativeTime(dto.createdAt, now),
+    errorMessage: dto.errorMessage,
+    documentUrl: dto.documentUrl,
+    extractedPayload: dto.extractedPayload,
   };
 }
 

@@ -16,7 +16,7 @@ import { Clinic } from '../../../domain/clinic/clinic.aggregate';
 import { ExtractionSchema } from '../../../domain/extraction-schema/extraction-schema.aggregate';
 import { Referral } from '../../../domain/referral/referral.aggregate';
 import type { ReferralWithPresignedUpload } from '../../../application/application.service';
-import type { ReferralView } from '../../../application/read-models/referral-view.read-model';
+import type { ReferralListItemView } from '../../../application/read-models/referral-view.read-model';
 
 export class SignupRequest {
   /** Full name or title of the clinic. */
@@ -290,6 +290,12 @@ export class BoundingBoxDto {
 }
 
 export class ExtractedFieldDto {
+  /** Schema key identifying the extracted field (e.g. `patient_name`). */
+  public readonly key!: string;
+
+  /** Human-readable label for the extracted field. */
+  public readonly label!: string;
+
   /** Extracted text value. */
   public readonly value!: string;
 
@@ -327,13 +333,19 @@ export class ReferralListItemDto {
   /** Populated when the referral FAILED or was REJECTED. */
   public readonly errorMessage!: string | null;
 
+  /** Extracted fields for the review UI, with spatial bounding boxes. */
+  public readonly extractedPayload!: ExtractedFieldDto[];
+
+  /** Short-lived presigned S3 GET URL for the source PDF, refreshed per serve. */
+  public readonly documentUrl!: string;
+
   /** ISO-8601 creation timestamp. */
   public readonly createdAt!: string;
 
   /** ISO-8601 last-update timestamp. */
   public readonly updatedAt!: string;
 
-  public static fromReadModel(view: ReferralView): ReferralListItemDto {
+  public static fromReadModel(view: ReferralListItemView): ReferralListItemDto {
     return {
       id: view.id,
       fileName: view.fileName,
@@ -342,6 +354,8 @@ export class ReferralListItemDto {
       extractionSchemaId: view.extractionSchemaId,
       extractionSchemaVersion: view.extractionSchemaVersion,
       errorMessage: view.errorMessage,
+      extractedPayload: view.extractedPayload,
+      documentUrl: view.documentUrl,
       createdAt: view.createdAt,
       updatedAt: view.updatedAt,
     };

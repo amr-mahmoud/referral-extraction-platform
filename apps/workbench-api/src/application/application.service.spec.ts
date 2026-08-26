@@ -11,6 +11,37 @@ import { ClinicId } from '../domain/shared/ids/clinic-id.value-object';
 import { ExtractionSchemaId } from '../domain/shared/ids/extraction-schema-id.value-object';
 import type { ReferralView } from './read-models/referral-view.read-model';
 
+const TEST_BUCKET_NAME = 'referral-workbench';
+
+/** Deterministic presigned-GET fake shared by both describe blocks. */
+function buildStorageService(): StoragePort {
+  return {
+    presignReferralUpload: jest.fn((_clinicId, referralId) =>
+      Promise.resolve({
+        url: `https://s3/${referralId}`,
+        expiresAt: new Date(),
+      }),
+    ),
+    presignPut: jest.fn(),
+    presignGet: jest.fn(({ key }) =>
+      Promise.resolve({
+        url: `https://s3/get/${key}`,
+        expiresAt: new Date(),
+      }),
+    ),
+    getConfiguredBucketName: jest.fn().mockReturnValue(TEST_BUCKET_NAME),
+    buildReferralPdfKey: jest.fn(
+      (clinicId: ClinicId, referralId) =>
+        `referrals/${clinicId.value}/${referralId}.pdf`,
+    ),
+  };
+}
+
+/** The URL `buildStorageService`'s presignGet will emit for a given view. */
+function expectedDocumentUrl(view: ReferralView): string {
+  return `https://s3/get/referrals/${view.clinicId}/${view.id}.pdf`;
+}
+
 describe('ApplicationService.createNewReferralsWithAttachedPresignedUrls', () => {
   const clinicId = ClinicId.from('11111111-1111-1111-1111-111111111111');
 
@@ -46,16 +77,7 @@ describe('ApplicationService.createNewReferralsWithAttachedPresignedUrls', () =>
     };
 
     const storageService: StoragePort = {
-      presignReferralUpload: jest.fn((_clinicId, referralId) =>
-        Promise.resolve({
-          url: `https://s3/${referralId}`,
-          expiresAt: new Date(),
-        }),
-      ),
-      presignPut: jest.fn(),
-      presignGet: jest.fn(),
-      getConfiguredBucketName: jest.fn().mockReturnValue('referral-workbench'),
-      buildReferralPdfKey: jest.fn(),
+      ...buildStorageService(),
       ...overrides?.storageService,
     };
 
@@ -237,6 +259,7 @@ describe('ApplicationService.listReferralViewsByClinic', () => {
   function buildService(overrides?: {
     referralRepository?: Partial<ReferralRepositoryPort>;
     cachingService?: Partial<CachingServicePort>;
+    storageService?: Partial<StoragePort>;
   }) {
     const clinicRepository: ClinicRepositoryPort = {
       findById: jest.fn(),
@@ -277,7 +300,7 @@ describe('ApplicationService.listReferralViewsByClinic', () => {
       referralRepository,
       {} as never,
       {} as never,
-      {} as never,
+      { ...buildStorageService(), ...overrides?.storageService },
       cachingService,
     );
 
@@ -294,10 +317,18 @@ describe('ApplicationService.listReferralViewsByClinic', () => {
       extractionSchemaId: null,
       extractionSchemaVersion: null,
       errorMessage: null,
+      extractedPayload: [],
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
       ...overrides,
     };
+  }
+
+  /** The served shape: the cached view plus a freshly-attached documentUrl. */
+  function buildServedView(
+    view: ReferralView,
+  ): ReferralView & { documentUrl: string } {
+    return { ...view, documentUrl: expectedDocumentUrl(view) };
   }
 
   it('serves entirely from Redis on a full cache hit, without touching Postgres', async () => {
@@ -311,7 +342,7 @@ describe('ApplicationService.listReferralViewsByClinic', () => {
 
     const results = await service.listReferralViewsByClinic(clinicId);
 
-    expect(results).toEqual([view]);
+    expect(results).toEqual([buildServedView(view)]);
     expect(
       referralRepository.findReferralViewsByClinicId,
     ).not.toHaveBeenCalled();
@@ -331,7 +362,7 @@ describe('ApplicationService.listReferralViewsByClinic', () => {
 
     const results = await service.listReferralViewsByClinic(clinicId);
 
-    expect(results).toEqual([view]);
+    expect(results).toEqual([buildServedView(view)]);
     expect(cachingService.setManyReferralViews).toHaveBeenCalledWith([view]);
     expect(cachingService.addReferralIdsToClinicIndex).toHaveBeenCalledWith(
       clinicId.value,
@@ -416,6 +447,6 @@ describe('ApplicationService.listReferralViewsByClinic', () => {
 
     const results = await service.listReferralViewsByClinic(clinicId);
 
-    expect(results).toEqual([view]);
+    expect(results).toEqual([buildServedView(view)]);
   });
 });

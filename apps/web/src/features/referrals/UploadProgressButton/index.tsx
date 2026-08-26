@@ -37,6 +37,11 @@ const UploadProgressButton = React.forwardRef<
   const isIdle = phase === "idle";
   const isComplete = phase === "complete";
 
+  // Dim the button only when it's idle and disabled (nothing to submit) — never
+  // while a batch is in flight, where `disabled` guards against double-submits
+  // but the progress bar must stay fully visible.
+  const isDimmed = isIdle && Boolean(disabled);
+
   const fillTone = isComplete ? (hasErrors ? "danger" : "success") : "progress";
   const fillPercent = isIdle ? 0 : Math.max(0, Math.min(100, percent));
 
@@ -54,7 +59,10 @@ const UploadProgressButton = React.forwardRef<
       data-phase={phase}
       disabled={disabled}
       {...props}
-      className={cn(uploadProgressButtonVariants({ className }))}
+      className={cn(
+        uploadProgressButtonVariants({ className }),
+        isDimmed ? "opacity-40" : undefined,
+      )}
     >
       <span
         aria-hidden

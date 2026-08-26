@@ -19,6 +19,8 @@ export interface RawLlmOutput {
 }
 
 export interface ExtractedFieldPayload {
+  key: string;
+  label: string;
   value: string;
   pageNumber: number;
   boundingBox: NormalizedBoundingBox | null;

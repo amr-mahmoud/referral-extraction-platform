@@ -6,11 +6,17 @@ import { revalidatePath } from "next/cache";
 import { apiClient } from "@/client/api-client";
 import { ACCESS_TOKEN_COOKIE } from "@/constants/auth";
 import { getApiErrorMessage } from "@/lib/api-error";
-import { toReferralRowView } from "@/managers/referral-view.manager";
+import {
+  toReferralDetailView,
+  toReferralRowView,
+} from "@/managers/referral-view.manager";
 import { ROUTES } from "@/routes";
 import { SCHEMA_SOURCES, type SchemaSelection } from "@/types/extraction-schemas/schema";
 import type { ActionResult } from "@/types/server-action";
-import type { ReferralRowView } from "@/types/referrals/referral";
+import type {
+  ReferralDetailView,
+  ReferralRowView,
+} from "@/types/referrals/referral";
 import type { ReferralUploadSlot } from "@/managers/direct-upload.manager";
 
 /**
@@ -33,6 +39,35 @@ export async function getReferralRows(): Promise<readonly ReferralRowView[]> {
 
   const now = Date.now();
   return data.map((referral) => toReferralRowView(referral, now));
+}
+
+/**
+ * Read side of the review screen. Deliberately NOT a new fetch pattern or a
+ * per-id endpoint: it issues the identical `GET /referrals` call the dashboard
+ * already makes on every load, finds the matching row, and maps it to the
+ * detail view — so the review screen is served entirely from data that already
+ * flows through the list/SSE feed.
+ *
+ * Returns `null` when the id doesn't belong to this clinic (or is unknown) so
+ * the page can call `notFound()` — the backend never surfaces foreign ids.
+ */
+export async function getReferralDetailById(
+  referralId: string,
+): Promise<ReferralDetailView | null> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(ACCESS_TOKEN_COOKIE)?.value;
+  if (!token) return null;
+
+  const { data, response } = await apiClient.GET("/referrals", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok || !data) return null;
+
+  const match = data.find((referral) => referral.id === referralId);
+  if (!match) return null;
+
+  return toReferralDetailView(match, Date.now());
 }
 
 export interface CreateReferralsInput {

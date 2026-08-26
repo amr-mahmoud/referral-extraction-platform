@@ -659,3 +659,51 @@ This document serves as the centralized commit history and decision log for the 
 
 - **Modified:** `apps/workbench-api/src/application/application.service.ts`, `apps/workbench-api/src/application/ports/caching.port.ts`, `apps/workbench-api/src/application/ports/referral-repository.port.ts`, `apps/workbench-api/src/application/read-models/referral-view.read-model.ts`, `apps/workbench-api/src/infrastructure/caching/redis.service.ts`, `apps/workbench-api/src/infrastructure/notifications/postgres-listen.service.ts`, `apps/workbench-api/src/interface/http/clinics/clinics.controller.ts`, `apps/workbench-api/src/interface/http/dto/index.dto.ts`, `docker/postgres/init/002-referral-notify.sql`, `apps/web/src/app/api/referrals/stream/route.ts`, `apps/web/src/hooks/use-referral-status-stream.ts`, `apps/web/src/managers/referral-view.manager.ts`, `apps/web/src/apps/dashboard/index.tsx`, `apps/web/src/features/referrals/**`, `apps/agent_worker/src/**`, `.env.example`, `.gitignore`
 - **Impact:** Requires Postgres trigger `002-referral-notify.sql` loaded in database (handled on compose boot / migration); Next.js dashboard opens an SSE stream to `/api/referrals/stream`; Redis cache failures now log warnings and degrade to Postgres without throwing 500s.
+
+---
+
+## v0.0.33 | 2026-08-26 | feat | EXTRACTED FIELD LABELS
+
+**Category:** Domain Models  
+**Summary:** Enrich extracted payload fields with schema keys and human-readable labels across the agent worker normalizer, domain value objects, persistence mapper, and OpenAPI DTOs.  
+**SuggestedCommitMessage:** feat: enrich extracted fields with key and label across worker and API | Domain Models
+
+### 🧠 Logic & Decisions
+
+- **The Why:** Previously, `ExtractedField` only carried `value`, `pageNumber`, and `boundingBox`, losing the semantic schema `key` and human-readable `label` (e.g. `patient_name`, `Patient Name`) upon storage in Postgres and serialization to API responses. The review UI requires both the machine-readable key and the UI label to render correction inputs and coordinate highlighting.
+  - **Payload Normalization in Worker:** `normalizeExtractionOutput` now maps schema definitions to attach `key` and human-readable `label` (falling back to `DEFAULT_EXTRACTION_FIELDS`), logging structured pairs `[key] label: "value"`.
+  - **Rich Domain Model Invariant (`ExtractedField`):** Added non-empty string validation for `key` and `label` in `ExtractedField` value object, enforcing state integrity before persistence.
+  - **Data Mapping & DTO Contract:** Updated `ReferralMapper` (Domain <-> Postgres JSONB) and `ExtractedFieldDto` / `api.generated.ts` to include `key` and `label`.
+  - **Plan Clean-Up:** Untracked `apps/agent_worker/plan.md` from git index per `.gitignore`.
+- **State Change:** All extracted fields in `extractedPayload` now reliably contain `key` and `label` alongside `value`, `pageNumber`, and `boundingBox`.
+
+### 🔗 Dependencies
+
+- **Modified:** `apps/agent_worker/src/extraction/payload-normalizer.ts`, `apps/agent_worker/src/extraction/referral-extraction.service.ts`, `apps/agent_worker/src/extraction/extraction-logger.ts`, `apps/agent_worker/src/types/extraction.types.ts`, `apps/workbench-api/src/domain/referral/extracted-field.value-object.ts`, `apps/workbench-api/src/infrastructure/repository/referral.mapper.ts`, `apps/workbench-api/src/interface/http/dto/index.dto.ts`, `apps/web/src/types/api.generated.ts`
+- **Impact:** Review UI and downstream consumers now receive explicit `key` and `label` properties for each field in `referral.extractedPayload`.
+
+---
+
+## v0.0.34 | 2026-08-26 | feat | REFERRAL REVIEW SCREEN
+
+**Category:** Interface Services  
+**Summary:** Implement wireframe 1e Referral Detail review interface with split PDF viewer, spatial grounding bounding box highlights, auto-navigation hook, and extracted fields panel.  
+**SuggestedCommitMessage:** feat: implement referral review detail screen with PDF viewer and spatial grounding | Interface Services
+
+### 🧠 Logic & Decisions
+
+- **The Why:** Completed the interactive referral review screen (wireframe 1e) allowing clinic staff to review extracted data side-by-side with source PDF documents:
+  - **Route & Layout Architecture:** Implemented `/referrals/[id]` route in `apps/web/src/app/referrals/[id]/page.tsx`, `ReferralDetailLayout` shell, and `ReferralDetailHeader` with back button, referral metadata, status pill, and timestamp formatting.
+  - **Interactive PDF Viewer (`react-pdf`):** Built `PdfViewer` in `features/review/PdfViewer/` configured with client-side dynamic loading and local worker `pdf.worker.min.mjs` to avoid Turbopack SSR issues and remote CDN dependencies. Added zoom controls (`ZoomIn`/`ZoomOut`) and page controls.
+  - **Spatial Grounding Coordinate Projection:** Created `bounding-box.manager.ts` (`scaleNormalizedBoundingBoxToPixelRect`) to project Gemini's normalized 0–1000 coordinate space onto rendered canvas pixel dimensions, drawing target highlight overlays with padding.
+  - **Custom Field Auto-Navigator Hook:** Created `useCustomAutoNavigatorExtractedFieldClick` (`hooks/use-custom-auto-navigator-extracted-field-click.ts`) to encapsulate field selection → PDF page auto-navigation and "no source on this page" indicators.
+  - **Extracted Fields Panel:** Created `ExtractedFieldsPanel` (`features/review/ExtractedFieldsPanel/`) rendering extraction values, schema keys/labels, and active field selection cues.
+  - **Dashboard Table Navigation:** Wired `ReferralRow` in `ReferralsTable` to navigate directly to `/referrals/[id]` on row click.
+  - **Real-Time Synchronization:** Integrated `useReferralStatusStream` into `ReferralDetailApp` to live-update status and extraction payload without manual reload.
+- **State Change:** Clicking any referral row in the dashboard opens `/referrals/[id]` displaying the split PDF viewer and synchronized extracted fields review panel.
+
+### 🔗 Dependencies
+
+- **Modified:** `apps/web/src/app/referrals/[id]/page.tsx`, `apps/web/src/apps/referral-detail/index.tsx`, `apps/web/src/features/review/**/*`, `apps/web/src/features/referrals/ReferralRow/**/*`, `apps/web/src/features/referrals/ReferralsTable/**/*`, `apps/web/src/hooks/use-custom-auto-navigator-extracted-field-click.ts`, `apps/web/src/layouts/ReferralDetailLayout/**/*`, `apps/web/src/managers/bounding-box.manager.ts`, `apps/web/src/managers/referral-view.manager.ts`, `apps/web/src/routes/index.ts`, `apps/web/src/server-actions/referrals.ts`, `apps/web/src/types/referrals/referral.ts`, `apps/web/public/pdf.worker.min.mjs`, `apps/workbench-api/src/application/application.service.ts`, `apps/workbench-api/src/application/read-models/referral-view.read-model.ts`, `docs/commit-log.md`
+- **Impact:** Clinic users can inspect and review extracted referral fields with spatial PDF visual grounding on `/referrals/[id]`.
+

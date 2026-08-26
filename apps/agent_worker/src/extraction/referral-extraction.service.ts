@@ -51,7 +51,7 @@ export class ReferralExtractionService {
         responseSchema,
         fieldInstructions,
       );
-      const normalized = normalizeExtractionOutput(rawOutput);
+      const normalized = normalizeExtractionOutput(rawOutput, schemaDefinition);
       logExtractionResult(context, rawOutput, normalized);
 
       if (!normalized.isValidDocument) {

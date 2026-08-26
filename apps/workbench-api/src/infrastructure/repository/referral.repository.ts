@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import {
   ListReferralOptions,
   Paginated,
@@ -9,7 +10,10 @@ import { ClinicId } from '../../domain/shared/ids/clinic-id.value-object';
 import { ReferralId } from '../../domain/shared/ids/referral-id.value-object';
 import { PrismaService } from './prisma.service';
 import { ReferralMapper } from './referral.mapper';
-import type { ReferralView } from '../../application/read-models/referral-view.read-model';
+import type {
+  ExtractedFieldView,
+  ReferralView,
+} from '../../application/read-models/referral-view.read-model';
 
 @Injectable()
 export class PrismaReferralRepository implements ReferralRepositoryPort {
@@ -143,6 +147,7 @@ const REFERRAL_VIEW_SELECT = {
   status: true,
   extractionSchemaId: true,
   errorMessage: true,
+  extractedPayload: true,
   createdAt: true,
   updatedAt: true,
   extractionSchema: { select: { version: true } },
@@ -156,9 +161,24 @@ interface ReferralViewRow {
   status: string;
   extractionSchemaId: string | null;
   errorMessage: string | null;
+  extractedPayload: Prisma.JsonValue;
   createdAt: Date;
   updatedAt: Date;
   extractionSchema: { version: number } | null;
+}
+
+/**
+ * The `extractedPayload` JSONB column only ever holds the exact
+ * `{key, label, value, pageNumber, boundingBox}` shape written by
+ * `ReferralMapper.toPersistence`/the worker's normalizer, so a structural cast
+ * here carries the same trust level the read model already applies to its other
+ * primitives.
+ */
+function toExtractedFieldViews(raw: Prisma.JsonValue): ExtractedFieldView[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw as unknown as ExtractedFieldView[];
 }
 
 function toReferralView(row: ReferralViewRow): ReferralView {
@@ -171,6 +191,7 @@ function toReferralView(row: ReferralViewRow): ReferralView {
     extractionSchemaId: row.extractionSchemaId,
     extractionSchemaVersion: row.extractionSchema?.version ?? null,
     errorMessage: row.errorMessage,
+    extractedPayload: toExtractedFieldViews(row.extractedPayload),
     // ISO strings, not Date — this shape is JSON.stringify'd straight into
     // Redis and must survive the round-trip unchanged.
     createdAt: row.createdAt.toISOString(),

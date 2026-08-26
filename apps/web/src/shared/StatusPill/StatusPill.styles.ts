@@ -2,7 +2,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 
 export const statusPillVariants = cva(
   [
-    "inline-flex w-fit shrink-0 items-center rounded-full px-2.5 py-1",
+    "inline-flex w-fit shrink-0 items-center gap-1 rounded-full px-2.5 py-1",
     "text-[10.5px] font-semibold tracking-[0.03em] uppercase",
   ],
   {

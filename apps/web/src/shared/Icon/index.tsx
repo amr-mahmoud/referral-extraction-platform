@@ -60,6 +60,11 @@ export const ChevronRightIcon = createIcon(
   <path d="m9 5 7 7-7 7" />,
 );
 
+export const ChevronLeftIcon = createIcon(
+  "chevron-left",
+  <path d="m15 5-7 7 7 7" />,
+);
+
 export const ChevronDownIcon = createIcon("chevron-down", <path d="m5 9 7 7 7-7" />);
 
 export const PlusIcon = createIcon(
@@ -78,7 +83,31 @@ export const DocumentIcon = createIcon(
   </>,
 );
 
+export const ZoomInIcon = createIcon(
+  "zoom-in",
+  <>
+    <circle cx="11" cy="11" r="7" />
+    <path d="m21 21-4.35-4.35" />
+    <path d="M11 8v6" />
+    <path d="M8 11h6" />
+  </>,
+);
+
+export const ZoomOutIcon = createIcon(
+  "zoom-out",
+  <>
+    <circle cx="11" cy="11" r="7" />
+    <path d="m21 21-4.35-4.35" />
+    <path d="M8 11h6" />
+  </>,
+);
+
 export const CheckIcon = createIcon("check", <path d="M20 6 9 17l-5-5" />);
+
+export const LoaderIcon = createIcon(
+  "loader",
+  <path d="M21 12a9 9 0 1 1-6.219-8.56" />,
+);
 
 export const LogoutIcon = createIcon(
   "logout",

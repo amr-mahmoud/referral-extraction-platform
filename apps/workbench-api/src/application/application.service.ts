@@ -21,7 +21,10 @@ import {
   type CachingServicePort,
   type ReferralCacheEntry,
 } from './ports/caching.port';
-import type { ReferralView } from './read-models/referral-view.read-model';
+import type {
+  ReferralListItemView,
+  ReferralView,
+} from './read-models/referral-view.read-model';
 import {
   CLINIC_REPOSITORY_PORT,
   type ClinicRepositoryPort,
@@ -409,14 +412,16 @@ export class ApplicationService {
    */
   public async listReferralViewsByClinic(
     clinicId: ClinicId,
-  ): Promise<ReferralView[]> {
+  ): Promise<ReferralListItemView[]> {
     try {
       const cachedReferralIds = await this.readClinicIndexTolerantly(clinicId);
 
       // No index key at all — the clinic has never been cached (cold start,
       // eviction, flushed Redis). Rebuild the whole thing from Postgres.
       if (cachedReferralIds === null) {
-        return this.rebuildClinicCacheFromDatabase(clinicId);
+        return this.attachDocumentUrls(
+          await this.rebuildClinicCacheFromDatabase(clinicId),
+        );
       }
 
       if (cachedReferralIds.length === 0) {
@@ -450,7 +455,9 @@ export class ApplicationService {
         await this.writeReferralViewsTolerantly(backfilled);
       }
 
-      return this.sortNewestFirst([...viewsById.values()]);
+      return this.attachDocumentUrls(
+        this.sortNewestFirst([...viewsById.values()]),
+      );
     } catch (error) {
       if (error instanceof DomainError) {
         throw error;
@@ -464,7 +471,7 @@ export class ApplicationService {
   /** Re-reads one referral from Postgres and refreshes its cache entry. */
   public async refreshReferralViewCache(
     referralId: string,
-  ): Promise<ReferralView | null> {
+  ): Promise<ReferralListItemView | null> {
     const [view] = await this.referralRepository.findReferralViewsByIds([
       referralId,
     ]);
@@ -473,7 +480,8 @@ export class ApplicationService {
     }
     await this.writeReferralViewsTolerantly([view]);
     await this.addToClinicIndexTolerantly(view.clinicId, [view.id]);
-    return view;
+    const [servedView] = await this.attachDocumentUrls([view]);
+    return servedView ?? null;
   }
 
   /** Dev-only warm-up: loads every referral into Redis so the cache starts hot. */
@@ -594,9 +602,50 @@ export class ApplicationService {
       extractionSchemaId: referral.extractionSchemaId?.value ?? null,
       extractionSchemaVersion: extractionSchema?.version ?? null,
       errorMessage: referral.errorMessage,
+      // Fresh aggregates are always `AWAITING_UPLOAD` with an empty payload —
+      // mirror `ReferralMapper.toPersistence` so the cached shape can never
+      // drift from what a Postgres read of the same row would produce.
+      extractedPayload: referral.extractedPayload.map((field) => ({
+        key: field.key,
+        label: field.label,
+        value: field.value,
+        pageNumber: field.pageNumber,
+        boundingBox: field.boundingBox
+          ? {
+              xmin: field.boundingBox.xmin,
+              ymin: field.boundingBox.ymin,
+              xmax: field.boundingBox.xmax,
+              ymax: field.boundingBox.ymax,
+            }
+          : null,
+      })),
       createdAt: referral.createdAt.toISOString(),
       updatedAt: referral.updatedAt.toISOString(),
     };
+  }
+
+  /**
+   * Attaches a fresh presigned GET URL to each view right before it is served.
+   * Presigning is a local SigV4 signing operation (no AWS network round-trip),
+   * and it MUST happen here rather than being embedded in the cached view: a
+   * presigned URL expires (~15 min) while the Redis view cache has no TTL, so
+   * a cached URL would go stale silently.
+   */
+  private async attachDocumentUrls(
+    views: ReferralView[],
+  ): Promise<ReferralListItemView[]> {
+    return Promise.all(
+      views.map(async (view): Promise<ReferralListItemView> => {
+        const { url } = await this.storageService.presignGet({
+          bucket: this.storageService.getConfiguredBucketName(),
+          key: this.storageService.buildReferralPdfKey(
+            ClinicId.from(view.clinicId),
+            ReferralId.from(view.id),
+          ),
+        });
+        return { ...view, documentUrl: url };
+      }),
+    );
   }
 
   private logCacheDegradation(operation: string, error: unknown): void {

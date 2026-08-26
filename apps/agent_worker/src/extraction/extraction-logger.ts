@@ -57,7 +57,7 @@ function logNormalizedOutput(
       ? `{ xmin: ${field.boundingBox.xmin}, ymin: ${field.boundingBox.ymin}, xmax: ${field.boundingBox.xmax}, ymax: ${field.boundingBox.ymax} }`
       : 'null';
     console.log(
-      `    ${(index + 1).toString().padStart(2, ' ')}. "${field.value}" | page=${field.pageNumber} | bbox=${bbox}`,
+      `    ${(index + 1).toString().padStart(2, ' ')}. [${field.key}] ${field.label}: "${field.value}" | page=${field.pageNumber} | bbox=${bbox}`,
     );
   });
 }

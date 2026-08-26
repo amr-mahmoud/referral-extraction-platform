@@ -8,6 +8,8 @@ import { ExtractionSchemaId } from '../../domain/shared/ids/extraction-schema-id
 import { ReferralId } from '../../domain/shared/ids/referral-id.value-object';
 
 interface RawExtractedField {
+  key: string;
+  label: string;
   value: string;
   pageNumber: number;
   boundingBox: {
@@ -26,6 +28,8 @@ export class ReferralMapper {
       ? (raw.extractedPayload as unknown as RawExtractedField[]).map(
           (field) =>
             new ExtractedField(
+              field.key,
+              field.label,
               field.value,
               field.pageNumber,
               field.boundingBox
@@ -67,6 +71,8 @@ export class ReferralMapper {
       extractionSchemaId: referral.extractionSchemaId?.value ?? null,
       status: referral.status.value,
       extractedPayload: referral.extractedPayload.map((field) => ({
+        key: field.key,
+        label: field.label,
         value: field.value,
         pageNumber: field.pageNumber,
         boundingBox: field.boundingBox

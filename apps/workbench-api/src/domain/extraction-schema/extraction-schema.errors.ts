@@ -1,31 +1,29 @@
-import { DomainError } from '../shared/domain.error';
+import { DOMAIN_ERROR } from '../../../libs/errors/domain-error-code.enum';
+import { DomainException } from '../shared/domain.exception';
 
-export enum ExtractionSchemaErrorCode {
-  INVALID_SCHEMA = 'INVALID_SCHEMA',
-  EMPTY_SCHEMA = 'EMPTY_SCHEMA',
-  SCHEMA_NOT_FOUND = 'SCHEMA_NOT_FOUND',
-}
-
-export class ExtractionSchemaValidationError extends DomainError {
-  public readonly code = ExtractionSchemaErrorCode.INVALID_SCHEMA;
+export class ExtractionSchemaValidationError extends DomainException {
+  public readonly errorCode = DOMAIN_ERROR.SCHEMA_INVALID;
 
   constructor(message: string) {
-    super(message);
+    super(DOMAIN_ERROR.SCHEMA_INVALID, message);
   }
 }
 
-export class ExtractionSchemaEmptyError extends DomainError {
-  public readonly code = ExtractionSchemaErrorCode.EMPTY_SCHEMA;
+export class ExtractionSchemaEmptyError extends DomainException {
+  public readonly errorCode = DOMAIN_ERROR.SCHEMA_EMPTY;
 
   constructor(message: string) {
-    super(message);
+    super(DOMAIN_ERROR.SCHEMA_EMPTY, message);
   }
 }
 
-export class ExtractionSchemaNotFoundError extends DomainError {
-  public readonly code = ExtractionSchemaErrorCode.SCHEMA_NOT_FOUND;
+export class ExtractionSchemaNotFoundError extends DomainException {
+  public readonly errorCode = DOMAIN_ERROR.SCHEMA_NOT_FOUND;
 
   constructor(schemaId: string) {
-    super(`Extraction schema with id '${schemaId}' was not found`);
+    super(
+      DOMAIN_ERROR.SCHEMA_NOT_FOUND,
+      `Extraction schema with id '${schemaId}' was not found`,
+    );
   }
 }

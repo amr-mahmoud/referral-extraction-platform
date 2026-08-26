@@ -70,11 +70,10 @@ export class ClinicDto {
 
   public static fromDomain(clinic: Clinic): ClinicDto {
     return {
-      id: clinic.id.value,
+      id: clinic.id,
       clinicName: clinic.clinicName,
       username: clinic.username,
-      defaultExtractionSchemaId:
-        clinic.defaultExtractionSchemaId?.value ?? null,
+      defaultExtractionSchemaId: clinic.defaultExtractionSchemaId,
       createdAt: clinic.createdAt,
     };
   }
@@ -172,7 +171,7 @@ export class ExtractionSchemaDto {
   public static fromDomain(schema: ExtractionSchema): ExtractionSchemaDto {
     return {
       id: schema.id,
-      clinicId: schema.clinicId.value,
+      clinicId: schema.clinicId,
       version: schema.version,
       title: schema.title,
       fields: schema.schemaDefinition.map((f) => ({
@@ -247,13 +246,13 @@ export class ReferralDto {
   public static fromDomain(referral: Referral): ReferralDto {
     return {
       id: referral.id,
-      clinicId: referral.clinicId.value,
+      clinicId: referral.clinicId,
       fileName: referral.fileName,
       patientName: referral.patientName,
       status: referral.status.value,
-      extractionSchemaId: referral.extractionSchemaId?.value ?? null,
+      extractionSchemaId: referral.extractionSchemaId,
       s3Bucket: process.env.S3_BUCKET_NAME ?? 'plena-referrals',
-      s3Key: `referrals/${referral.clinicId.value}/${referral.id}.pdf`,
+      s3Key: `referrals/${referral.clinicId}/${referral.id}.pdf`,
       createdAt: referral.createdAt,
       updatedAt: referral.updatedAt,
     };

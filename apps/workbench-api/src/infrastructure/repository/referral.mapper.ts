@@ -3,9 +3,6 @@ import { BoundingBox } from '../../domain/referral/bounding-box.value-object';
 import { ExtractedField } from '../../domain/referral/extracted-field.value-object';
 import { Referral } from '../../domain/referral/referral.aggregate';
 import { ReferralStatus } from '../../domain/referral/referral-status.value-object';
-import { ClinicId } from '../../domain/shared/ids/clinic-id.value-object';
-import { ExtractionSchemaId } from '../../domain/shared/ids/extraction-schema-id.value-object';
-import { ReferralId } from '../../domain/shared/ids/referral-id.value-object';
 
 interface RawExtractedField {
   key: string;
@@ -45,13 +42,11 @@ export class ReferralMapper {
       : [];
 
     return new Referral({
-      id: ReferralId.from(raw.id),
-      clinicId: ClinicId.from(raw.clinicId),
+      id: raw.id,
+      clinicId: raw.clinicId,
       fileName: raw.fileName,
       patientName: raw.patientName,
-      extractionSchemaId: raw.extractionSchemaId
-        ? ExtractionSchemaId.from(raw.extractionSchemaId)
-        : null,
+      extractionSchemaId: raw.extractionSchemaId,
       status: ReferralStatus.from(raw.status),
       extractedPayload,
       errorMessage: raw.errorMessage,
@@ -63,12 +58,12 @@ export class ReferralMapper {
   public static toPersistence(referral: Referral) {
     return {
       id: referral.id,
-      clinicId: referral.clinicId.value,
+      clinicId: referral.clinicId,
       fileName: referral.fileName,
       patientName: referral.patientName,
       s3Bucket: process.env.S3_BUCKET_NAME ?? 'plena-referrals',
-      s3Key: `referrals/${referral.clinicId.value}/${referral.id}.pdf`,
-      extractionSchemaId: referral.extractionSchemaId?.value ?? null,
+      s3Key: `referrals/${referral.clinicId}/${referral.id}.pdf`,
+      extractionSchemaId: referral.extractionSchemaId,
       status: referral.status.value,
       extractedPayload: referral.extractedPayload.map((field) => ({
         key: field.key,

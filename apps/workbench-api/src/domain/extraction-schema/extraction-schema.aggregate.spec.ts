@@ -1,4 +1,3 @@
-import { ClinicId } from '../shared/ids/clinic-id.value-object';
 import { ExtractionSchema } from './extraction-schema.aggregate';
 import {
   ExtractionSchemaEmptyError,
@@ -7,7 +6,7 @@ import {
 import { InvalidFieldDefinitionError } from './field-definition.value-object';
 
 describe('ExtractionSchema', () => {
-  const clinicId = ClinicId.from('11111111-1111-1111-1111-111111111111');
+  const clinicId = '11111111-1111-1111-1111-111111111111';
 
   const validFields = [
     { key: 'patient_name', description: 'Full legal name of the patient' },
@@ -25,7 +24,7 @@ describe('ExtractionSchema', () => {
       // Guards the regression where id/clinicId/schemaDefinition were declared
       // but never assigned in the constructor.
       expect(schema.id).toEqual(expect.any(String));
-      expect(schema.clinicId.value).toBe(clinicId.value);
+      expect(schema.clinicId).toBe(clinicId);
       expect(schema.version).toBe(1);
       expect(schema.createdAt).toBeInstanceOf(Date);
       expect(schema.schemaDefinition).toHaveLength(2);
@@ -79,7 +78,7 @@ describe('ExtractionSchema', () => {
       expect(
         () =>
           new ExtractionSchema({
-            clinicId: undefined as unknown as ClinicId,
+            clinicId: undefined as unknown as string,
             version: 1,
             schemaDefinition: validFields,
           }),

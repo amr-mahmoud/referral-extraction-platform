@@ -1,10 +1,14 @@
-import { DomainError } from '../shared/domain.error';
+import { DOMAIN_ERROR } from '../../../libs/errors/domain-error-code.enum';
+import { DomainException } from '../shared/domain.exception';
 
-export class InvalidPasswordHashError extends DomainError {
-  public readonly code = 'INVALID_PASSWORD_HASH';
+export class InvalidPasswordHashError extends DomainException {
+  public readonly errorCode = DOMAIN_ERROR.CLINIC_INVALID_PASSWORD_HASH;
 
   constructor() {
-    super('Password hash must be a non-empty hashed credential string');
+    super(
+      DOMAIN_ERROR.CLINIC_INVALID_PASSWORD_HASH,
+      'Password hash must be a non-empty hashed credential string',
+    );
   }
 }
 

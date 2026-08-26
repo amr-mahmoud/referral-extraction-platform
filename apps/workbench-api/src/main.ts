@@ -2,9 +2,10 @@ import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { apiReference } from '@scalar/nestjs-api-reference';
+import type { Response } from 'express';
 import { AppModule } from './app.module';
 import { ApplicationService } from './application/application.service';
-import { DomainExceptionFilter } from './interface/http/filters/domain-exception.filter';
+import { AllExceptionFilter } from './infrastructure/filters/all-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -17,7 +18,7 @@ async function bootstrap() {
     }),
   );
 
-  app.useGlobalFilters(new DomainExceptionFilter());
+  app.useGlobalFilters(new AllExceptionFilter());
 
   const config = new DocumentBuilder()
     .setTitle('Plena Referral Extraction Workbench API')
@@ -41,7 +42,7 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
 
   // Serve raw OpenAPI JSON document for client codegen (openapi-typescript)
-  app.getHttpAdapter().get('/docs-json', (_req, res) => {
+  app.getHttpAdapter().get('/docs-json', (_req, res: Response) => {
     res.json(document);
   });
 

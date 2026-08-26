@@ -1,5 +1,4 @@
 import { FieldDefinitionInput } from '../domain-types/extraction-schema.input';
-import { ClinicId } from '../shared/ids/clinic-id.value-object';
 import {
   ExtractionSchemaEmptyError,
   ExtractionSchemaValidationError,
@@ -14,12 +13,9 @@ const UUID_PATTERN =
 
 export interface ExtractionSchemaCreateProps {
   id?: string;
-  clinicId: ClinicId;
-  /**
-   * Human-friendly version name shown in the dashboard ("Q3 Insurance Forms").
-   * Falls back to `Custom schema v{version}` when omitted, so every schema
-   * carries a displayable string no matter which entry point created it.
-   */
+  /** Owning clinic id (UUID string). */
+  clinicId: string;
+
   title?: string;
   /** Explicit version. Mutually exclusive with `oldVersion`. */
   version?: number;
@@ -32,7 +28,7 @@ export interface ExtractionSchemaCreateProps {
 
 export class ExtractionSchema {
   id: string;
-  clinicId: ClinicId;
+  clinicId: string;
   version: number;
   title: string;
   schemaDefinition: FieldDefinition[];
@@ -52,7 +48,7 @@ export class ExtractionSchema {
     }
     this.clinicId = clinicId;
 
-    this.id = id ? this.validateIdFormat(id) : crypto.randomUUID();
+    this.id = id ? this.validateId(id) : this.generateId();
 
     this.setSchemaDefinition(schemaDefinition);
     this.setValidVersion({ version, oldVersion });
@@ -67,7 +63,17 @@ export class ExtractionSchema {
     }
     return `Custom schema v${version}`;
   }
+  public readonly generateId = (): string => crypto.randomUUID();
 
+  /** Own-id validation: a schema id is a UUID, so a malformed id is caught here. */
+  public readonly validateId = (id: string): string => {
+    if (typeof id !== 'string' || !UUID_PATTERN.test(id)) {
+      throw new ExtractionSchemaValidationError(
+        `Invalid extraction schema id: '${String(id)}'`,
+      );
+    }
+    return id;
+  };
   private setValidVersion({
     version,
     oldVersion,
@@ -97,15 +103,6 @@ export class ExtractionSchema {
       );
     }
     this.version = (oldVersion as number) + 1;
-  }
-
-  private validateIdFormat(id: string): string {
-    if (typeof id !== 'string' || !UUID_PATTERN.test(id)) {
-      throw new ExtractionSchemaValidationError(
-        `Invalid extraction schema id: '${String(id)}'`,
-      );
-    }
-    return id;
   }
 
   /**

@@ -5,15 +5,18 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import Redis from 'ioredis';
+import { REPOSITORY_ERROR } from '../../../libs/errors/repository-error-code.enum';
 import {
+  CachedClinic,
   CachedExtractionSchema,
   CachedReferralView,
   CachingServicePort,
   ReferralCacheEntry,
 } from '../../application/ports/caching.port';
+import { RepositoryException } from '../errors/repository.exception';
 
 const REFERRAL_KEY_PREFIX = 'referral:';
-const CLINIC_INDEX_KEY_PREFIX = 'clinic:';
+const CLINIC_KEY_PREFIX = 'clinic:';
 const CLINIC_INDEX_KEY_SUFFIX = ':referrals';
 const REFERRAL_VIEW_FIELD = 'referral';
 
@@ -24,6 +27,11 @@ const REFERRAL_VIEW_FIELD = 'referral';
 // when the key is absent entirely. Letting it expire guarantees a full
 // rebuild from Postgres at least this often, so drift is bounded.
 const CLINIC_INDEX_TTL_SECONDS = 10 * 60000;
+
+// Bounds staleness of the full-clinic cache: the cache is refreshed on every
+// schema-resolution miss and after schema creation, but a TTL guarantees it
+// self-heals even if a write path is missed.
+const CLINIC_CACHE_TTL_SECONDS = 10 * 60;
 
 // Fail fast, not fail eventually: ioredis's defaults queue commands and
 // retry reconnecting for up to `maxRetriesPerRequest` (20) attempts with
@@ -71,7 +79,7 @@ export class RedisService
     // fail-closed policy), not of the whole API — auth and schema
     // management don't touch it, so a Redis outage at boot must not crash
     // every endpoint. The real fail-closed guarantee is enforced per-call in
-    // `setManyReferralCaches`.
+    // `setManyReferralsToCache`.
     try {
       await this.client.ping();
     } catch (error) {
@@ -85,7 +93,7 @@ export class RedisService
     await this.client.quit();
   }
 
-  public async setManyReferralCaches(
+  public async setManyReferralsToCache(
     entries: ReferralCacheEntry[],
   ): Promise<void> {
     if (entries.length === 0) {
@@ -94,12 +102,16 @@ export class RedisService
 
     const pipeline = this.client.pipeline();
     for (const entry of entries) {
-      pipeline.hset(this.buildKey(entry.referralId), {
+      const hashFields: Record<string, string> = {
         fileName: entry.fileName,
         extractionSchema: entry.extractionSchema
           ? JSON.stringify(entry.extractionSchema)
           : '',
-      });
+      };
+      if (entry.referralView) {
+        hashFields[REFERRAL_VIEW_FIELD] = JSON.stringify(entry.referralView);
+      }
+      pipeline.hset(this.buildKey(entry.referralId), hashFields);
     }
 
     const results = await pipeline.exec();
@@ -113,8 +125,11 @@ export class RedisService
       this.logger.error(
         `Failed to write ${failures.length}/${entries.length} referral cache entries`,
       );
-      throw new Error(
+      throw new RepositoryException(
+        REPOSITORY_ERROR.CACHE_WRITE_FAILED,
         `Failed to write ${failures.length} of ${entries.length} referral cache entries to Redis`,
+        RedisService.name,
+        'setManyReferralsToCache',
       );
     }
   }
@@ -122,18 +137,27 @@ export class RedisService
   public async getReferralCache(
     referralId: string,
   ): Promise<ReferralCacheEntry | null> {
-    const raw = await this.client.hgetall(this.buildKey(referralId));
-    if (!raw || !raw.fileName) {
-      return null;
-    }
+    try {
+      const raw = await this.client.hgetall(this.buildKey(referralId));
+      if (!raw || !raw.fileName) {
+        return null;
+      }
 
-    return {
-      referralId,
-      fileName: raw.fileName,
-      extractionSchema: raw.extractionSchema
-        ? (JSON.parse(raw.extractionSchema) as CachedExtractionSchema)
-        : null,
-    };
+      return {
+        referralId,
+        fileName: raw.fileName,
+        extractionSchema: raw.extractionSchema
+          ? (JSON.parse(raw.extractionSchema) as CachedExtractionSchema)
+          : null,
+      };
+    } catch (error) {
+      throw new RepositoryException(
+        REPOSITORY_ERROR.CACHE_WRITE_FAILED,
+        error instanceof Error ? error.message : String(error),
+        RedisService.name,
+        'getReferralCache',
+      );
+    }
   }
 
   public async setReferralView(view: CachedReferralView): Promise<void> {
@@ -159,8 +183,11 @@ export class RedisService
     const results = await pipeline.exec();
     const failures = (results ?? []).filter(([error]) => error !== null);
     if (failures.length > 0) {
-      throw new Error(
+      throw new RepositoryException(
+        REPOSITORY_ERROR.CACHE_WRITE_FAILED,
         `Failed to write ${failures.length} of ${views.length} referral views to Redis`,
+        RedisService.name,
+        'setManyReferralViews',
       );
     }
   }
@@ -231,6 +258,55 @@ export class RedisService
     return this.client.smembers(key);
   }
 
+  public async getFullClinic(clinicId: string): Promise<CachedClinic | null> {
+    const raw = await this.client.get(this.buildClinicKey(clinicId));
+    return this.parseCachedClinic(raw);
+  }
+
+  public async setFullClinic(clinic: CachedClinic): Promise<void> {
+    try {
+      await this.client.set(
+        this.buildClinicKey(clinic.id),
+        JSON.stringify(clinic),
+        'EX',
+        CLINIC_CACHE_TTL_SECONDS,
+      );
+    } catch (error) {
+      throw new RepositoryException(
+        REPOSITORY_ERROR.CACHE_WRITE_FAILED,
+        error instanceof Error ? error.message : String(error),
+        RedisService.name,
+        'setFullClinic',
+      );
+    }
+  }
+
+  public async deleteReferralsToCache(
+    clinicId: string,
+    referralIds: string[],
+  ): Promise<void> {
+    if (referralIds.length === 0) {
+      return;
+    }
+
+    const pipeline = this.client.pipeline();
+    for (const referralId of referralIds) {
+      pipeline.del(this.buildKey(referralId));
+    }
+    pipeline.srem(this.buildClinicIndexKey(clinicId), ...referralIds);
+
+    const results = await pipeline.exec();
+    const failures = (results ?? []).filter(([error]) => error !== null);
+    if (failures.length > 0) {
+      throw new RepositoryException(
+        REPOSITORY_ERROR.CACHE_WRITE_FAILED,
+        `Failed to remove ${failures.length} of ${referralIds.length} referral cache entries`,
+        RedisService.name,
+        'deleteReferralsToCache',
+      );
+    }
+  }
+
   private parseReferralView(raw: string | null): CachedReferralView | null {
     if (!raw) {
       return null;
@@ -247,11 +323,31 @@ export class RedisService
     }
   }
 
+  private parseCachedClinic(raw: string | null): CachedClinic | null {
+    if (!raw) {
+      return null;
+    }
+    try {
+      return JSON.parse(raw) as CachedClinic;
+    } catch (error) {
+      this.logger.error(
+        `Discarding unparseable cached clinic: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return null;
+    }
+  }
+
   private buildKey(referralId: string): string {
     return `${REFERRAL_KEY_PREFIX}${referralId}`;
   }
 
+  private buildClinicKey(clinicId: string): string {
+    return `${CLINIC_KEY_PREFIX}${clinicId}`;
+  }
+
   private buildClinicIndexKey(clinicId: string): string {
-    return `${CLINIC_INDEX_KEY_PREFIX}${clinicId}${CLINIC_INDEX_KEY_SUFFIX}`;
+    return `${CLINIC_KEY_PREFIX}${clinicId}${CLINIC_INDEX_KEY_SUFFIX}`;
   }
 }

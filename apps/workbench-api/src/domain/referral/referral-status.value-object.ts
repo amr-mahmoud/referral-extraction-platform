@@ -1,18 +1,25 @@
-import { DomainError } from '../shared/domain.error';
+import { DOMAIN_ERROR } from '../../../libs/errors/domain-error-code.enum';
+import { DomainException } from '../shared/domain.exception';
 
-export class InvalidReferralStatusError extends DomainError {
-  public readonly code = 'INVALID_REFERRAL_STATUS';
+export class InvalidReferralStatusError extends DomainException {
+  public readonly errorCode = DOMAIN_ERROR.REFERRAL_INVALID_STATUS;
 
   constructor(value: string) {
-    super(`'${value}' is not a valid referral status`);
+    super(
+      DOMAIN_ERROR.REFERRAL_INVALID_STATUS,
+      `'${value}' is not a valid referral status`,
+    );
   }
 }
 
-export class InvalidReferralStatusTransitionError extends DomainError {
-  public readonly code = 'INVALID_REFERRAL_STATUS_TRANSITION';
+export class InvalidReferralStatusTransitionError extends DomainException {
+  public readonly errorCode = DOMAIN_ERROR.REFERRAL_INVALID_STATUS_TRANSITION;
 
   constructor(from: ReferralStatusValue, to: ReferralStatusValue) {
-    super(`Referral cannot transition from '${from}' to '${to}'`);
+    super(
+      DOMAIN_ERROR.REFERRAL_INVALID_STATUS_TRANSITION,
+      `Referral cannot transition from '${from}' to '${to}'`,
+    );
   }
 }
 

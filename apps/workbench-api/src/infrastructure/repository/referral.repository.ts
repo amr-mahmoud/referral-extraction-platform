@@ -1,13 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { REPOSITORY_ERROR } from '../../../libs/errors/repository-error-code.enum';
 import {
   ListReferralOptions,
   Paginated,
   ReferralRepositoryPort,
 } from '../../application/ports/referral-repository.port';
 import { Referral } from '../../domain/referral/referral.aggregate';
-import { ClinicId } from '../../domain/shared/ids/clinic-id.value-object';
-import { ReferralId } from '../../domain/shared/ids/referral-id.value-object';
+import { RepositoryException } from '../errors/repository.exception';
 import { PrismaService } from './prisma.service';
 import { ReferralMapper } from './referral.mapper';
 import type {
@@ -19,117 +19,214 @@ import type {
 export class PrismaReferralRepository implements ReferralRepositoryPort {
   public constructor(private readonly prisma: PrismaService) {}
 
-  public async findReferralById(id: ReferralId): Promise<Referral | null> {
-    const row = await this.prisma.referral.findUnique({
-      where: { id },
-    });
+  public async findReferralById(id: string): Promise<Referral | null> {
+    try {
+      const row = await this.prisma.referral.findUnique({
+        where: { id },
+      });
 
-    if (!row) {
-      return null;
+      if (!row) {
+        return null;
+      }
+
+      return ReferralMapper.toDomain(row);
+    } catch (error) {
+      throw this.toRepositoryException(
+        error,
+        'findReferralById',
+        REPOSITORY_ERROR.DATABASE_QUERY_FAILED,
+      );
     }
-
-    return ReferralMapper.toDomain(row);
   }
 
   public async findReferralByIdForClinic(
-    id: ReferralId,
-    clinicId: ClinicId,
+    id: string,
+    clinicId: string,
   ): Promise<Referral | null> {
-    const row = await this.prisma.referral.findFirst({
-      where: { id, clinicId: clinicId.value },
-    });
+    try {
+      const row = await this.prisma.referral.findFirst({
+        where: { id, clinicId },
+      });
 
-    if (!row) {
-      return null;
+      if (!row) {
+        return null;
+      }
+
+      return ReferralMapper.toDomain(row);
+    } catch (error) {
+      throw this.toRepositoryException(
+        error,
+        'findReferralByIdForClinic',
+        REPOSITORY_ERROR.DATABASE_QUERY_FAILED,
+      );
     }
-
-    return ReferralMapper.toDomain(row);
   }
 
   public async findPaginatedReferralsByClinicId(
-    clinicId: ClinicId,
+    clinicId: string,
     options: ListReferralOptions,
   ): Promise<Paginated<Referral>> {
-    const skip = (options.page - 1) * options.limit;
+    try {
+      const skip = (options.page - 1) * options.limit;
 
-    const [rows, total] = await this.prisma.$transaction([
-      this.prisma.referral.findMany({
-        where: { clinicId: clinicId.value },
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: options.limit,
-      }),
-      this.prisma.referral.count({ where: { clinicId: clinicId.value } }),
-    ]);
+      const [rows, total] = await this.prisma.$transaction([
+        this.prisma.referral.findMany({
+          where: { clinicId },
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take: options.limit,
+        }),
+        this.prisma.referral.count({ where: { clinicId } }),
+      ]);
 
-    return {
-      items: rows.map((row) => ReferralMapper.toDomain(row)),
-      total,
-      page: options.page,
-      limit: options.limit,
-    };
+      return {
+        items: rows.map((row) => ReferralMapper.toDomain(row)),
+        total,
+        page: options.page,
+        limit: options.limit,
+      };
+    } catch (error) {
+      throw this.toRepositoryException(
+        error,
+        'findPaginatedReferralsByClinicId',
+        REPOSITORY_ERROR.DATABASE_TRANSACTION_FAILED,
+      );
+    }
   }
 
   public async saveReferral(referral: Referral): Promise<Referral> {
-    const data = ReferralMapper.toPersistence(referral);
+    try {
+      const data = ReferralMapper.toPersistence(referral);
 
-    const row = await this.prisma.referral.upsert({
-      where: { id: data.id },
-      create: data,
-      update: data,
-    });
+      const row = await this.prisma.referral.upsert({
+        where: { id: data.id },
+        create: data,
+        update: data,
+      });
 
-    return ReferralMapper.toDomain(row);
+      return ReferralMapper.toDomain(row);
+    } catch (error) {
+      throw this.toRepositoryException(
+        error,
+        'saveReferral',
+        REPOSITORY_ERROR.DATABASE_WRITE_FAILED,
+      );
+    }
   }
 
   public async saveReferrals(referrals: Referral[]): Promise<Referral[]> {
-    const rows = await this.prisma.$transaction(
-      referrals.map((referral) => {
-        const data = ReferralMapper.toPersistence(referral);
-        return this.prisma.referral.upsert({
-          where: { id: data.id },
-          create: data,
-          update: data,
-        });
-      }),
-    );
+    try {
+      const rows = await this.prisma.$transaction(
+        referrals.map((referral) => {
+          const data = ReferralMapper.toPersistence(referral);
+          return this.prisma.referral.upsert({
+            where: { id: data.id },
+            create: data,
+            update: data,
+          });
+        }),
+      );
 
-    return rows.map((row) => ReferralMapper.toDomain(row));
+      return rows.map((row) => ReferralMapper.toDomain(row));
+    } catch (error) {
+      throw this.toRepositoryException(
+        error,
+        'saveReferrals',
+        REPOSITORY_ERROR.DATABASE_TRANSACTION_FAILED,
+      );
+    }
+  }
+
+  public async deleteReferralsByIds(referralIds: string[]): Promise<void> {
+    try {
+      if (referralIds.length === 0) {
+        return;
+      }
+      await this.prisma.referral.deleteMany({
+        where: { id: { in: referralIds } },
+      });
+    } catch (error) {
+      throw this.toRepositoryException(
+        error,
+        'deleteReferralsByIds',
+        REPOSITORY_ERROR.DATABASE_WRITE_FAILED,
+      );
+    }
   }
 
   // ── Read-model queries ───────────────────────────────────────────────
 
   public async findReferralViewsByClinicId(
-    clinicId: ClinicId,
+    clinicId: string,
   ): Promise<ReferralView[]> {
-    const rows = await this.prisma.referral.findMany({
-      where: { clinicId: clinicId.value },
-      orderBy: { createdAt: 'desc' },
-      select: REFERRAL_VIEW_SELECT,
-    });
-    return rows.map(toReferralView);
+    try {
+      const rows = await this.prisma.referral.findMany({
+        where: { clinicId },
+        orderBy: { createdAt: 'desc' },
+        select: REFERRAL_VIEW_SELECT,
+      });
+      return rows.map(toReferralView);
+    } catch (error) {
+      throw this.toRepositoryException(
+        error,
+        'findReferralViewsByClinicId',
+        REPOSITORY_ERROR.DATABASE_QUERY_FAILED,
+      );
+    }
   }
 
   public async findReferralViewsByIds(
     referralIds: string[],
   ): Promise<ReferralView[]> {
-    if (referralIds.length === 0) {
-      return [];
+    try {
+      if (referralIds.length === 0) {
+        return [];
+      }
+      const rows = await this.prisma.referral.findMany({
+        where: { id: { in: referralIds } },
+        orderBy: { createdAt: 'desc' },
+        select: REFERRAL_VIEW_SELECT,
+      });
+      return rows.map(toReferralView);
+    } catch (error) {
+      throw this.toRepositoryException(
+        error,
+        'findReferralViewsByIds',
+        REPOSITORY_ERROR.DATABASE_QUERY_FAILED,
+      );
     }
-    const rows = await this.prisma.referral.findMany({
-      where: { id: { in: referralIds } },
-      orderBy: { createdAt: 'desc' },
-      select: REFERRAL_VIEW_SELECT,
-    });
-    return rows.map(toReferralView);
   }
 
   public async findAllReferralViews(): Promise<ReferralView[]> {
-    const rows = await this.prisma.referral.findMany({
-      orderBy: { createdAt: 'desc' },
-      select: REFERRAL_VIEW_SELECT,
-    });
-    return rows.map(toReferralView);
+    try {
+      const rows = await this.prisma.referral.findMany({
+        orderBy: { createdAt: 'desc' },
+        select: REFERRAL_VIEW_SELECT,
+      });
+      return rows.map(toReferralView);
+    } catch (error) {
+      throw this.toRepositoryException(
+        error,
+        'findAllReferralViews',
+        REPOSITORY_ERROR.DATABASE_QUERY_FAILED,
+      );
+    }
+  }
+
+  private toRepositoryException(
+    error: unknown,
+    methodSrc: string,
+    errorCode: REPOSITORY_ERROR,
+  ): RepositoryException {
+    if (error instanceof RepositoryException) {
+      return error;
+    }
+    return new RepositoryException(
+      errorCode,
+      error instanceof Error ? error.message : String(error),
+      PrismaReferralRepository.name,
+      methodSrc,
+    );
   }
 }
 

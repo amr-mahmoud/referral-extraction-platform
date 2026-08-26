@@ -1,6 +1,5 @@
-import { DomainError } from '../shared/domain.error';
-import { ClinicId } from '../shared/ids/clinic-id.value-object';
-import { ExtractionSchemaId } from '../shared/ids/extraction-schema-id.value-object';
+import { DOMAIN_ERROR } from '../../../libs/errors/domain-error-code.enum';
+import { DomainException } from '../shared/domain.exception';
 import { ExtractedField } from './extracted-field.value-object';
 import {
   ReferralCorrectionNotAllowedError,
@@ -13,26 +12,30 @@ import {
   ReferralStatusValue,
 } from './referral-status.value-object';
 
-export class InvalidReferralIdError extends DomainError {
-  public readonly code = 'INVALID_REFERRAL_ID';
+export class InvalidReferralIdError extends DomainException {
+  public readonly errorCode = DOMAIN_ERROR.REFERRAL_INVALID_ID;
 
   constructor(id: unknown) {
-    super(`Invalid referral id: '${String(id)}'`);
+    super(
+      DOMAIN_ERROR.REFERRAL_INVALID_ID,
+      `Invalid referral id: '${String(id)}'`,
+    );
   }
 }
 
 const PDF_FILE_NAME_PATTERN = /\.pdf$/i;
 
 export interface ReferralCreateProps {
-  /** Self-generated when absent. Expected to be a string. */
+  /** Self-generated when absent. Expected to be a UUID string. */
   id?: string;
-  clinicId: ClinicId;
+  /** Owning clinic id (UUID string). */
+  clinicId: string;
   /** Original uploaded file name; must end in `.pdf`. */
   fileName: string;
   /** Unknown until extraction resolves one — `null` is a legal, expected state. */
   patientName?: string | null;
 
-  extractionSchemaId?: ExtractionSchemaId | null;
+  extractionSchemaId?: string | null;
   status?: ReferralStatus;
   extractedPayload?: ExtractedField[];
   errorMessage?: string | null;
@@ -46,26 +49,17 @@ export interface ReferralCreateProps {
  */
 export class Referral {
   public readonly id: string;
-  public readonly clinicId: ClinicId;
+  public readonly clinicId: string;
   public readonly fileName: string;
   public readonly patientName: string | null;
 
   public readonly createdAt: Date;
 
-  private _extractionSchemaId: ExtractionSchemaId | null;
+  private _extractionSchemaId: string | null;
   private _status: ReferralStatus;
   private _extractedPayload: ExtractedField[];
   private _errorMessage: string | null;
   private _updatedAt: Date;
-
-  public static readonly generateId = (): string => crypto.randomUUID();
-
-  public static readonly validateId = (id: string): string => {
-    if (typeof id !== 'string' || id.trim() === '') {
-      throw new InvalidReferralIdError(id);
-    }
-    return id.trim();
-  };
 
   public constructor({
     id,
@@ -85,9 +79,7 @@ export class Referral {
     this.clinicId = clinicId;
 
     this.id =
-      id !== undefined && id !== null
-        ? Referral.validateId(id)
-        : Referral.generateId();
+      id !== undefined && id !== null ? this.validateId(id) : this.generateId();
     this.fileName = this.validateFileName(fileName);
     this.patientName = this.validatePatientName(patientName);
 
@@ -134,7 +126,7 @@ export class Referral {
     return this._status;
   }
 
-  public get extractionSchemaId(): ExtractionSchemaId | null {
+  public get extractionSchemaId(): string | null {
     return this._extractionSchemaId;
   }
 
@@ -150,9 +142,7 @@ export class Referral {
     return this._updatedAt;
   }
 
-  public readonly resolveSchema = (
-    extractionSchemaId: ExtractionSchemaId,
-  ): void => {
+  public readonly resolveSchema = (extractionSchemaId: string): void => {
     if (
       this._status.value !== ReferralStatusValue.AWAITING_UPLOAD &&
       this._status.value !== ReferralStatusValue.PENDING
@@ -161,12 +151,21 @@ export class Referral {
     }
     if (
       this._extractionSchemaId !== null &&
-      !this._extractionSchemaId.equals(extractionSchemaId)
+      this._extractionSchemaId !== extractionSchemaId
     ) {
       throw new ReferralSchemaAlreadyFixedError(this.id);
     }
     this._extractionSchemaId = extractionSchemaId;
     this._touch();
+  };
+
+  public readonly generateId = (): string => crypto.randomUUID();
+
+  public readonly validateId = (id: string): string => {
+    if (typeof id !== 'string' || id.trim() === '') {
+      throw new InvalidReferralIdError(id);
+    }
+    return id.trim();
   };
 
   public readonly markUploaded = (): void => {

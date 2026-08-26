@@ -2,8 +2,8 @@ import { cva, type VariantProps } from "class-variance-authority";
 
 export const uploadFileChipVariants = cva(
   [
-    "flex max-w-full items-center gap-2 rounded-lg border px-3 py-2",
-    "text-[12.5px] font-medium",
+    "flex max-w-full items-center gap-2 rounded-lg border px-4 py-2.5",
+    "text-[13.5px] font-medium",
   ],
   {
     variants: {
@@ -26,7 +26,7 @@ export const uploadFileChipNameVariants = cva("truncate");
  * bolded so it reads as the primary signal in the chip, not a caption.
  */
 export const uploadFileChipMetaVariants = cva(
-  "shrink-0 text-[12.5px] font-semibold",
+  "shrink-0 text-[13.5px] font-semibold",
   {
     variants: {
       tone: {

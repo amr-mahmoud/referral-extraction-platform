@@ -1,10 +1,11 @@
-import { DomainError } from '../shared/domain.error';
+import { DOMAIN_ERROR } from '../../../libs/errors/domain-error-code.enum';
+import { DomainException } from '../shared/domain.exception';
 
-export class InvalidBoundingBoxError extends DomainError {
-  public readonly code = 'INVALID_BOUNDING_BOX';
+export class InvalidBoundingBoxError extends DomainException {
+  public readonly errorCode = DOMAIN_ERROR.REFERRAL_INVALID_BOUNDING_BOX;
 
   constructor(message: string) {
-    super(message);
+    super(DOMAIN_ERROR.REFERRAL_INVALID_BOUNDING_BOX, message);
   }
 }
 

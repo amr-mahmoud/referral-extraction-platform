@@ -1,5 +1,3 @@
-import { ClinicId } from '../../domain/shared/ids/clinic-id.value-object';
-import { ReferralId } from '../../domain/shared/ids/referral-id.value-object';
 import { S3StorageService } from './s3-storage.service';
 
 describe('S3StorageService', () => {
@@ -22,10 +20,8 @@ describe('S3StorageService', () => {
 
   describe('buildReferralPdfKey', () => {
     it('builds the referrals/{clinicId}/{referralId}.pdf key convention', () => {
-      const clinicId = ClinicId.from('11111111-1111-1111-1111-111111111111');
-      const referralId = ReferralId.from(
-        '22222222-2222-2222-2222-222222222222',
-      );
+      const clinicId = '11111111-1111-1111-1111-111111111111';
+      const referralId = '22222222-2222-2222-2222-222222222222';
 
       const service = new S3StorageService();
 

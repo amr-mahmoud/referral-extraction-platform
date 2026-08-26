@@ -1,6 +1,3 @@
-import { ClinicId } from '../../domain/shared/ids/clinic-id.value-object';
-import { ReferralId } from '../../domain/shared/ids/referral-id.value-object';
-
 export const STORAGE_PORT = 'STORAGE_PORT';
 
 export interface S3Object {
@@ -26,8 +23,8 @@ export interface PresignedUrl {
 
 export interface StoragePort {
   presignReferralUpload(
-    clinicId: ClinicId,
-    referralId: ReferralId,
+    clinicId: string,
+    referralId: string,
     options?: PresignPutOptions,
   ): Promise<PresignedUrl>;
   presignPut(
@@ -40,5 +37,5 @@ export interface StoragePort {
   /**
    * The referral PDF key convention: `referrals/{clinicId}/{referralId}.pdf`.
    */
-  buildReferralPdfKey(clinicId: ClinicId, referralId: ReferralId): string;
+  buildReferralPdfKey(clinicId: string, referralId: string): string;
 }

@@ -1,5 +1,5 @@
-import { ClinicId } from '../shared/ids/clinic-id.value-object';
-import { ExtractionSchemaId } from '../shared/ids/extraction-schema-id.value-object';
+import { DOMAIN_ERROR } from '../../../libs/errors/domain-error-code.enum';
+import { ExtractionSchema } from '../extraction-schema/extraction-schema.aggregate';
 import {
   ClinicInvalidCredentialsError,
   ClinicInvalidUsernameFormatError,
@@ -7,29 +7,46 @@ import {
   ClinicWeakPasswordError,
 } from './clinic.errors';
 import { PasswordHash } from './password-hash.value-object';
+import { DomainException } from '../shared/domain.exception';
 import type { PasswordVerifier } from './password-verifier.type';
 
 const MIN_PASSWORD_LENGTH = 8;
 const USERNAME_PATTERN = /^[a-zA-Z0-9_]{3,50}$/;
 
+export class InvalidClinicIdError extends DomainException {
+  public readonly errorCode = DOMAIN_ERROR.INVALID_CLINIC_ID;
+
+  constructor(id: unknown) {
+    super(DOMAIN_ERROR.INVALID_CLINIC_ID, `Invalid clinic id: '${String(id)}'`);
+  }
+}
+
 export interface ClinicCreateProps {
-  id?: ClinicId | string;
+  /** Self-generated when absent. Expected to be a UUID string. */
+  id?: string;
   clinicName: string;
   username: string;
   passwordHash?: PasswordHash | string;
   rawPassword?: string;
   hashedPassword?: string;
-  defaultExtractionSchemaId?: ExtractionSchemaId | string | null;
+  /** The clinic's default extraction schema id, or `null` for the LLM default. */
+  defaultExtractionSchemaId?: string | null;
+  /** Ids of the clinic's related extraction schemas (cache/read hydration). */
+  extractionSchemaIds?: string[];
+  /** Ids of the clinic's referrals (cache/read hydration). */
+  referralIds?: string[];
   createdAt?: Date;
   updatedAt?: Date;
 }
 
 export class Clinic {
-  id: ClinicId;
+  id: string;
   clinicName: string;
   username: string;
   private _passwordHash: PasswordHash;
-  private _defaultExtractionSchemaId: ExtractionSchemaId | null;
+  private _defaultExtractionSchemaId: string | null;
+  private _extractionSchemaIds: string[];
+  private _referralIds: string[];
   createdAt: Date;
   private _updatedAt: Date;
 
@@ -81,50 +98,86 @@ export class Clinic {
       );
     }
 
-    this.id = props.id
-      ? typeof props.id === 'string'
-        ? ClinicId.from(props.id)
-        : props.id
-      : ClinicId.from(crypto.randomUUID());
+    this.id =
+      props.id !== undefined && props.id !== null
+        ? this.validateId(props.id)
+        : this.generateId();
 
     this.clinicName = props.clinicName.trim();
     this.username = props.username;
     this._passwordHash = passwordHash;
-
-    if (
-      props.defaultExtractionSchemaId !== undefined &&
-      props.defaultExtractionSchemaId !== null
-    ) {
-      this._defaultExtractionSchemaId =
-        typeof props.defaultExtractionSchemaId === 'string'
-          ? ExtractionSchemaId.from(props.defaultExtractionSchemaId)
-          : props.defaultExtractionSchemaId;
-    } else {
-      this._defaultExtractionSchemaId = null;
-    }
+    this._defaultExtractionSchemaId = props.defaultExtractionSchemaId ?? null;
+    this._extractionSchemaIds = props.extractionSchemaIds ?? [];
+    this._referralIds = props.referralIds ?? [];
 
     this.createdAt = props.createdAt ?? new Date();
     this._updatedAt = props.updatedAt ?? new Date();
   }
 
-  public static create(props: ClinicCreateProps): Clinic {
-    return new Clinic(props);
-  }
+  public readonly generateId = (): string => crypto.randomUUID();
 
-  public static register(props: ClinicCreateProps): Clinic {
-    return new Clinic(props);
-  }
+  public readonly validateId = (id: string): string => {
+    if (typeof id !== 'string' || id.trim() === '') {
+      throw new InvalidClinicIdError(id);
+    }
+    return id.trim();
+  };
 
   public get passwordHash(): PasswordHash {
     return this._passwordHash;
   }
 
-  public get defaultExtractionSchemaId(): ExtractionSchemaId | null {
+  public get defaultExtractionSchemaId(): string | null {
     return this._defaultExtractionSchemaId;
+  }
+
+  /** Ids of the clinic's related extraction schemas, hydrated at construction or via `updateRelationSchemas`. */
+  public get extractionSchemaIds(): string[] {
+    return this._extractionSchemaIds;
+  }
+
+  /** Ids of the clinic's referrals, hydrated at construction via `referralIds`. */
+  public get referralIds(): string[] {
+    return this._referralIds;
   }
 
   public get updatedAt(): Date {
     return this._updatedAt;
+  }
+
+  /**
+   * Hydrates the clinic's schema relations from full aggregates (the Postgres
+   * read path) — stores only their ids.
+   */
+  public updateRelationSchemas(extractionSchemas: ExtractionSchema[]): void {
+    this._extractionSchemaIds = extractionSchemas.map((schema) => schema.id);
+  }
+
+  /**
+   * Resolves the id of the extraction schema that applies to this clinic:
+   * - an explicitly requested id (valid only if it is one of this clinic's
+   *   schemas), or
+   * - the clinic's default schema.
+   *
+   * Returns `null` when no schema applies (no default configured) or the
+   * requested schema is not among the loaded relations — callers fall back to
+   * Postgres and treat a still-missing requested id as not-found. The full
+   * schema payload is fetched separately once the id is known.
+   */
+  public findExtractionSchema(
+    extractionSchemaId?: string | null,
+  ): string | null {
+    if (extractionSchemaId) {
+      return this._extractionSchemaIds.includes(extractionSchemaId)
+        ? extractionSchemaId
+        : null;
+    }
+    if (!this._defaultExtractionSchemaId) {
+      return null;
+    }
+    return this._extractionSchemaIds.includes(this._defaultExtractionSchemaId)
+      ? this._defaultExtractionSchemaId
+      : null;
   }
 
   public async verifyPassword(
@@ -138,17 +191,7 @@ export class Clinic {
     }
   }
 
-  public changeDefaultSchema(
-    extractionSchemaId: ExtractionSchemaId | null,
-  ): void {
-    if (
-      extractionSchemaId !== null &&
-      !(extractionSchemaId instanceof ExtractionSchemaId)
-    ) {
-      throw new ClinicValidationError(
-        'Default extraction schema must be an ExtractionSchemaId or null',
-      );
-    }
+  public changeDefaultSchema(extractionSchemaId: string | null): void {
     this._defaultExtractionSchemaId = extractionSchemaId;
     this._updatedAt = new Date();
   }

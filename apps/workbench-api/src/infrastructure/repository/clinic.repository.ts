@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
+import { REPOSITORY_ERROR } from '../../../libs/errors/repository-error-code.enum';
 import { ClinicRepositoryPort } from '../../application/ports/clinic-repository.port';
 import { Clinic } from '../../domain/clinic/clinic.aggregate';
 import { ExtractionSchema } from '../../domain/extraction-schema/extraction-schema.aggregate';
-import { ClinicId } from '../../domain/shared/ids/clinic-id.value-object';
-import { ExtractionSchemaId } from '../../domain/shared/ids/extraction-schema-id.value-object';
+import { RepositoryException } from '../errors/repository.exception';
 import { ClinicMapper } from './clinic.mapper';
 import { ExtractionSchemaMapper } from './extraction-schema.mapper';
 import { PrismaService } from './prisma.service';
@@ -12,88 +12,160 @@ import { PrismaService } from './prisma.service';
 export class PrismaClinicRepository implements ClinicRepositoryPort {
   public constructor(private readonly prisma: PrismaService) {}
 
-  public async findById(id: ClinicId): Promise<Clinic | null> {
-    const row = await this.prisma.clinic.findUnique({
-      where: { id: id.value },
-    });
+  public async findById(id: string): Promise<Clinic | null> {
+    try {
+      const row = await this.prisma.clinic.findUnique({
+        where: { id },
+      });
 
-    if (!row) {
-      return null;
+      if (!row) {
+        return null;
+      }
+
+      return ClinicMapper.toDomain(row);
+    } catch (error) {
+      throw this.toRepositoryException(
+        error,
+        'findById',
+        REPOSITORY_ERROR.DATABASE_QUERY_FAILED,
+      );
     }
-
-    return ClinicMapper.toDomain(row);
   }
 
   public async findByUsername(username: string): Promise<Clinic | null> {
-    const row = await this.prisma.clinic.findUnique({
-      where: { username },
-    });
+    try {
+      const row = await this.prisma.clinic.findUnique({
+        where: { username },
+      });
 
-    if (!row) {
-      return null;
+      if (!row) {
+        return null;
+      }
+
+      return ClinicMapper.toDomain(row);
+    } catch (error) {
+      throw this.toRepositoryException(
+        error,
+        'findByUsername',
+        REPOSITORY_ERROR.DATABASE_QUERY_FAILED,
+      );
     }
-
-    return ClinicMapper.toDomain(row);
   }
 
   public async save(clinic: Clinic): Promise<Clinic> {
-    const data = ClinicMapper.toPersistence(clinic);
+    try {
+      const data = ClinicMapper.toPersistence(clinic);
 
-    const row = await this.prisma.clinic.upsert({
-      where: { id: data.id },
-      create: data,
-      update: data,
-    });
+      const row = await this.prisma.clinic.upsert({
+        where: { id: data.id },
+        create: data,
+        update: data,
+      });
 
-    return ClinicMapper.toDomain(row);
+      return ClinicMapper.toDomain(row);
+    } catch (error) {
+      throw this.toRepositoryException(
+        error,
+        'save',
+        REPOSITORY_ERROR.DATABASE_WRITE_FAILED,
+      );
+    }
   }
 
   public async saveExtractionSchema(
     schema: ExtractionSchema,
   ): Promise<ExtractionSchema> {
-    const data = ExtractionSchemaMapper.toPersistence(schema);
+    try {
+      const data = ExtractionSchemaMapper.toPersistence(schema);
 
-    const row = await this.prisma.extractionSchema.upsert({
-      where: { id: data.id },
-      create: data,
-      update: data,
-    });
+      const row = await this.prisma.extractionSchema.upsert({
+        where: { id: data.id },
+        create: data,
+        update: data,
+      });
 
-    return ExtractionSchemaMapper.toDomain(row);
+      return ExtractionSchemaMapper.toDomain(row);
+    } catch (error) {
+      throw this.toRepositoryException(
+        error,
+        'saveExtractionSchema',
+        REPOSITORY_ERROR.DATABASE_WRITE_FAILED,
+      );
+    }
   }
 
-  public async findLatestSchemaVersion(clinicId: ClinicId): Promise<number> {
-    const latest = await this.prisma.extractionSchema.findFirst({
-      where: { clinicId: clinicId.value },
-      orderBy: { version: 'desc' },
-      select: { version: true },
-    });
+  public async findLatestSchemaVersion(clinicId: string): Promise<number> {
+    try {
+      const latest = await this.prisma.extractionSchema.findFirst({
+        where: { clinicId },
+        orderBy: { version: 'desc' },
+        select: { version: true },
+      });
 
-    return latest?.version ?? 0;
+      return latest?.version ?? 0;
+    } catch (error) {
+      throw this.toRepositoryException(
+        error,
+        'findLatestSchemaVersion',
+        REPOSITORY_ERROR.DATABASE_QUERY_FAILED,
+      );
+    }
   }
 
   public async findExtractionSchemaById(
-    id: ExtractionSchemaId,
+    id: string,
   ): Promise<ExtractionSchema | null> {
-    const row = await this.prisma.extractionSchema.findUnique({
-      where: { id: id.value },
-    });
+    try {
+      const row = await this.prisma.extractionSchema.findUnique({
+        where: { id },
+      });
 
-    if (!row) {
-      return null;
+      if (!row) {
+        return null;
+      }
+
+      return ExtractionSchemaMapper.toDomain(row);
+    } catch (error) {
+      throw this.toRepositoryException(
+        error,
+        'findExtractionSchemaById',
+        REPOSITORY_ERROR.DATABASE_QUERY_FAILED,
+      );
     }
-
-    return ExtractionSchemaMapper.toDomain(row);
   }
 
   public async listExtractionSchemasByClinic(
-    clinicId: ClinicId,
+    clinicId: string,
   ): Promise<ExtractionSchema[]> {
-    const rows = await this.prisma.extractionSchema.findMany({
-      where: { clinicId: clinicId.value },
-      orderBy: { version: 'asc' },
-    });
+    try {
+      const rows = await this.prisma.extractionSchema.findMany({
+        where: { clinicId },
+        orderBy: { version: 'asc' },
+      });
 
-    return rows.map((row) => ExtractionSchemaMapper.toDomain(row));
+      return rows.map((row) => ExtractionSchemaMapper.toDomain(row));
+    } catch (error) {
+      throw this.toRepositoryException(
+        error,
+        'listExtractionSchemasByClinic',
+        REPOSITORY_ERROR.DATABASE_QUERY_FAILED,
+      );
+    }
+  }
+
+  private toRepositoryException(
+    error: unknown,
+    methodSrc: string,
+    errorCode: REPOSITORY_ERROR,
+  ): RepositoryException {
+    if (error instanceof RepositoryException) {
+      return error;
+    }
+    return new RepositoryException(
+      errorCode,
+      error instanceof Error ? error.message : String(error),
+      PrismaClinicRepository.name,
+      methodSrc,
+    );
   }
 }

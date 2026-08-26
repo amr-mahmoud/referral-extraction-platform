@@ -1,11 +1,12 @@
-import { DomainError } from '../shared/domain.error';
+import { DOMAIN_ERROR } from '../../../libs/errors/domain-error-code.enum';
+import { DomainException } from '../shared/domain.exception';
 import { BoundingBox } from './bounding-box.value-object';
 
-export class InvalidExtractedFieldError extends DomainError {
-  public readonly code = 'INVALID_EXTRACTED_FIELD';
+export class InvalidExtractedFieldError extends DomainException {
+  public readonly errorCode = DOMAIN_ERROR.REFERRAL_INVALID_EXTRACTED_FIELD;
 
   constructor(message: string) {
-    super(message);
+    super(DOMAIN_ERROR.REFERRAL_INVALID_EXTRACTED_FIELD, message);
   }
 }
 

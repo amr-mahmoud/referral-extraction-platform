@@ -24,8 +24,6 @@ import { NotImplementedError } from '../../../application/errors/not-implemented
 import { TokenClaims } from '../../../application/ports/token.port';
 import { PostgresListenService } from '../../../infrastructure/notifications/postgres-listen.service';
 import { Referral } from '../../../domain/referral/referral.aggregate';
-import { ClinicId } from '../../../domain/shared/ids/clinic-id.value-object';
-import { ExtractionSchemaId } from '../../../domain/shared/ids/extraction-schema-id.value-object';
 import { normalizeExtractionSchemaFields } from '../dto/extraction-schema-input.mapper';
 import {
   ClinicDto,
@@ -61,7 +59,7 @@ export class ClinicsController {
   })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   public async me(@Req() req: AuthenticatedRequest): Promise<ClinicDto> {
-    const clinicId = ClinicId.from(req.user.clinicId);
+    const clinicId = req.user.clinicId;
     const clinic = await this.applicationService.getClinic(clinicId);
     return ClinicDto.fromDomain(clinic);
   }
@@ -79,7 +77,7 @@ export class ClinicsController {
     @Req() req: AuthenticatedRequest,
     @Body() body: CreateExtractionSchemaRequest,
   ): Promise<ExtractionSchemaDto> {
-    const clinicId = ClinicId.from(req.user.clinicId);
+    const clinicId = req.user.clinicId;
     const schema = await this.applicationService.createExtractionSchema({
       clinicId,
       title: body.title,
@@ -102,7 +100,7 @@ export class ClinicsController {
   public async listSchemas(
     @Req() req: AuthenticatedRequest,
   ): Promise<ExtractionSchemaDto[]> {
-    const clinicId = ClinicId.from(req.user.clinicId);
+    const clinicId = req.user.clinicId;
     const schemas =
       await this.applicationService.listExtractionSchemas(clinicId);
     return schemas.map((schema) => ExtractionSchemaDto.fromDomain(schema));
@@ -125,7 +123,7 @@ export class ClinicsController {
     @Req() req: AuthenticatedRequest,
     @Body() body: CreateReferralsRequest,
   ): Promise<CreateReferralResponseDto[]> {
-    const clinicId = ClinicId.from(req.user.clinicId);
+    const clinicId = req.user.clinicId;
     const results =
       await this.applicationService.createNewReferralsWithAttachedPresignedUrls(
         {
@@ -134,9 +132,7 @@ export class ClinicsController {
             fileName: file.fileName,
             patientName: file.patientName,
           })),
-          extractionSchemaId: body.extractionSchemaId
-            ? ExtractionSchemaId.from(body.extractionSchemaId)
-            : null,
+          extractionSchemaId: body.extractionSchemaId ?? null,
         },
       );
 
@@ -161,7 +157,7 @@ export class ClinicsController {
   public async listReferrals(
     @Req() req: AuthenticatedRequest,
   ): Promise<ReferralListItemDto[]> {
-    const clinicId = ClinicId.from(req.user.clinicId);
+    const clinicId = req.user.clinicId;
     const views =
       await this.applicationService.listReferralViewsByClinic(clinicId);
     return views.map((view) => ReferralListItemDto.fromReadModel(view));
@@ -224,7 +220,7 @@ export class ClinicsController {
     @Req() req: AuthenticatedRequest,
     @Param('id') id: string,
   ): Promise<ReferralListItemDto> {
-    const clinicId = ClinicId.from(req.user.clinicId);
+    const clinicId = req.user.clinicId;
     const view = await this.applicationService.getReferralViewByClinic(
       clinicId,
       id,

@@ -1,10 +1,11 @@
-import { DomainError } from '../shared/domain.error';
+import { DOMAIN_ERROR } from '../../../libs/errors/domain-error-code.enum';
+import { DomainException } from '../shared/domain.exception';
 
-export class InvalidFieldDefinitionError extends DomainError {
-  public readonly code = 'INVALID_FIELD_DEFINITION';
+export class InvalidFieldDefinitionError extends DomainException {
+  public readonly errorCode = DOMAIN_ERROR.SCHEMA_INVALID_FIELD_DEFINITION;
 
   constructor(message: string) {
-    super(message);
+    super(DOMAIN_ERROR.SCHEMA_INVALID_FIELD_DEFINITION, message);
   }
 }
 

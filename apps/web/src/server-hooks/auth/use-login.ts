@@ -14,10 +14,6 @@ export interface UseLoginOptions {
   onError?: (error: string) => void;
 }
 
-/**
- * Domain hook for authenticating an existing clinic user.
- * Consumes loginAction, manages transition states, and redirects to dashboard upon success.
- */
 export function useLogin(options: UseLoginOptions = {}) {
   const router = useRouter();
 

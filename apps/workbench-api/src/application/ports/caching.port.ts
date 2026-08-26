@@ -10,6 +10,7 @@ export const CACHING_SERVICE_PORT = 'CACHING_SERVICE_PORT';
  */
 export interface CachedExtractionSchema {
   id: string;
+  clinicId?: string;
   version: number;
   /** Version name — not consumed by the worker, but carried for completeness. */
   title: string;
@@ -21,6 +22,8 @@ export interface ReferralCacheEntry {
   fileName: string;
   /** `null` when the clinic has no default schema — worker falls back to the default LLM schema. */
   extractionSchema: CachedExtractionSchema | null;
+  /** Optional initial UI read model projection cached in the same hash under the `referral` field. */
+  referralView?: CachedReferralView;
 }
 
 /**
@@ -47,7 +50,7 @@ export type CachedReferralView = ReferralView;
  */
 export interface CachingServicePort {
   /** Writes every referral hash in one pipelined round-trip. */
-  setManyReferralCaches(entries: ReferralCacheEntry[]): Promise<void>;
+  setManyReferralsToCache(entries: ReferralCacheEntry[]): Promise<void>;
   getReferralCache(referralId: string): Promise<ReferralCacheEntry | null>;
 
   /** Upserts the dashboard-facing projection onto the referral's existing hash. */
@@ -69,4 +72,38 @@ export interface CachingServicePort {
    * yet, go read Postgres".
    */
   getClinicReferralIds(clinicId: string): Promise<string[] | null>;
+
+  /** Full-clinic cache-aside entry, hydrated with the clinic's extraction schemas. */
+  getFullClinic(clinicId: string): Promise<CachedClinic | null>;
+  setFullClinic(clinic: CachedClinic): Promise<void>;
+
+  /**
+   * Compensating rollback: removes the referral hashes and clinic-index
+   * entries written for a batch that failed to persist. Idempotent — DEL/SREM
+   * of keys that may or may not exist.
+   */
+  deleteReferralsToCache(
+    clinicId: string,
+    referralIds: string[],
+  ): Promise<void>;
+}
+
+/**
+ * The clinic aggregate as cached for the extraction-schema resolution path
+ * (`clinic:{clinicId}`). Carries the password hash so the aggregate can be
+ * fully rehydrated without a Postgres round-trip; the hash is one-way bcrypt,
+ * not a plaintext credential. Relations are stored as **id collections only**
+ * — the full schema/referral payloads stay in Postgres and are fetched once
+ * an id is resolved.
+ */
+export interface CachedClinic {
+  id: string;
+  clinicName: string;
+  username: string;
+  passwordHash: string;
+  defaultExtractionSchemaId: string | null;
+  referralIds: string[];
+  extractionSchemaIds: string[];
+  createdAt: string;
+  updatedAt: string;
 }

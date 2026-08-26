@@ -26,8 +26,10 @@ import {
   referralDropzoneVariants,
 } from "./ReferralDropzone.styles";
 
-export interface ReferralDropzoneProps
-  extends Omit<React.HTMLAttributes<HTMLDivElement>, "onDrop"> {
+export interface ReferralDropzoneProps extends Omit<
+  React.HTMLAttributes<HTMLDivElement>,
+  "onDrop"
+> {
   isDragging: boolean;
   candidates: readonly UploadCandidate[];
   dropzoneProps: DropzoneHandlers;
@@ -44,7 +46,10 @@ export interface ReferralDropzoneProps
  * The drop target. Presentation only — drag state and the candidate list are
  * owned by `useFileDropzone` so this stays a pure view of them.
  */
-const ReferralDropzone = React.forwardRef<HTMLDivElement, ReferralDropzoneProps>(
+const ReferralDropzone = React.forwardRef<
+  HTMLDivElement,
+  ReferralDropzoneProps
+>(
   (
     {
       candidates,
@@ -69,7 +74,11 @@ const ReferralDropzone = React.forwardRef<HTMLDivElement, ReferralDropzoneProps>
         {...dropzoneProps}
         {...props}
         className={cn(
-          referralDropzoneVariants({ dragging: isDragging, disabled, className }),
+          referralDropzoneVariants({
+            dragging: isDragging,
+            disabled,
+            className,
+          }),
         )}
       >
         <span aria-hidden className={cn(referralDropzoneIconVariants())}>
@@ -93,7 +102,7 @@ const ReferralDropzone = React.forwardRef<HTMLDivElement, ReferralDropzoneProps>
         />
 
         <Button
-          size="sm"
+          size="md"
           disabled={disabled}
           onClick={(event) => {
             // The whole zone already opens the picker on click — stop this

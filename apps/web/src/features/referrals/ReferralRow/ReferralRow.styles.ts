@@ -1,14 +1,10 @@
 import { cva, type VariantProps } from "class-variance-authority";
 
-/**
- * The column template is declared once here and reused by the table's header
- * row, so headings and cells cannot drift apart. The 8th track is the
- * "# extractions" count column.
- */
+
 export const referralGridVariants = cva([
   "grid items-center gap-3",
-  "grid-cols-[34px_minmax(0,1.2fr)_minmax(0,0.9fr)_28px]",
-  "md:grid-cols-[34px_minmax(0,1.2fr)_minmax(0,1.3fr)_minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,0.8fr)_minmax(0,0.7fr)_28px]",
+  "grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)_28px]",
+  "md:grid-cols-[minmax(0,1.2fr)_minmax(0,1.3fr)_minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,0.8fr)_minmax(0,0.7fr)_28px]",
 ]);
 
 export const referralRowVariants = cva(
@@ -40,15 +36,6 @@ export const referralRowVariants = cva(
       interactive: false,
     },
   },
-);
-
-export const referralThumbVariants = cva([
-  "flex h-[42px] w-[34px] items-center justify-center rounded-[5px]",
-  "border border-hairline-strong bg-[#fafafd] text-faint",
-]);
-
-export const referralThumbSpinnerVariants = cva(
-  "animate-spin text-brand-deep",
 );
 
 export const referralPatientVariants = cva("truncate");

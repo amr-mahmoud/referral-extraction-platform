@@ -1,0 +1,7 @@
+{
+  "patient_name": "Full legal name of the patient, usually near the top of page 1",
+  "date_of_birth": "Patient date of birth, format MM/DD/YYYY",
+  "policy_number": "Insurance policy number, typically top right of page 1",
+  "referring_provider": "Name of the referring physician or clinic",
+  "reason_for_referral": "Short description of why the patient is being referred"
+}

@@ -5,14 +5,6 @@ export const authBrandPanelVariants = cva([
   "bg-[linear-gradient(160deg,#efeffe_0%,#e4e2fd_55%,#dcd9fc_100%)] ",
 ]);
 
-export const authBrandPanelLockupVariants = cva(
-  "flex items-center gap-2.5 text-[17px]/none font-bold text-ink",
-);
-
-export const authBrandPanelMarkVariants = cva(
-  "size-[30px] shrink-0 rounded-full border-2 border-brand",
-);
-
 export const authBrandPanelCopyVariants = cva("flex flex-col gap-4");
 
 export const authBrandPanelHeadlineVariants = cva(

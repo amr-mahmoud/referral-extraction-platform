@@ -82,6 +82,7 @@ export class ClinicsController {
     const clinicId = ClinicId.from(req.user.clinicId);
     const schema = await this.applicationService.createExtractionSchema({
       clinicId,
+      title: body.title,
       fields: normalizeExtractionSchemaFields(body.fields),
     });
     return ExtractionSchemaDto.fromDomain(schema);
@@ -208,13 +209,27 @@ export class ClinicsController {
   @Get('referrals/:id')
   @ApiOperation({
     summary:
-      'Get referral detail by ID with extracted payload and bounding boxes',
+      'Get one referral by ID, with extracted payload and bounding boxes',
+    description:
+      "Served cache-aside from the referral's own Redis hash, falling back " +
+      'to Postgres on a miss — the single-id form of `GET /referrals`.',
   })
-  @ApiResponse({ status: 200, description: 'Referral detail record' })
+  @ApiResponse({
+    status: 200,
+    description: 'Referral detail record',
+    type: ReferralListItemDto,
+  })
   @ApiResponse({ status: 404, description: 'Referral not found' })
-  public getReferral(@Param('id') id: string): Promise<Referral> {
-    void id;
-    throw new NotImplementedError('ClinicsController.getReferral');
+  public async getReferral(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ): Promise<ReferralListItemDto> {
+    const clinicId = ClinicId.from(req.user.clinicId);
+    const view = await this.applicationService.getReferralViewByClinic(
+      clinicId,
+      id,
+    );
+    return ReferralListItemDto.fromReadModel(view);
   }
 
   @ApiTags('Referrals')

@@ -1,8 +1,11 @@
 /* eslint-disable @typescript-eslint/unbound-method -- jest mock function
    references passed to `expect()` are never invoked unbound. */
 import { ApplicationService } from './application.service';
-import { ReferralFileNameError } from '../domain/referral/referral.errors';
-import { ReferralValidationError } from '../domain/referral/referral.errors';
+import {
+  ReferralFileNameError,
+  ReferralNotFoundError,
+  ReferralValidationError,
+} from '../domain/referral/referral.errors';
 import { CachingServicePort } from './ports/caching.port';
 import { ClinicRepositoryPort } from './ports/clinic-repository.port';
 import { ReferralRepositoryPort } from './ports/referral-repository.port';
@@ -189,6 +192,7 @@ describe('ApplicationService.createNewReferralsWithAttachedPresignedUrls', () =>
         findExtractionSchemaById: jest.fn().mockResolvedValue({
           id: schemaId,
           version: 2,
+          title: 'Q3 Insurance Forms',
           clinicId,
           schemaDefinition: [
             {
@@ -220,6 +224,7 @@ describe('ApplicationService.createNewReferralsWithAttachedPresignedUrls', () =>
     expect(entries[0].extractionSchema).toEqual({
       id: schemaId,
       version: 2,
+      title: 'Q3 Insurance Forms',
       schemaDefinition: [
         {
           key: 'patient_name',
@@ -316,6 +321,7 @@ describe('ApplicationService.listReferralViewsByClinic', () => {
       status: 'AWAITING_UPLOAD',
       extractionSchemaId: null,
       extractionSchemaVersion: null,
+      extractionSchemaTitle: null,
       errorMessage: null,
       extractedPayload: [],
       createdAt: '2026-01-01T00:00:00.000Z',
@@ -448,5 +454,169 @@ describe('ApplicationService.listReferralViewsByClinic', () => {
     const results = await service.listReferralViewsByClinic(clinicId);
 
     expect(results).toEqual([buildServedView(view)]);
+  });
+});
+
+describe('ApplicationService.getReferralViewByClinic', () => {
+  const clinicId = ClinicId.from('11111111-1111-1111-1111-111111111111');
+  const otherClinicId = ClinicId.from('99999999-9999-9999-9999-999999999999');
+
+  function buildService(overrides?: {
+    referralRepository?: Partial<ReferralRepositoryPort>;
+    cachingService?: Partial<CachingServicePort>;
+    storageService?: Partial<StoragePort>;
+  }) {
+    const clinicRepository: ClinicRepositoryPort = {
+      findById: jest.fn(),
+      findByUsername: jest.fn(),
+      save: jest.fn(),
+      saveExtractionSchema: jest.fn(),
+      findLatestSchemaVersion: jest.fn(),
+      findExtractionSchemaById: jest.fn(),
+      listExtractionSchemasByClinic: jest.fn(),
+    };
+
+    const referralRepository: ReferralRepositoryPort = {
+      findReferralById: jest.fn(),
+      findReferralByIdForClinic: jest.fn(),
+      findPaginatedReferralsByClinicId: jest.fn(),
+      saveReferral: jest.fn(),
+      saveReferrals: jest.fn(),
+      findReferralViewsByClinicId: jest.fn().mockResolvedValue([]),
+      findReferralViewsByIds: jest.fn().mockResolvedValue([]),
+      findAllReferralViews: jest.fn().mockResolvedValue([]),
+      ...overrides?.referralRepository,
+    };
+
+    const cachingService: CachingServicePort = {
+      setManyReferralCaches: jest.fn(),
+      getReferralCache: jest.fn(),
+      setReferralView: jest.fn().mockResolvedValue(undefined),
+      setManyReferralViews: jest.fn().mockResolvedValue(undefined),
+      getReferralView: jest.fn().mockResolvedValue(null),
+      getManyReferralViews: jest.fn().mockResolvedValue([]),
+      addReferralIdsToClinicIndex: jest.fn().mockResolvedValue(undefined),
+      getClinicReferralIds: jest.fn().mockResolvedValue(null),
+      ...overrides?.cachingService,
+    };
+
+    const service = new ApplicationService(
+      clinicRepository,
+      referralRepository,
+      {} as never,
+      {} as never,
+      { ...buildStorageService(), ...overrides?.storageService },
+      cachingService,
+    );
+
+    return { service, referralRepository, cachingService };
+  }
+
+  function buildView(overrides?: Partial<ReferralView>): ReferralView {
+    return {
+      id: 'referral-1',
+      clinicId: clinicId.value,
+      fileName: 'a.pdf',
+      patientName: null,
+      status: 'COMPLETED',
+      extractionSchemaId: null,
+      extractionSchemaVersion: null,
+      extractionSchemaTitle: null,
+      errorMessage: null,
+      extractedPayload: [],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      ...overrides,
+    };
+  }
+
+  function buildServedView(
+    view: ReferralView,
+  ): ReferralView & { documentUrl: string } {
+    return { ...view, documentUrl: expectedDocumentUrl(view) };
+  }
+
+  it('serves from Redis on a cache hit, without touching Postgres', async () => {
+    const view = buildView();
+    const { service, referralRepository } = buildService({
+      cachingService: { getReferralView: jest.fn().mockResolvedValue(view) },
+    });
+
+    const result = await service.getReferralViewByClinic(clinicId, view.id);
+
+    expect(result).toEqual(buildServedView(view));
+    expect(referralRepository.findReferralViewsByIds).not.toHaveBeenCalled();
+  });
+
+  it('falls back to Postgres and backfills Redis on a cache miss', async () => {
+    const view = buildView();
+    const { service, cachingService } = buildService({
+      cachingService: { getReferralView: jest.fn().mockResolvedValue(null) },
+      referralRepository: {
+        findReferralViewsByIds: jest.fn().mockResolvedValue([view]),
+      },
+    });
+
+    const result = await service.getReferralViewByClinic(clinicId, view.id);
+
+    expect(result).toEqual(buildServedView(view));
+    expect(cachingService.setManyReferralViews).toHaveBeenCalledWith([view]);
+  });
+
+  it('treats a cache hit for a different clinic as a miss, not a leak, and falls through to Postgres', async () => {
+    const foreignView = buildView({ clinicId: otherClinicId.value });
+    const ownView = buildView();
+    const { service, referralRepository } = buildService({
+      cachingService: {
+        getReferralView: jest.fn().mockResolvedValue(foreignView),
+      },
+      referralRepository: {
+        findReferralViewsByIds: jest.fn().mockResolvedValue([ownView]),
+      },
+    });
+
+    const result = await service.getReferralViewByClinic(clinicId, ownView.id);
+
+    expect(result).toEqual(buildServedView(ownView));
+    expect(referralRepository.findReferralViewsByIds).toHaveBeenCalledWith([
+      ownView.id,
+    ]);
+  });
+
+  it('throws ReferralNotFoundError when the id belongs to another clinic in Postgres too', async () => {
+    const foreignView = buildView({ clinicId: otherClinicId.value });
+    const { service } = buildService({
+      referralRepository: {
+        findReferralViewsByIds: jest.fn().mockResolvedValue([foreignView]),
+      },
+    });
+
+    await expect(
+      service.getReferralViewByClinic(clinicId, foreignView.id),
+    ).rejects.toThrow(ReferralNotFoundError);
+  });
+
+  it('throws ReferralNotFoundError when the id does not exist anywhere', async () => {
+    const { service } = buildService();
+
+    await expect(
+      service.getReferralViewByClinic(clinicId, 'does-not-exist'),
+    ).rejects.toThrow(ReferralNotFoundError);
+  });
+
+  it('falls back to Postgres and does not throw when Redis itself errors', async () => {
+    const view = buildView();
+    const { service } = buildService({
+      cachingService: {
+        getReferralView: jest.fn().mockRejectedValue(new Error('ECONNREFUSED')),
+      },
+      referralRepository: {
+        findReferralViewsByIds: jest.fn().mockResolvedValue([view]),
+      },
+    });
+
+    const result = await service.getReferralViewByClinic(clinicId, view.id);
+
+    expect(result).toEqual(buildServedView(view));
   });
 });

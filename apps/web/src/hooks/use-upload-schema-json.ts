@@ -67,12 +67,13 @@ export function useUploadSchemaJson(
             return;
           }
 
-          create.execute(
-            result.fields.map((field) => ({
+          create.execute({
+            title: file.name.replace(/\.json$/i, ""),
+            fields: result.fields.map((field) => ({
               name: field.name,
               description: field.description,
             })),
-          );
+          });
         })
         .catch(() => setLocalError(`Could not read '${file.name}'.`))
         .finally(() => setIsReading(false));

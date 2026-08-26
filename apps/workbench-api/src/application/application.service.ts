@@ -10,7 +10,10 @@ import { ExtractionSchemaNotFoundError } from '../domain/extraction-schema/extra
 import { ExtractionSchema } from '../domain/extraction-schema/extraction-schema.aggregate';
 import { ExtractedField } from '../domain/referral/extracted-field.value-object';
 import { Referral } from '../domain/referral/referral.aggregate';
-import { ReferralValidationError } from '../domain/referral/referral.errors';
+import {
+  ReferralNotFoundError,
+  ReferralValidationError,
+} from '../domain/referral/referral.errors';
 import { ClinicId } from '../domain/shared/ids/clinic-id.value-object';
 import { ExtractionSchemaId } from '../domain/shared/ids/extraction-schema-id.value-object';
 import { ReferralId } from '../domain/shared/ids/referral-id.value-object';
@@ -63,6 +66,8 @@ export interface AuthResult {
 
 export interface CreateExtractionSchemaCommand {
   clinicId: ClinicId;
+  /** Optional version name; the aggregate falls back to `Custom schema v{n}`. */
+  title?: string;
   /** Already normalised by the interface layer; see `normalizeExtractionSchemaFields`. */
   fields: FieldDefinitionInput[];
 }
@@ -221,6 +226,7 @@ export class ApplicationService {
       //    mandatory description) and derives the next version itself.
       const schemaAggregate = new ExtractionSchema({
         clinicId: command.clinicId,
+        title: command.title,
         schemaDefinition: command.fields,
         ...(latestVersion > 0 ? { oldVersion: latestVersion } : { version: 1 }),
       });
@@ -325,6 +331,7 @@ export class ApplicationService {
             ? {
                 id: extractionSchema.id,
                 version: extractionSchema.version,
+                title: extractionSchema.title,
                 schemaDefinition: extractionSchema.schemaDefinition.map(
                   (field) => ({
                     key: field.key,
@@ -468,6 +475,53 @@ export class ApplicationService {
     }
   }
 
+  /**
+   * Cache-aside for a single referral (design-doc step 10, single-id form):
+   * try the referral's own Redis hash first, fall back to Postgres on a
+   * miss and backfill Redis either way — the same contract
+   * `listReferralViewsByClinic` applies across the whole list, applied here
+   * to one id. Powers `GET /referrals/:id`, which — per the "no new
+   * fetching" constraint on the review screen — is now the single place
+   * that reads referral detail, rather than the client filtering the full
+   * list for one id.
+   *
+   * A cache hit for a referral owned by a DIFFERENT clinic is treated as an
+   * absolute miss: the Redis key (`referral:{referralId}`) carries no
+   * clinic scoping, unlike the per-clinic SET the list path reads ids from,
+   * so this is the only place tenant isolation has to be enforced for a
+   * direct single-id lookup.
+   */
+  public async getReferralViewByClinic(
+    clinicId: ClinicId,
+    referralId: string,
+  ): Promise<ReferralListItemView> {
+    try {
+      const cached = await this.readReferralViewTolerantly(referralId);
+      if (cached && cached.clinicId === clinicId.value) {
+        const [served] = await this.attachDocumentUrls([cached]);
+        return served;
+      }
+
+      const [view] = await this.referralRepository.findReferralViewsByIds([
+        referralId,
+      ]);
+      if (!view || view.clinicId !== clinicId.value) {
+        throw new ReferralNotFoundError(referralId);
+      }
+
+      await this.writeReferralViewsTolerantly([view]);
+      const [served] = await this.attachDocumentUrls([view]);
+      return served;
+    } catch (error) {
+      if (error instanceof DomainError) {
+        throw error;
+      }
+      throw new Error(
+        `Failed to get referral: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
   /** Re-reads one referral from Postgres and refreshes its cache entry. */
   public async refreshReferralViewCache(
     referralId: string,
@@ -560,6 +614,17 @@ export class ApplicationService {
     }
   }
 
+  private async readReferralViewTolerantly(
+    referralId: string,
+  ): Promise<ReferralView | null> {
+    try {
+      return await this.cachingService.getReferralView(referralId);
+    } catch (error) {
+      this.logCacheDegradation('read referral view', error);
+      return null;
+    }
+  }
+
   private async writeReferralViewsTolerantly(
     views: ReferralView[],
   ): Promise<void> {
@@ -587,7 +652,7 @@ export class ApplicationService {
   /**
    * Projects a freshly-created aggregate into the cached read model without a
    * second database read — everything the dashboard needs is already in hand
-   * at creation time, including the schema version resolved in step 1.
+   * at creation time, including the schema title and version resolved in step 1.
    */
   private toReferralViewFromAggregate(
     referral: Referral,
@@ -601,6 +666,7 @@ export class ApplicationService {
       status: referral.status.value,
       extractionSchemaId: referral.extractionSchemaId?.value ?? null,
       extractionSchemaVersion: extractionSchema?.version ?? null,
+      extractionSchemaTitle: extractionSchema?.title ?? null,
       errorMessage: referral.errorMessage,
       // Fresh aggregates are always `AWAITING_UPLOAD` with an empty payload —
       // mirror `ReferralMapper.toPersistence` so the cached shape can never

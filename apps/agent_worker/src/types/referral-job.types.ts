@@ -1,6 +1,7 @@
 export interface CachedExtractionSchema {
   id: string;
   version: number;
+  title: string;
   schemaDefinition: { key: string; label: string; description: string }[];
 }
 

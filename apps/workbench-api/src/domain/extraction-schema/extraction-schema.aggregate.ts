@@ -15,6 +15,12 @@ const UUID_PATTERN =
 export interface ExtractionSchemaCreateProps {
   id?: string;
   clinicId: ClinicId;
+  /**
+   * Human-friendly version name shown in the dashboard ("Q3 Insurance Forms").
+   * Falls back to `Custom schema v{version}` when omitted, so every schema
+   * carries a displayable string no matter which entry point created it.
+   */
+  title?: string;
   /** Explicit version. Mutually exclusive with `oldVersion`. */
   version?: number;
   /** Raw field inputs — the aggregate builds the `FieldDefinition` VOs itself. */
@@ -24,24 +30,18 @@ export interface ExtractionSchemaCreateProps {
   oldVersion?: number;
 }
 
-/**
- * A single, immutable version of a clinic's custom extraction schema.
- *
- * Revising a schema does not mutate this aggregate — construct a new one with
- * `oldVersion: previous.version` to get a fresh id at the next version. That
- * mirrors the `@@unique([clinicId, version])` one-row-per-version model in
- * `prisma/schema.prisma`.
- */
 export class ExtractionSchema {
   id: string;
   clinicId: ClinicId;
   version: number;
+  title: string;
   schemaDefinition: FieldDefinition[];
   createdAt: Date;
 
   public constructor({
     id,
     clinicId,
+    title,
     version,
     schemaDefinition,
     createdAt,
@@ -56,7 +56,16 @@ export class ExtractionSchema {
 
     this.setSchemaDefinition(schemaDefinition);
     this.setValidVersion({ version, oldVersion });
+    this.title = this.resolveTitle(title, this.version);
     this.createdAt = createdAt ?? new Date();
+  }
+
+  /** Normalises the optional input into a non-empty, displayable title. */
+  private resolveTitle(title: string | undefined, version: number): string {
+    if (typeof title === 'string' && title.trim() !== '') {
+      return title.trim();
+    }
+    return `Custom schema v${version}`;
   }
 
   private setValidVersion({

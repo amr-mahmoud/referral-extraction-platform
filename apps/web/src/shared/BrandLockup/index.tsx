@@ -3,31 +3,33 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 import {
-  brandLockupMarkVariants,
+  brandLockupImageVariants,
   brandLockupVariants,
   type BrandLockupVariantProps,
 } from "./BrandLockup.styles";
 
 export interface BrandLockupProps
-  extends React.HTMLAttributes<HTMLSpanElement>,
-    BrandLockupVariantProps {
-  /** Wordmark next to the ring. Defaults to the product name. */
+  extends React.HTMLAttributes<HTMLSpanElement>, BrandLockupVariantProps {
+  /** Accessible name for the logo image. */
   name?: string;
 }
 
-/** The ring-and-wordmark pairing used in the header and the auth brand panel. */
+/** The Plena Health wordmark used in the header and the auth brand panel. */
 const BrandLockup = React.forwardRef<HTMLSpanElement, BrandLockupProps>(
-  ({ className, name = "Referral Workbench", size, ...props }, ref) => {
+  ({ className, name = "Plena Health", size, ...props }, ref) => {
     return (
       <span
         ref={ref}
         data-component="BrandLockup"
-        data-size={size ?? "sm"}
+        data-size={size ?? "md"}
         {...props}
-        className={cn(brandLockupVariants({ size, className }))}
+        className={cn(brandLockupVariants({ size: "md", className }))}
       >
-        <span aria-hidden className={cn(brandLockupMarkVariants({ size }))} />
-        {name}
+        <img
+          src="/logo-wordmark.png"
+          alt={name}
+          className={cn(brandLockupImageVariants())}
+        />
       </span>
     );
   },

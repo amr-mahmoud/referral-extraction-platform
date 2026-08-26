@@ -1,33 +1,19 @@
 import { cva, type VariantProps } from "class-variance-authority";
 
-export const brandLockupVariants = cva(
-  "flex shrink-0 items-center font-bold text-ink",
-  {
-    variants: {
-      size: {
-        sm: "gap-2.5 text-[15px]",
-        lg: "gap-2.5 text-[17px]/none",
-      },
-    },
-    defaultVariants: {
-      size: "sm",
+export const brandLockupVariants = cva("flex shrink-0 items-center", {
+  variants: {
+    size: {
+      sm: "h-6",
+      md: "h-9",
+      lg: "h-[30px]",
     },
   },
-);
+  defaultVariants: {
+    size: "sm",
+  },
+});
 
-export const brandLockupMarkVariants = cva(
-  "shrink-0 rounded-full border-2 border-brand",
-  {
-    variants: {
-      size: {
-        sm: "size-6",
-        lg: "size-[30px]",
-      },
-    },
-    defaultVariants: {
-      size: "sm",
-    },
-  },
-);
+/** The wordmark image already bakes in the mark and the company name at a fixed aspect ratio — height-only sizing keeps it crisp at any scale. */
+export const brandLockupImageVariants = cva("h-full w-auto");
 
 export type BrandLockupVariantProps = VariantProps<typeof brandLockupVariants>;

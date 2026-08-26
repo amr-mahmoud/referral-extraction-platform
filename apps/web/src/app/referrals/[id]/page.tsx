@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { ReferralDetailApp } from "@/apps/referral-detail";
+import { requireAuth } from "@/server-actions/auth";
 import { getReferralDetailById } from "@/server-actions/referrals";
 
 // Served from `GET /referrals` (cache-aside, always fresh-enough for a single
@@ -22,6 +23,7 @@ interface ReferralDetailPageProps {
 export default async function ReferralDetailPage({
   params,
 }: ReferralDetailPageProps) {
+  await requireAuth();
   const { id } = await params;
   const referral = await getReferralDetailById(id);
 

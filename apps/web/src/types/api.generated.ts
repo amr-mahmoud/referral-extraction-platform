@@ -121,7 +121,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get referral detail by ID with extracted payload and bounding boxes */
+        /**
+         * Get one referral by ID, with extracted payload and bounding boxes
+         * @description Served cache-aside from the referral's own Redis hash, falling back to Postgres on a miss — the single-id form of `GET /referrals`.
+         */
         get: operations["ClinicsController_getReferral"];
         put?: never;
         post?: never;
@@ -202,6 +205,12 @@ export interface components {
             fields: components["schemas"]["SchemaFieldDefinitionDto"][] | {
                 [key: string]: string;
             };
+            /**
+             * @description Human-friendly version name surfaced in the dashboard ("Q3 Insurance
+             *     Forms"). Optional on the wire — the domain falls back to
+             *     `Custom schema v{version}` — but the in-app field builder always sends it.
+             */
+            title?: string;
         };
         SchemaFieldDefinitionDto: {
             /** @description Parameter name for the field, e.g. `policy_number`. */
@@ -220,6 +229,8 @@ export interface components {
             clinicId: string;
             /** @description Schema version integer. */
             version: number;
+            /** @description Human-friendly version name, e.g. "Q3 Insurance Forms". Never empty. */
+            title: string;
             /** @description Array of field definitions in this schema. */
             fields: components["schemas"]["SchemaFieldDefinitionDto"][];
             /**
@@ -286,30 +297,6 @@ export interface components {
             /** @description Presigned S3 upload slot for the referral PDF. */
             upload: components["schemas"]["PresignedUploadDto"];
         };
-        ReferralListItemDto: {
-            /** @description Unique referral ID (UUID). */
-            id: string;
-            /** @description Original uploaded file name. */
-            fileName: string;
-            /** @description `null` until extraction resolves a patient. */
-            patientName: string | null;
-            /** @description Current lifecycle status. */
-            status: string;
-            /** @description Resolved extraction schema ID, or `null` for the default LLM schema. */
-            extractionSchemaId: string | null;
-            /** @description Schema version behind `extractionSchemaId`, for the dashboard label. */
-            extractionSchemaVersion: number | null;
-            /** @description Populated when the referral FAILED or was REJECTED. */
-            errorMessage: string | null;
-            /** @description Extracted fields for the review UI, with spatial bounding boxes. */
-            extractedPayload: components["schemas"]["ExtractedFieldDto"][];
-            /** @description Short-lived presigned S3 GET URL for the source PDF, refreshed per serve. */
-            documentUrl: string;
-            /** @description ISO-8601 creation timestamp. */
-            createdAt: string;
-            /** @description ISO-8601 last-update timestamp. */
-            updatedAt: string;
-        };
         BoundingBoxDto: {
             /** @description Normalized minimum X coordinate (0-1000). */
             xmin: number;
@@ -331,6 +318,32 @@ export interface components {
             pageNumber: number;
             /** @description Spatial bounding box used to highlight the value on the PDF page. */
             boundingBox: components["schemas"]["BoundingBoxDto"] | null;
+        };
+        ReferralListItemDto: {
+            /** @description Unique referral ID (UUID). */
+            id: string;
+            /** @description Original uploaded file name. */
+            fileName: string;
+            /** @description `null` until extraction resolves a patient. */
+            patientName: string | null;
+            /** @description Current lifecycle status. */
+            status: string;
+            /** @description Resolved extraction schema ID, or `null` for the default LLM schema. */
+            extractionSchemaId: string | null;
+            /** @description Schema version behind `extractionSchemaId`, for the dashboard label. */
+            extractionSchemaVersion: number | null;
+            /** @description Schema title behind `extractionSchemaId`; the dashboard label when present. */
+            extractionSchemaTitle: string | null;
+            /** @description Populated when the referral FAILED or was REJECTED. */
+            errorMessage: string | null;
+            /** @description Extracted fields for the review UI, with spatial bounding boxes. */
+            extractedPayload: components["schemas"]["ExtractedFieldDto"][];
+            /** @description Short-lived presigned S3 GET URL for the source PDF, refreshed per serve. */
+            documentUrl: string;
+            /** @description ISO-8601 creation timestamp. */
+            createdAt: string;
+            /** @description ISO-8601 last-update timestamp. */
+            updatedAt: string;
         };
         UpdateReferralRequest: {
             /** @description Updated payload of extracted fields corrected by staff user. */
@@ -570,7 +583,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ReferralListItemDto"];
+                };
             };
             /** @description Referral not found */
             404: {

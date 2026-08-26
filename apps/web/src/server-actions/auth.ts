@@ -1,12 +1,14 @@
 "use server";
 
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { apiClient } from "@/client/api-client";
 import {
   ACCESS_TOKEN_COOKIE,
   ACCESS_TOKEN_MAX_AGE_SECONDS,
 } from "@/constants/auth";
 import { getApiErrorMessage } from "@/lib/api-error";
+import { ROUTES } from "@/routes";
 import type { components } from "@/types/api.generated";
 import type { ActionResult } from "@/types/server-action";
 
@@ -110,7 +112,7 @@ export async function logoutAction(): Promise<ActionResult<null>> {
 }
 
 /**
- * Server Action: Fetch authenticated clinic profile
+ * Server Action: Fetch authenticated clinic profile from backend
  */
 export async function getMeAction(): Promise<ActionResult<ClinicProfile>> {
   try {
@@ -144,4 +146,18 @@ export async function getMeAction(): Promise<ActionResult<ClinicProfile>> {
       error: err instanceof Error ? err.message : "Failed to fetch profile",
     };
   }
+}
+
+/**
+ * Server-side authentication guard for protected layouts and views.
+ * Validates the session against the backend (`GET /clinics/me`).
+ * If unauthenticated, expired, or if the clinic no longer exists in the DB,
+ * redirects immediately to `/auth`.
+ */
+export async function requireAuth(): Promise<ClinicProfile> {
+  const result = await getMeAction();
+  if (!result.success || !result.data) {
+    redirect(ROUTES.AUTH);
+  }
+  return result.data;
 }

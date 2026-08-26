@@ -1,7 +1,6 @@
 "use server";
 
 import { cookies } from "next/headers";
-import { revalidatePath } from "next/cache";
 
 import { apiClient } from "@/client/api-client";
 import { ACCESS_TOKEN_COOKIE } from "@/constants/auth";
@@ -10,7 +9,6 @@ import {
   toReferralDetailView,
   toReferralRowView,
 } from "@/managers/referral-view.manager";
-import { ROUTES } from "@/routes";
 import { SCHEMA_SOURCES, type SchemaSelection } from "@/types/extraction-schemas/schema";
 import type { ActionResult } from "@/types/server-action";
 import type {
@@ -31,25 +29,31 @@ export async function getReferralRows(): Promise<readonly ReferralRowView[]> {
   const token = cookieStore.get(ACCESS_TOKEN_COOKIE)?.value;
   if (!token) return [];
 
-  const { data, response } = await apiClient.GET("/referrals", {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  try {
+    const { data, response } = await apiClient.GET("/referrals", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
 
-  if (!response.ok || !data) return [];
+    if (!response.ok || !data) return [];
 
-  const now = Date.now();
-  return data.map((referral) => toReferralRowView(referral, now));
+    const now = Date.now();
+    return data.map((referral) => toReferralRowView(referral, now));
+  } catch {
+    // A temporarily-unreachable API must never crash the dashboard — the
+    // table renders empty until the connection recovers.
+    return [];
+  }
 }
 
 /**
- * Read side of the review screen. Deliberately NOT a new fetch pattern or a
- * per-id endpoint: it issues the identical `GET /referrals` call the dashboard
- * already makes on every load, finds the matching row, and maps it to the
- * detail view — so the review screen is served entirely from data that already
- * flows through the list/SSE feed.
+ * Read side of the review screen: `GET /referrals/{id}`, the single-referral
+ * form of the same cache-aside read the list already uses — the API serves
+ * it from the referral's own Redis hash on a hit, falling back to Postgres
+ * on a miss, rather than the client filtering the full list for one id.
  *
- * Returns `null` when the id doesn't belong to this clinic (or is unknown) so
- * the page can call `notFound()` — the backend never surfaces foreign ids.
+ * Returns `null` when the id doesn't belong to this clinic (or is unknown —
+ * the API returns 404 for both, so a foreign id can't be distinguished from
+ * a nonexistent one) so the page can call `notFound()`.
  */
 export async function getReferralDetailById(
   referralId: string,
@@ -58,16 +62,20 @@ export async function getReferralDetailById(
   const token = cookieStore.get(ACCESS_TOKEN_COOKIE)?.value;
   if (!token) return null;
 
-  const { data, response } = await apiClient.GET("/referrals", {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  try {
+    const { data, response } = await apiClient.GET("/referrals/{id}", {
+      params: { path: { id: referralId } },
+      headers: { Authorization: `Bearer ${token}` },
+    });
 
-  if (!response.ok || !data) return null;
+    if (!response.ok || !data) return null;
 
-  const match = data.find((referral) => referral.id === referralId);
-  if (!match) return null;
-
-  return toReferralDetailView(match, Date.now());
+    return toReferralDetailView(data, Date.now());
+  } catch {
+    // A temporarily-unreachable API must not 500 the review page — treat it
+    // like an unknown id so the page renders its not-found state instead.
+    return null;
+  }
 }
 
 export interface CreateReferralsInput {
@@ -82,9 +90,6 @@ export interface CreateReferralsBatchResult {
 function resolveExtractionSchemaId(selection: SchemaSelection): string | null {
   if (selection.source === SCHEMA_SOURCES.SAVED) {
     return selection.savedSchemaId ?? null;
-  }
-  if (selection.source === SCHEMA_SOURCES.UPLOAD) {
-    return selection.uploadedSchemaId ?? null;
   }
   return null;
 }
@@ -127,10 +132,16 @@ export async function createReferrals(
       };
     }
 
-    // Rows are real and in AWAITING_UPLOAD the moment this POST succeeds,
-    // independent of whether the client-side PUTs that follow succeed — so
-    // revalidating here is correct regardless of upload outcome.
-    revalidatePath(ROUTES.DASHBOARD);
+    // No `revalidatePath` here, deliberately: the Postgres NOTIFY trigger
+    // fires on INSERT as well as status UPDATE, so these new AWAITING_UPLOAD
+    // rows already reach the client over the open SSE stream in real time.
+    // Forcing a full RSC re-render here used to race that stream — a
+    // dashboard refresh would re-run `getReferralRows()` against whatever
+    // Postgres looked like at THIS instant (before any file had even started
+    // uploading), and if that stale snapshot's response landed after SSE had
+    // already pushed a later status, it would overwrite the live table back
+    // to AWAITING_UPLOAD until SSE caught back up — a visible flicker on
+    // every multi-file batch.
 
     return {
       success: true,

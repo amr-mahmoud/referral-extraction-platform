@@ -46,6 +46,10 @@ model ExtractionSchema {
   id                 String   @id @default(uuid()) @db.Uuid
   clinicId           String   @map("clinic_id") @db.Uuid
   version            Int
+  // Human-friendly version name surfaced in the dashboard ("Custom schema v2"
+  // fallback). Nullable for rows created before the column existed; the domain
+  // always resolves a string (see ExtractionSchema#resolveTitle).
+  title              String?  @map("title")
   // FieldDefinition[] VO collection — { key, label, description }[]
   schemaDefinition   Json     @map("schema_definition")
   createdAt          DateTime @default(now()) @map("created_at")

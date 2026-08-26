@@ -11,11 +11,11 @@ import type { ActionResult } from "@/types/server-action";
 export type SchemaFieldInput = components["schemas"]["SchemaFieldDefinitionDto"];
 export type ExtractionSchemaDto = components["schemas"]["ExtractionSchemaDto"];
 
-/** Backend has no naming concept for a schema — version is the only identity a clinic sees. */
+/** The API serves the version title; fall back to the bare `v{n}` label only if it's somehow absent. */
 function toSavedSchema(dto: ExtractionSchemaDto): SavedSchema {
   return {
     id: dto.id,
-    name: `Custom schema v${dto.version}`,
+    name: dto.title ?? `Custom schema v${dto.version}`,
     fieldCount: dto.fields.length,
   };
 }
@@ -32,13 +32,25 @@ export async function getSavedSchemas(): Promise<readonly SavedSchema[]> {
   const token = cookieStore.get(ACCESS_TOKEN_COOKIE)?.value;
   if (!token) return [];
 
-  const { data, response } = await apiClient.GET("/extraction-schemas", {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  try {
+    const { data, response } = await apiClient.GET("/extraction-schemas", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
 
-  if (!response.ok || !data) return [];
+    if (!response.ok || !data) return [];
 
-  return [...data].reverse().map(toSavedSchema);
+    return [...data].reverse().map(toSavedSchema);
+  } catch {
+    // A temporarily-unreachable API must never crash the dashboard — the
+    // upload panel simply renders with no saved schemas until it recovers.
+    return [];
+  }
+}
+
+export interface CreateExtractionSchemaInput {
+  /** Version name shown in the dashboard; the backend falls back to `Custom schema v{n}`. */
+  title: string;
+  fields: SchemaFieldInput[];
 }
 
 /**
@@ -50,7 +62,7 @@ export async function getSavedSchemas(): Promise<readonly SavedSchema[]> {
  * field set becomes a real, selectable row the moment this succeeds.
  */
 export async function createExtractionSchemaAction(
-  fields: SchemaFieldInput[],
+  input: CreateExtractionSchemaInput,
 ): Promise<ActionResult<ExtractionSchemaDto>> {
   try {
     const cookieStore = await cookies();
@@ -64,7 +76,7 @@ export async function createExtractionSchemaAction(
       "/extraction-schemas",
       {
         headers: { Authorization: `Bearer ${token}` },
-        body: { fields },
+        body: { title: input.title, fields: input.fields },
       },
     );
 

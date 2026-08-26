@@ -1,14 +1,13 @@
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
+import { BrandLockup } from "@/shared/BrandLockup";
 
 import {
   authBrandPanelAccentVariants,
   authBrandPanelBlurbVariants,
   authBrandPanelCopyVariants,
   authBrandPanelHeadlineVariants,
-  authBrandPanelLockupVariants,
-  authBrandPanelMarkVariants,
   authBrandPanelRuleVariants,
   authBrandPanelVariants,
   type AuthBrandPanelVariantProps,
@@ -27,10 +26,7 @@ const AuthBrandPanel = React.forwardRef<HTMLDivElement, AuthBrandPanelProps>(
         {...props}
         className={cn(authBrandPanelVariants({ className }))}
       >
-        <div className={cn(authBrandPanelLockupVariants())}>
-          <span aria-hidden className={cn(authBrandPanelMarkVariants())} />
-          Plena Health
-        </div>
+        <BrandLockup size="lg" />
 
         <div className={cn(authBrandPanelCopyVariants())}>
           <h1 className={cn(authBrandPanelHeadlineVariants())}>

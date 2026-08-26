@@ -22,10 +22,6 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL(ROUTES.AUTH, request.url));
   }
 
-  if (hasSession && pathname === ROUTES.AUTH) {
-    return NextResponse.redirect(new URL(ROUTES.DASHBOARD, request.url));
-  }
-
   return NextResponse.next();
 }
 

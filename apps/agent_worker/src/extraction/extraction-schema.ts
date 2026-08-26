@@ -128,11 +128,28 @@ export function buildGeminiExtractionSchema(
   };
 }
 
+/**
+ * The clinic's own field list, rendered for the prompt — or `null` when the
+ * clinic supplied no custom schema.
+ *
+ * Null is deliberate rather than falling back to `DEFAULT_EXTRACTION_FIELDS`
+ * here: the default keys already reach the model through the response schema
+ * (see `buildGeminiExtractionSchema`), and re-rendering them as a bare
+ * `key (label): description` list would produce exactly the same thin prompt a
+ * custom schema gets. Null lets `GeminiClient` swap in its far richer standard
+ * clinical referral playbook instead, which is what a weaker model needs to
+ * tell a referring provider from a referred-to provider.
+ */
 export function buildFieldInstructions(
   schemaDefinition: FieldDefinition[] | null,
-): string {
-  const fields = schemaDefinition ?? DEFAULT_EXTRACTION_FIELDS;
-  return fields
+): string | null {
+  // An empty definition is treated exactly like a missing one: rendering it
+  // would put an empty bullet list under "extract EXACTLY these field keys",
+  // which reads to the model as "extract nothing".
+  if (schemaDefinition === null || schemaDefinition.length === 0) {
+    return null;
+  }
+  return schemaDefinition
     .map((field) => `- ${field.key} (${field.label}): ${field.description}`)
     .join('\n');
 }

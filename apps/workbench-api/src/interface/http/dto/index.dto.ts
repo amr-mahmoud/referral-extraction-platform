@@ -115,6 +115,15 @@ export class SchemaFieldDefinitionDto {
 
 export class CreateExtractionSchemaRequest {
   /**
+   * Human-friendly version name surfaced in the dashboard ("Q3 Insurance
+   * Forms"). Optional on the wire — the domain falls back to
+   * `Custom schema v{version}` — but the in-app field builder always sends it.
+   */
+  @IsOptional()
+  @IsString()
+  public readonly title?: string;
+
+  /**
    * Field definitions, accepted in either form:
    *  - an array of {@link SchemaFieldDefinitionDto} (in-app field builder), or
    *  - a flat `{ "field_name": "description" }` map (uploaded JSON config).
@@ -151,6 +160,9 @@ export class ExtractionSchemaDto {
   /** Schema version integer. */
   public readonly version!: number;
 
+  /** Human-friendly version name, e.g. "Q3 Insurance Forms". Never empty. */
+  public readonly title!: string;
+
   /** Array of field definitions in this schema. */
   public readonly fields!: SchemaFieldDefinitionDto[];
 
@@ -162,6 +174,7 @@ export class ExtractionSchemaDto {
       id: schema.id,
       clinicId: schema.clinicId.value,
       version: schema.version,
+      title: schema.title,
       fields: schema.schemaDefinition.map((f) => ({
         key: f.key,
         label: f.label,
@@ -330,6 +343,9 @@ export class ReferralListItemDto {
   /** Schema version behind `extractionSchemaId`, for the dashboard label. */
   public readonly extractionSchemaVersion!: number | null;
 
+  /** Schema title behind `extractionSchemaId`; the dashboard label when present. */
+  public readonly extractionSchemaTitle!: string | null;
+
   /** Populated when the referral FAILED or was REJECTED. */
   public readonly errorMessage!: string | null;
 
@@ -353,6 +369,7 @@ export class ReferralListItemDto {
       status: view.status,
       extractionSchemaId: view.extractionSchemaId,
       extractionSchemaVersion: view.extractionSchemaVersion,
+      extractionSchemaTitle: view.extractionSchemaTitle,
       errorMessage: view.errorMessage,
       extractedPayload: view.extractedPayload,
       documentUrl: view.documentUrl,

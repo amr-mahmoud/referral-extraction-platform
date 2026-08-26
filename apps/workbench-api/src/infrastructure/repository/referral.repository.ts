@@ -137,7 +137,7 @@ export class PrismaReferralRepository implements ReferralRepositoryPort {
  * One `select` shared by every read-model query so the three can never drift
  * apart — a field added here reaches the list, the backfill, and the dev
  * warm-up at once. The nested `extractionSchema` join is what supplies the
- * dashboard's "Custom schema v3" label.
+ * dashboard's schema label (title, with `v{n}` as fallback).
  */
 const REFERRAL_VIEW_SELECT = {
   id: true,
@@ -150,7 +150,7 @@ const REFERRAL_VIEW_SELECT = {
   extractedPayload: true,
   createdAt: true,
   updatedAt: true,
-  extractionSchema: { select: { version: true } },
+  extractionSchema: { select: { version: true, title: true } },
 } as const;
 
 interface ReferralViewRow {
@@ -164,7 +164,7 @@ interface ReferralViewRow {
   extractedPayload: Prisma.JsonValue;
   createdAt: Date;
   updatedAt: Date;
-  extractionSchema: { version: number } | null;
+  extractionSchema: { version: number; title: string | null } | null;
 }
 
 /**
@@ -190,6 +190,7 @@ function toReferralView(row: ReferralViewRow): ReferralView {
     status: row.status,
     extractionSchemaId: row.extractionSchemaId,
     extractionSchemaVersion: row.extractionSchema?.version ?? null,
+    extractionSchemaTitle: row.extractionSchema?.title ?? null,
     errorMessage: row.errorMessage,
     extractedPayload: toExtractedFieldViews(row.extractedPayload),
     // ISO strings, not Date — this shape is JSON.stringify'd straight into

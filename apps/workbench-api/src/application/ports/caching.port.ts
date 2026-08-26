@@ -11,6 +11,8 @@ export const CACHING_SERVICE_PORT = 'CACHING_SERVICE_PORT';
 export interface CachedExtractionSchema {
   id: string;
   version: number;
+  /** Version name — not consumed by the worker, but carried for completeness. */
+  title: string;
   schemaDefinition: { key: string; label: string; description: string }[];
 }
 

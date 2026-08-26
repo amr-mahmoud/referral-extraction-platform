@@ -23,7 +23,7 @@ const REFERRAL_VIEW_FIELD = 'referral';
 // is invisible to the cache-aside path, which only falls back to Postgres
 // when the key is absent entirely. Letting it expire guarantees a full
 // rebuild from Postgres at least this often, so drift is bounded.
-const CLINIC_INDEX_TTL_SECONDS = 10 * 60;
+const CLINIC_INDEX_TTL_SECONDS = 10 * 60000;
 
 // Fail fast, not fail eventually: ioredis's defaults queue commands and
 // retry reconnecting for up to `maxRetriesPerRequest` (20) attempts with

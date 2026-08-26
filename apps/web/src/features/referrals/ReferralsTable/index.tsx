@@ -17,6 +17,8 @@ import {
 } from "@/managers/referral-filter.manager";
 import {
   mergeReferralRowView,
+  mergeReferralRowViews,
+  sortReferralRowsNewestFirst,
   toReferralRowView,
 } from "@/managers/referral-view.manager";
 import { referralDetailRoute } from "@/routes";
@@ -50,15 +52,17 @@ const ReferralsTable = React.forwardRef<HTMLElement, ReferralsTableProps>(
       REFERRAL_FILTERS.ALL,
     );
 
-    // Seeded from the server-rendered list, then kept live by SSE. Re-synced
-    // whenever the server list itself changes (e.g. `revalidatePath` after a
-    // new batch upload) so a fresh server fetch is never shadowed by stale
-    // client state.
+    // Seeded from the server-rendered list, then kept live by SSE. A later
+    // server-rendered `referrals` prop (e.g. after `router.refresh()` from
+    // an unrelated schema action) is MERGED in, not swapped in wholesale —
+    // that snapshot can be older than what SSE has already delivered (it was
+    // read from Postgres at some earlier instant), and `mergeReferralRowView`
+    // drops anything that would regress a row's `updatedAt` backward.
     const [liveReferrals, setLiveReferrals] =
       React.useState<readonly ReferralRowView[]>(referrals);
 
     React.useEffect(() => {
-      setLiveReferrals(referrals);
+      setLiveReferrals((current) => mergeReferralRowViews(current, referrals));
     }, [referrals]);
 
     useReferralStatusStream(
@@ -75,7 +79,11 @@ const ReferralsTable = React.forwardRef<HTMLElement, ReferralsTableProps>(
     );
 
     const visible = React.useMemo(
-      () => filterReferrals(liveReferrals, filter),
+      () =>
+        filterReferrals(
+          sortReferralRowsNewestFirst(liveReferrals),
+          filter,
+        ),
       [filter, liveReferrals],
     );
 
@@ -127,7 +135,6 @@ const ReferralsTable = React.forwardRef<HTMLElement, ReferralsTableProps>(
                   "pb-2",
                 )}
               >
-                <span />
                 <span className={cn(referralsTableHeadCellVariants())}>
                   Patient
                 </span>

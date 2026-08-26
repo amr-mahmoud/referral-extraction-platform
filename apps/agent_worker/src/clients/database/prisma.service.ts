@@ -20,7 +20,13 @@ export class PrismaService {
     const result = await this.client.referral.updateMany({
       where: {
         id: referralId,
-        status: { in: [ReferralStatus.AWAITING_UPLOAD, ReferralStatus.PENDING] },
+        status: {
+          in: [
+            ReferralStatus.AWAITING_UPLOAD,
+            ReferralStatus.PENDING,
+            ReferralStatus.FAILED,
+          ],
+        },
       },
       data: { status: ReferralStatus.PROCESSING },
     });
@@ -73,12 +79,13 @@ export class PrismaService {
     if (referral.extractionSchemaId) {
       const schema = await this.client.extractionSchema.findUnique({
         where: { id: referral.extractionSchemaId },
-        select: { id: true, version: true, schemaDefinition: true },
+        select: { id: true, version: true, title: true, schemaDefinition: true },
       });
       if (schema) {
         extractionSchema = {
           id: schema.id,
           version: schema.version,
+          title: schema.title ?? `Custom schema v${schema.version}`,
           schemaDefinition: schema.schemaDefinition as CachedExtractionSchema['schemaDefinition'],
         };
       }

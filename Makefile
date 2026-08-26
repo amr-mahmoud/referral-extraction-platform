@@ -9,7 +9,7 @@
 #   4. postgres/redis- Local data services (Docker Compose)
 # ==============================================================================
 
-.PHONY: help install dev dev-web dev-api dev-worker kill stop kill-all clean-dev-api kill-api build build-web build-api build-worker docker-up docker-dev docker-dev-backend docker-dev-api docker-down docker-logs docker-clean docker-give-perms fix-perms db-reset db-down-reset db-apply-migrations db-apply-notify lint codegen-api clean
+.PHONY: help install dev dev-web dev-api dev-worker kill stop kill-all clean-dev-api kill-api build build-web build-api build-worker docker-up docker-dev docker-dev-backend docker-dev-api docker-down docker-logs docker-clean docker-give-perms fix-perms db-setup db-reset db-down-reset db-apply-migrations db-apply-notify redis-build redis-restart redis-cli lint codegen-api clean env-encrypt env-decrypt
 
 # Default target when running 'make'
 .DEFAULT_GOAL := help
@@ -111,6 +111,19 @@ docker-give-perms: ## Fix ownership permissions on ~/.docker and repository work
 	@echo "--> Restoring user file ownership on ~/.docker and workspace..."
 	sudo chown -R $$(whoami) ~/.docker .
 
+db-setup: ## Spin up Postgres container, push Prisma schema, generate client, and apply NOTIFY triggers
+	@echo "--> Starting Postgres database container..."
+	docker compose up -d postgres
+	@echo "--> Waiting for Postgres database to become healthy..."
+	@until [ "$$(docker inspect --format='{{.State.Health.Status}}' referral-postgres 2>/dev/null)" = "healthy" ]; do sleep 1; done
+	@sleep 1
+	@echo "--> Pushing Prisma schema to database..."
+	npm run prisma:push
+	@echo "--> Generating Prisma client..."
+	npm run prisma:generate
+	@$(MAKE) db-apply-notify
+	@echo "--> Database setup complete and ready."
+
 db-down-reset: ## Remove DB container, purge data volume, spin up DB container, push Prisma schema, and regenerate client
 	@echo "--> Resetting database container and purging volume..."
 	-docker compose stop postgres 2>/dev/null || true
@@ -143,6 +156,17 @@ db-apply-notify: ## (Re)apply the referral LISTEN/NOTIFY trigger to an already-r
 	@docker compose exec -T postgres psql -U $${POSTGRES_USER:-referral} -d $${POSTGRES_DB:-referral_extraction} \
 		< docker/postgres/init/002-referral-notify.sql
 	@echo "--> NOTIFY trigger applied."
+
+redis-build: ## Build and start Redis container in detached mode
+	@echo "--> Starting Redis container..."
+	docker compose up -d redis
+
+redis-restart: ## Restart the Redis container
+	@echo "--> Restarting Redis container..."
+	docker compose restart redis
+
+redis-cli: ## Open an interactive redis-cli session inside the Redis container
+	@docker compose exec -it redis redis-cli
 
 
 
@@ -179,4 +203,17 @@ codegen-api: ## Regenerate apps/web's typed API client from the running Workbenc
 clean: ## Clean node_modules, .next, and dist build outputs
 	@echo "--> Cleaning build artifacts and node_modules..."
 	rm -rf node_modules apps/web/.next apps/web/dist apps/workbench-api/dist apps/agent_worker/dist
+
+# ------------------------------------------------------------------------------
+# 8. ENVIRONMENT & SECRETS (OPENSSL AES-256)
+# ------------------------------------------------------------------------------
+env-encrypt: ## Encrypt .env into .env.enc (prompts for passphrase)
+	@echo "--> Encrypting .env -> .env.enc (AES-256-CBC)..."
+	@openssl enc -aes-256-cbc -salt -pbkdf2 -in .env -out .env.enc
+	@echo "--> Encrypted .env successfully saved to .env.enc"
+
+env-decrypt: ## Decrypt .env.enc into .env (prompts for passphrase)
+	@echo "--> Decrypting .env.enc -> .env (AES-256-CBC)..."
+	@openssl enc -d -aes-256-cbc -pbkdf2 -in .env.enc -out .env
+	@echo "--> Decrypted .env.enc successfully saved to .env"
 

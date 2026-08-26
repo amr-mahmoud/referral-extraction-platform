@@ -15,6 +15,8 @@ export class ExtractionSchemaMapper {
       id: raw.id,
       clinicId: ClinicId.from(raw.clinicId),
       version: raw.version,
+      // Nullable for pre-title rows; the aggregate resolves the v{n} fallback.
+      title: raw.title ?? undefined,
       schemaDefinition,
       createdAt: raw.createdAt,
     });
@@ -25,6 +27,7 @@ export class ExtractionSchemaMapper {
       id: schema.id,
       clinicId: schema.clinicId.value,
       version: schema.version,
+      title: schema.title,
       schemaDefinition: schema.schemaDefinition.map((field) => ({
         key: field.key,
         label: field.label,

@@ -9,7 +9,7 @@ import {
   REFERRAL_STATUS_TONES,
 } from "@/constants/referrals";
 import { cn } from "@/lib/utils";
-import { ChevronRightIcon, DocumentIcon, LoaderIcon } from "@/shared/Icon";
+import { ChevronRightIcon } from "@/shared/Icon";
 import { StatusPill } from "@/shared/StatusPill";
 import {
   REFERRAL_STATUSES,
@@ -26,8 +26,6 @@ import {
   referralPatientVariants,
   referralRowVariants,
   referralSecondaryCellVariants,
-  referralThumbSpinnerVariants,
-  referralThumbVariants,
 } from "./ReferralRow.styles";
 
 export interface ReferralRowProps extends Omit<
@@ -67,17 +65,6 @@ const ReferralRow = React.forwardRef<HTMLButtonElement, ReferralRowProps>(
           className,
         )}
       >
-        <span aria-hidden className={cn(referralThumbVariants())}>
-          {isExtractionInProgress ? (
-            <LoaderIcon
-              size="md"
-              className={cn(referralThumbSpinnerVariants())}
-            />
-          ) : (
-            <DocumentIcon size="md" />
-          )}
-        </span>
-
         <span className={cn(referralPatientVariants())}>
           {referral.patientName ?? "—"}
         </span>

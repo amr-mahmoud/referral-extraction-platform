@@ -82,16 +82,8 @@ const UploadWorkspace = React.forwardRef<HTMLDivElement, UploadWorkspaceProps>(
           savedSchemas={savedSchemas}
           source={schema.source}
           savedSchemaId={schema.savedSchemaId}
-          uploadedSchema={schema.uploadedSchema}
           onSourceChange={schema.setSource}
           onSavedSchemaChange={schema.setSavedSchemaId}
-          onSchemaUploaded={(uploaded) => {
-            schema.setUploadedSchema(uploaded);
-            // A validated upload is published server-side too (see
-            // `useUploadSchemaJson`) — refresh so it's also selectable under
-            // "Saved schema" without needing a manual page reload.
-            if (uploaded) router.refresh();
-          }}
           onBuildFields={() => setIsBuilderOpen(true)}
           onSubmit={handleSubmit}
           fileCount={fileCount}
@@ -107,13 +99,22 @@ const UploadWorkspace = React.forwardRef<HTMLDivElement, UploadWorkspaceProps>(
             isSaving={publishSchema.isLoading}
             saveError={publishSchema.error}
             onClose={() => setIsBuilderOpen(false)}
-            onConfirm={(fields) => {
-              publishSchema.execute(
-                fields.map((field) => ({
+            onConfirm={(draft) => {
+              publishSchema.execute({
+                title: draft.title,
+                fields: draft.fields.map((field) => ({
                   name: field.name,
                   description: field.description,
                 })),
-              );
+              });
+            }}
+            onSchemaUploaded={(uploaded) => {
+              // Same outcome as a manually-built schema publishing
+              // successfully: select it, close the modal, and refresh so it
+              // also appears under "Saved schema" without a manual reload.
+              schema.confirmSavedSchema(uploaded.id);
+              setIsBuilderOpen(false);
+              router.refresh();
             }}
           />
         ) : null}

@@ -99,6 +99,38 @@ describe('ExtractionSchema', () => {
       expect(schema.schemaDefinition[0].label).toBe('Policy Number');
     });
 
+    it('assigns a provided title verbatim, trimmed', () => {
+      const schema = new ExtractionSchema({
+        clinicId,
+        version: 1,
+        title: '  Q3 Insurance Forms  ',
+        schemaDefinition: validFields,
+      });
+
+      expect(schema.title).toBe('Q3 Insurance Forms');
+    });
+
+    it('falls back to a version-derived title when none is supplied', () => {
+      const schema = new ExtractionSchema({
+        clinicId,
+        version: 2,
+        schemaDefinition: validFields,
+      });
+
+      expect(schema.title).toBe('Custom schema v2');
+    });
+
+    it('falls back to a version-derived title for a blank or whitespace title', () => {
+      const schema = new ExtractionSchema({
+        clinicId,
+        oldVersion: 4,
+        title: '   ',
+        schemaDefinition: validFields,
+      });
+
+      expect(schema.title).toBe('Custom schema v5');
+    });
+
     it('slugifies a parameter name into a stable key', () => {
       const schema = new ExtractionSchema({
         clinicId,

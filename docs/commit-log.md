@@ -707,3 +707,27 @@ This document serves as the centralized commit history and decision log for the 
 - **Modified:** `apps/web/src/app/referrals/[id]/page.tsx`, `apps/web/src/apps/referral-detail/index.tsx`, `apps/web/src/features/review/**/*`, `apps/web/src/features/referrals/ReferralRow/**/*`, `apps/web/src/features/referrals/ReferralsTable/**/*`, `apps/web/src/hooks/use-custom-auto-navigator-extracted-field-click.ts`, `apps/web/src/layouts/ReferralDetailLayout/**/*`, `apps/web/src/managers/bounding-box.manager.ts`, `apps/web/src/managers/referral-view.manager.ts`, `apps/web/src/routes/index.ts`, `apps/web/src/server-actions/referrals.ts`, `apps/web/src/types/referrals/referral.ts`, `apps/web/public/pdf.worker.min.mjs`, `apps/workbench-api/src/application/application.service.ts`, `apps/workbench-api/src/application/read-models/referral-view.read-model.ts`, `docs/commit-log.md`
 - **Impact:** Clinic users can inspect and review extracted referral fields with spatial PDF visual grounding on `/referrals/[id]`.
 
+---
+
+## v0.0.35 | 2026-08-26 | feat | SCHEMA TITLES & HARDENING
+
+**Category:** System Architecture  
+**Summary:** Add custom extraction schema titles, dynamic single-referral cache-aside reads, server auth session verification, upgraded Gemini extraction prompts, and developer Makefile targets.  
+**SuggestedCommitMessage:** feat: add schema titles, single-referral cache-aside, auth guard, and dev make targets | System Architecture
+
+### 🧠 Logic & Decisions
+
+- **The Why:**
+  - **Schema Titles & Display:** Added human-friendly `title` field across `ExtractionSchema` aggregate, Prisma schema, mapper, and DTOs (falling back to `Custom schema v{version}`), displaying version names in `SchemaSelector`, `FieldBuilderModal`, and `ReferralsTable`.
+  - **Dynamic Single-Referral Cache-Aside:** Implemented `getReferralViewByClinic` in `ApplicationService` and `RedisService` to serve `GET /referrals/:id` cache-aside with O(1) Redis lookups and Postgres fallback. Dynamic document presigning (`attachDocumentUrls`) ensures URLs are generated fresh at serve time rather than going stale in Redis.
+  - **Server Auth Guarding:** Implemented `requireAuth()` in `apps/web/src/server-actions/auth.ts` validating session validity against `GET /clinics/me`, redirecting invalid/deleted users to `/auth`, and eliminating redirect loops in `proxy.ts`.
+  - **Gemini Extraction Hardening:** Refactored `GeminiClient` prompts with explicit reading order, document validation rules, clinical extraction playbook, verbatim value transcription, and tight spatial bounding-box contracts.
+  - **Developer Tooling & Secrets:** Added `db-setup`, `redis-build`, `redis-restart`, `redis-cli`, and OpenSSL AES-256 `env-encrypt` / `env-decrypt` targets in `Makefile`, along with clean step-by-step instructions in `README.md`.
+- **State Change:** Schemas now feature custom titles, individual referrals are served cache-aside, deleted database users are rejected on refresh, and local environment setup is streamlined via single-command Make targets.
+
+### 🔗 Dependencies
+
+- **Modified:** `Makefile`, `README.md`, `.gitignore`, `prisma/schema.prisma`, `apps/workbench-api/**/*`, `apps/web/**/*`, `apps/agent_worker/**/*`, `schemaExample.json`, `docs/commit-log.md`
+- **Impact:** Extraction schemas now persist and return `title`; `GET /referrals/:id` reads cache-aside; frontend routes enforce active database sessions; reviewers can decrypt environment secrets via `make env-decrypt`.
+
+

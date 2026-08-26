@@ -7,7 +7,6 @@ import {
   SCHEMA_SOURCE_LABELS,
   SCHEMA_SOURCE_ORDER,
 } from "@/constants/extraction-schemas";
-import type { UploadedSchema } from "@/hooks/use-schema-selection";
 import { cn } from "@/lib/utils";
 import { Button } from "@/shared/Button";
 import { PlusIcon } from "@/shared/Icon";
@@ -22,7 +21,6 @@ import {
 
 import { UploadProgressButton } from "@/features/referrals/UploadProgressButton";
 
-import { SchemaJsonDrop } from "../SchemaJsonDrop";
 import {
   schemaSelectorActionsVariants,
   schemaSelectorErrorVariants,
@@ -38,11 +36,9 @@ export interface SchemaSelectorProps
   savedSchemas: readonly SavedSchema[];
   source: SchemaSource;
   savedSchemaId?: string;
-  uploadedSchema?: UploadedSchema;
   onSourceChange: (source: SchemaSource) => void;
   onSavedSchemaChange: (id: string) => void;
-  onSchemaUploaded: (schema: UploadedSchema | undefined) => void;
-  /** Opens the in-app field builder modal (wireframe 2b). */
+  /** Opens the in-app field builder modal (wireframe 2b) — also where a schema JSON is uploaded now. */
   onBuildFields?: () => void;
   onSubmit: () => void;
   /** Drives the submit label: "Upload & extract 3 files". */
@@ -67,14 +63,12 @@ const SchemaSelector = React.forwardRef<HTMLElement, SchemaSelectorProps>(
       hasErrors,
       onBuildFields,
       onSavedSchemaChange,
-      onSchemaUploaded,
       onSourceChange,
       onSubmit,
       phase = "idle",
       progressPercent = 0,
       savedSchemaId,
       savedSchemas,
-      uploadedSchema,
       source,
       submitDisabled,
       ...props
@@ -102,13 +96,6 @@ const SchemaSelector = React.forwardRef<HTMLElement, SchemaSelectorProps>(
           placeholder="No saved schemas yet"
           disabled={source !== SCHEMA_SOURCES.SAVED}
           onChange={onSavedSchemaChange}
-        />
-      ),
-      [SCHEMA_SOURCES.UPLOAD]: (
-        <SchemaJsonDrop
-          uploadedSchema={uploadedSchema}
-          disabled={source !== SCHEMA_SOURCES.UPLOAD}
-          onUploaded={onSchemaUploaded}
         />
       ),
     };

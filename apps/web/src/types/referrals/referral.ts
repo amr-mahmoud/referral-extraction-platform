@@ -38,6 +38,16 @@ export interface ReferralSummary {
  * server so the client never re-derives them and desynchronises during hydration.
  */
 export interface ReferralRowView extends Omit<ReferralSummary, "submittedAt"> {
+  /** Raw ISO-8601 creation timestamp — the canonical sort key for the table (newest first). */
+  createdAt: string;
+  /**
+   * Raw ISO-8601 last-update timestamp — lets `mergeReferralRowView` refuse
+   * to replace a row with an older snapshot of itself. Two independent
+   * channels can deliver a row (the initial/refreshed server list, and the
+   * SSE stream), and they don't arrive in a guaranteed order relative to
+   * each other; this is what keeps a stale one from clobbering a fresher one.
+   */
+  updatedAt: string;
   submittedLabel: string;
 }
 

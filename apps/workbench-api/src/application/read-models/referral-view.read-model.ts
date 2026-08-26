@@ -2,10 +2,11 @@
  * The dashboard-facing projection of a referral.
  *
  * A read model rather than the `Referral` aggregate: the list needs the
- * extraction schema's *version* (to render "Custom schema v3"), which lives on
- * a different table and is not part of the referral's consistency boundary.
- * Loading the aggregate would not give it, and widening the aggregate to carry
- * it would put a foreign entity's field inside it purely for display.
+ * extraction schema's *title* (to render the version name, e.g. "Q3 Insurance
+ * Forms"), which lives on a different table and is not part of the referral's
+ * consistency boundary. Loading the aggregate would not give it, and widening
+ * the aggregate to carry it would put a foreign entity's field inside it
+ * purely for display.
  *
  * Every field is a primitive so this round-trips through `JSON.stringify` into
  * Redis and back without a mapper — dates are ISO-8601 strings, not `Date`.
@@ -32,6 +33,8 @@ export interface ReferralView {
   extractionSchemaId: string | null;
   /** `null` means the default LLM schema (no custom schema was resolved). */
   extractionSchemaVersion: number | null;
+  /** Version name; the dashboard prefers this over the bare version integer. */
+  extractionSchemaTitle: string | null;
   errorMessage: string | null;
   /** Static once written, so it is safe inside the no-expiry Redis view cache. */
   extractedPayload: ExtractedFieldView[];

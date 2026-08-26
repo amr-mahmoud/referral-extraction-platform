@@ -3,8 +3,8 @@
 import { useServerAction } from "@/hooks/use-server-action";
 import {
   createExtractionSchemaAction,
+  type CreateExtractionSchemaInput,
   type ExtractionSchemaDto,
-  type SchemaFieldInput,
 } from "@/server-actions/extraction-schemas";
 
 export interface UseCreateExtractionSchemaOptions {
@@ -16,7 +16,7 @@ export interface UseCreateExtractionSchemaOptions {
 export function useCreateExtractionSchema(
   options?: UseCreateExtractionSchemaOptions,
 ) {
-  return useServerAction<SchemaFieldInput[], ExtractionSchemaDto>(
+  return useServerAction<CreateExtractionSchemaInput, ExtractionSchemaDto>(
     createExtractionSchemaAction,
     options,
   );

@@ -37,15 +37,6 @@ export interface ReferralDetailAppProps {
   referral: ReferralDetailView;
 }
 
-/**
- * Entry point for `/referrals/[id]` (wireframe 1e). Served entirely from the
- * same list/SSE payload as the dashboard — no per-id fetch — and kept live by
- * the shared referral-changes stream filtered to this one referral.
- *
- * Selection state is parent-owned local state: a two-child selection like this
- * doesn't warrant a store, and the architecture doc's own note says it "resets
- * on navigation," which local state gives for free.
- */
 export function ReferralDetailApp({ referral }: ReferralDetailAppProps) {
   const [liveReferral, setLiveReferral] =
     React.useState<ReferralDetailView>(referral);
@@ -57,10 +48,6 @@ export function ReferralDetailApp({ referral }: ReferralDetailAppProps) {
     number | null
   >(null);
 
-  // React docs' "adjusting state when a prop changes" pattern: if the server
-  // hands back a fresh referral (e.g. a new render of this RSC after
-  // revalidation), re-seed local state during render rather than in an effect,
-  // so the live copy can't be shadowed by a stale server snapshot.
   const [previousReferral, setPreviousReferral] = React.useState(referral);
   if (previousReferral !== referral) {
     setPreviousReferral(referral);

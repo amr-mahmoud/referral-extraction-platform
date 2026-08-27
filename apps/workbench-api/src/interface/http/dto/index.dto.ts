@@ -16,7 +16,7 @@ import { Clinic } from '../../../domain/clinic/clinic.aggregate';
 import { ExtractionSchema } from '../../../domain/extraction-schema/extraction-schema.aggregate';
 import { Referral } from '../../../domain/referral/referral.aggregate';
 import type { ReferralWithPresignedUpload } from '../../../application/application.service';
-import type { ReferralListItemView } from '../../../application/read-models/referral-view.read-model';
+import type { ReferralListItem } from '../../../application/types';
 
 export class SignupRequest {
   /** Full name or title of the clinic. */
@@ -318,11 +318,6 @@ export class ExtractedFieldDto {
   public readonly boundingBox!: BoundingBoxDto | null;
 }
 
-export class UpdateReferralRequest {
-  /** Updated payload of extracted fields corrected by staff user. */
-  public readonly extractedPayload!: ExtractedFieldDto[];
-}
-
 export class ReferralListItemDto {
   /** Unique referral ID (UUID). */
   public readonly id!: string;
@@ -360,7 +355,7 @@ export class ReferralListItemDto {
   /** ISO-8601 last-update timestamp. */
   public readonly updatedAt!: string;
 
-  public static fromReadModel(view: ReferralListItemView): ReferralListItemDto {
+  public static fromReadModel(view: ReferralListItem): ReferralListItemDto {
     return {
       id: view.id,
       fileName: view.fileName,

@@ -7,10 +7,9 @@ import {
   ReferralSchemaAlreadyFixedError,
   ReferralValidationError,
 } from './referral.errors';
-import {
-  ReferralStatus,
-  ReferralStatusValue,
-} from './referral-status.value-object';
+import { ReferralStatus } from './referral-status.value-object';
+import type { ReferralCreateProps } from './types';
+import { ReferralStatusValue } from './types';
 
 export class InvalidReferralIdError extends DomainException {
   public readonly errorCode = DOMAIN_ERROR.REFERRAL_INVALID_ID;
@@ -24,24 +23,6 @@ export class InvalidReferralIdError extends DomainException {
 }
 
 const PDF_FILE_NAME_PATTERN = /\.pdf$/i;
-
-export interface ReferralCreateProps {
-  /** Self-generated when absent. Expected to be a UUID string. */
-  id?: string;
-  /** Owning clinic id (UUID string). */
-  clinicId: string;
-  /** Original uploaded file name; must end in `.pdf`. */
-  fileName: string;
-  /** Unknown until extraction resolves one — `null` is a legal, expected state. */
-  patientName?: string | null;
-
-  extractionSchemaId?: string | null;
-  status?: ReferralStatus;
-  extractedPayload?: ExtractedField[];
-  errorMessage?: string | null;
-  createdAt?: Date;
-  updatedAt?: Date;
-}
 
 /**
  * A single referral upload, tracked from `AWAITING_UPLOAD` through to a

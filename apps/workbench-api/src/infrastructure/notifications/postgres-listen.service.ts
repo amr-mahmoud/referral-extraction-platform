@@ -6,13 +6,7 @@ import {
 } from '@nestjs/common';
 import { Client } from 'pg';
 import { Subject, type Observable } from 'rxjs';
-
-/** Matches the `pg_notify` payload built in `docker/postgres/init/002-referral-notify.sql`. */
-export interface ReferralChangedNotification {
-  referralId: string;
-  clinicId: string;
-  status: string;
-}
+import type { ReferralChangedNotification } from './types';
 
 const NOTIFY_CHANNEL = 'referral_changed';
 const RECONNECT_DELAY_MS = 2000;

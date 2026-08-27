@@ -1,4 +1,4 @@
-import { FieldDefinitionInput } from '../domain-types/extraction-schema.input';
+import type { FieldDefinitionInput } from '../domain-types/extraction-schema.input';
 import {
   ExtractionSchemaEmptyError,
   ExtractionSchemaValidationError,
@@ -7,24 +7,10 @@ import {
   FieldDefinition,
   InvalidFieldDefinitionError,
 } from './field-definition.value-object';
+import type { ExtractionSchemaCreateProps } from './types';
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-export interface ExtractionSchemaCreateProps {
-  id?: string;
-  /** Owning clinic id (UUID string). */
-  clinicId: string;
-
-  title?: string;
-  /** Explicit version. Mutually exclusive with `oldVersion`. */
-  version?: number;
-  /** Raw field inputs — the aggregate builds the `FieldDefinition` VOs itself. */
-  schemaDefinition: FieldDefinitionInput[];
-  createdAt?: Date;
-  /** Version being superseded; the new schema lands at `oldVersion + 1`. */
-  oldVersion?: number;
-}
 
 export class ExtractionSchema {
   id: string;

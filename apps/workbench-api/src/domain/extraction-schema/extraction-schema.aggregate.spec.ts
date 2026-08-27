@@ -5,6 +5,9 @@ import {
 } from './extraction-schema.errors';
 import { InvalidFieldDefinitionError } from './field-definition.value-object';
 
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 describe('ExtractionSchema', () => {
   const clinicId = '11111111-1111-1111-1111-111111111111';
 
@@ -199,6 +202,38 @@ describe('ExtractionSchema', () => {
             schemaDefinition: validFields,
           }),
       ).toThrow(ExtractionSchemaValidationError);
+    });
+  });
+
+  describe('id helpers', () => {
+    it('generates a UUID id', () => {
+      const schema = new ExtractionSchema({
+        clinicId,
+        version: 1,
+        schemaDefinition: validFields,
+      });
+      expect(schema.generateId()).toMatch(UUID_REGEX);
+    });
+
+    it('accepts a well-formed UUID id', () => {
+      const schema = new ExtractionSchema({
+        clinicId,
+        version: 1,
+        schemaDefinition: validFields,
+      });
+      const id = '22222222-2222-4222-8222-222222222222';
+      expect(schema.validateId(id)).toBe(id);
+    });
+
+    it('rejects a non-UUID id', () => {
+      const schema = new ExtractionSchema({
+        clinicId,
+        version: 1,
+        schemaDefinition: validFields,
+      });
+      expect(() => schema.validateId('12345')).toThrow(
+        ExtractionSchemaValidationError,
+      );
     });
   });
 

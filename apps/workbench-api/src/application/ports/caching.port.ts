@@ -1,65 +1,19 @@
-import type { ReferralView } from '../read-models/referral-view.read-model';
+import { CachedClinic, CachedReferral } from '../types';
 
 export const CACHING_SERVICE_PORT = 'CACHING_SERVICE_PORT';
 
-/**
- * The schema shape the worker rehydrates from Redis — mirrors
- * `ExtractionSchemaMapper.toPersistence`'s field shape so the same
- * `{key, label, description}` structure can be re-validated into a
- * `FieldDefinitionInput[]` on the other side without translation.
- */
-export interface CachedExtractionSchema {
-  id: string;
-  clinicId?: string;
-  version: number;
-  /** Version name — not consumed by the worker, but carried for completeness. */
-  title: string;
-  schemaDefinition: { key: string; label: string; description: string }[];
-}
-
-export interface ReferralCacheEntry {
-  referralId: string;
-  fileName: string;
-  /** `null` when the clinic has no default schema — worker falls back to the default LLM schema. */
-  extractionSchema: CachedExtractionSchema | null;
-  /** Optional initial UI read model projection cached in the same hash under the `referral` field. */
-  referralView?: CachedReferralView;
-}
-
-/**
- * Cached under the same `referral:{referral_id}` hash (field `referral`) that
- * already carries the worker's `fileName`/`extractionSchema` — one key per
- * referral rather than a second parallel namespace, so a referral is
- * invalidated in exactly one place.
- */
-export type CachedReferralView = ReferralView;
-
-/**
- * Design-doc steps 3 and 10.
- *
- * Step 3 — a Redis cache-aside hash per referral (`referral:{referral_id}`),
- * written at referral-creation time so the worker can recover the original
- * file name and the resolved schema in one O(1) lookup; neither survives into
- * the S3 object key (`referrals/{clinicId}/{referralId}.pdf`) or the SQS
- * message built from it.
- *
- * Step 10 — a per-clinic secondary index (`clinic:{clinic_id}:referrals`, a
- * Redis SET) mapping one clinic to many referral ids, so the dashboard reads
- * its list without a Postgres table scan. Every read is cache-aside: a miss
- * falls back to Postgres and backfills, so Redis is never the system of record.
- */
 export interface CachingServicePort {
-  /** Writes every referral hash in one pipelined round-trip. */
-  setManyReferralsToCache(entries: ReferralCacheEntry[]): Promise<void>;
-  getReferralCache(referralId: string): Promise<ReferralCacheEntry | null>;
-
-  /** Upserts the dashboard-facing projection onto the referral's existing hash. */
-  setReferralView(view: CachedReferralView): Promise<void>;
-  setManyReferralViews(views: CachedReferralView[]): Promise<void>;
-  getReferralView(referralId: string): Promise<CachedReferralView | null>;
-  getManyReferralViews(
+  /**
+   * Writes the single flat `CachedReferral` for each referral — the same
+   * object the worker reads from `referral:{id}` and the API serves to the
+   * web. Read-modify-write: the fresh projection fields land whole while the
+   * static `extractionSchema` is carried forward from the existing entry.
+   */
+  setCachedReferrals(entries: CachedReferral[]): Promise<void>;
+  getCachedReferral(referralId: string): Promise<CachedReferral | null>;
+  getManyCachedReferrals(
     referralIds: string[],
-  ): Promise<(CachedReferralView | null)[]>;
+  ): Promise<(CachedReferral | null)[]>;
 
   /** Secondary index: adds referral ids to `clinic:{clinicId}:referrals`. */
   addReferralIdsToClinicIndex(
@@ -86,24 +40,4 @@ export interface CachingServicePort {
     clinicId: string,
     referralIds: string[],
   ): Promise<void>;
-}
-
-/**
- * The clinic aggregate as cached for the extraction-schema resolution path
- * (`clinic:{clinicId}`). Carries the password hash so the aggregate can be
- * fully rehydrated without a Postgres round-trip; the hash is one-way bcrypt,
- * not a plaintext credential. Relations are stored as **id collections only**
- * — the full schema/referral payloads stay in Postgres and are fetched once
- * an id is resolved.
- */
-export interface CachedClinic {
-  id: string;
-  clinicName: string;
-  username: string;
-  passwordHash: string;
-  defaultExtractionSchemaId: string | null;
-  referralIds: string[];
-  extractionSchemaIds: string[];
-  createdAt: string;
-  updatedAt: string;
 }

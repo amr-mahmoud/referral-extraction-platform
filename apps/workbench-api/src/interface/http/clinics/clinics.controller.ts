@@ -3,7 +3,6 @@ import {
   Controller,
   Get,
   Param,
-  Patch,
   Post,
   Req,
   Sse,
@@ -16,14 +15,10 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { Request } from 'express';
 import { Observable } from 'rxjs';
 import { concatMap, filter, map } from 'rxjs/operators';
 import { ApplicationService } from '../../../application/application.service';
-import { NotImplementedError } from '../../../application/errors/not-implemented.error';
-import { TokenClaims } from '../../../application/ports/token.port';
 import { PostgresListenService } from '../../../infrastructure/notifications/postgres-listen.service';
-import { Referral } from '../../../domain/referral/referral.aggregate';
 import { normalizeExtractionSchemaFields } from '../dto/extraction-schema-input.mapper';
 import {
   ClinicDto,
@@ -32,13 +27,9 @@ import {
   CreateReferralsRequest,
   ExtractionSchemaDto,
   ReferralListItemDto,
-  UpdateReferralRequest,
 } from '../dto/index.dto';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
-
-interface AuthenticatedRequest extends Request {
-  user: TokenClaims;
-}
+import type { AuthenticatedRequest } from '../types';
 
 @ApiBearerAuth('JWT-auth')
 @Controller()
@@ -158,8 +149,7 @@ export class ClinicsController {
     @Req() req: AuthenticatedRequest,
   ): Promise<ReferralListItemDto[]> {
     const clinicId = req.user.clinicId;
-    const views =
-      await this.applicationService.listReferralViewsByClinic(clinicId);
+    const views = await this.applicationService.listClinicReferrals(clinicId);
     return views.map((view) => ReferralListItemDto.fromReadModel(view));
   }
 
@@ -187,7 +177,7 @@ export class ClinicsController {
       // the fetch, not after.
       filter((notification) => notification.clinicId === clinicId),
       concatMap(async (notification) => {
-        const view = await this.applicationService.refreshReferralViewCache(
+        const view = await this.applicationService.refreshReferralCache(
           notification.referralId,
         );
         return view;
@@ -221,42 +211,7 @@ export class ClinicsController {
     @Param('id') id: string,
   ): Promise<ReferralListItemDto> {
     const clinicId = req.user.clinicId;
-    const view = await this.applicationService.getReferralViewByClinic(
-      clinicId,
-      id,
-    );
+    const view = await this.applicationService.getClinicReferral(clinicId, id);
     return ReferralListItemDto.fromReadModel(view);
-  }
-
-  @ApiTags('Referrals')
-  @UseGuards(JwtAuthGuard)
-  @Patch('referrals/:id')
-  @ApiOperation({
-    summary:
-      'Correct/Update extracted referral field values and bounding boxes',
-  })
-  @ApiResponse({ status: 200, description: 'Referral record updated' })
-  public updateReferral(
-    @Param('id') id: string,
-    @Body() body: UpdateReferralRequest,
-  ): Promise<Referral> {
-    void id;
-    void body;
-    throw new NotImplementedError('ClinicsController.updateReferral');
-  }
-
-  @ApiTags('Referrals')
-  @Sse('referrals/:id/stream')
-  @ApiOperation({
-    summary:
-      'Real-time Server-Sent Events (SSE) status stream for processing referral',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'SSE event stream connection established',
-  })
-  public streamReferral(@Param('id') id: string): Observable<MessageEvent> {
-    void id;
-    throw new NotImplementedError('ClinicsController.streamReferral');
   }
 }

@@ -9,14 +9,6 @@ export class InvalidFieldDefinitionError extends DomainException {
   }
 }
 
-export enum FieldType {
-  TEXT = 'text',
-  NUMBER = 'number',
-  DATE = 'date',
-  BOOLEAN = 'boolean',
-  SELECT = 'select',
-}
-
 export class FieldDefinition {
   public constructor(
     public readonly key: string,

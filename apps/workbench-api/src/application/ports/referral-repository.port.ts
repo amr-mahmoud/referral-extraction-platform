@@ -1,5 +1,5 @@
 import { Referral } from '../../domain/referral/referral.aggregate';
-import type { ReferralView } from '../read-models/referral-view.read-model';
+import type { CachedReferral } from '../types';
 
 export const REFERRAL_REPOSITORY_PORT = 'REFERRAL_REPOSITORY_PORT';
 
@@ -36,13 +36,15 @@ export interface ReferralRepositoryPort {
   deleteReferralsByIds(referralIds: string[]): Promise<void>;
 
   // ── Read-model queries (the cache-aside fallback path) ────────────────
-  // These return `ReferralView`, not the aggregate: they join the extraction
-  // schema's version for the dashboard label, and are only ever read.
+  // These return `CachedReferral`, not the aggregate: they join the extraction
+  // schema's version for the dashboard label, and are only ever read. The
+  // full `extractionSchema` payload is left null here — it's populated by the
+  // cache, not by the DB join.
 
   /** Newest-first. The Postgres fallback when the clinic index is a cache miss. */
-  findReferralViewsByClinicId(clinicId: string): Promise<ReferralView[]>;
+  findReferralsByClinicId(clinicId: string): Promise<CachedReferral[]>;
   /** Backfills the specific referrals that missed the cache. */
-  findReferralViewsByIds(referralIds: string[]): Promise<ReferralView[]>;
+  findManyReferralsByIds(referralIds: string[]): Promise<CachedReferral[]>;
   /** Every referral in the database — used only by the dev cache warm-up. */
-  findAllReferralViews(): Promise<ReferralView[]>;
+  findAllReferrals(): Promise<CachedReferral[]>;
 }

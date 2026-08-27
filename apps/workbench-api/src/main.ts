@@ -61,7 +61,7 @@ async function bootstrap() {
   // cold-cache miss. Pre-loading every referral removes that from the demo path.
   // Gated to non-production because at real scale this is exactly the full
   // table scan the cache-aside pattern exists to avoid — production starts
-  // cold and lets normal traffic (or `refreshReferralViewCache`) warm it
+  // cold and lets normal traffic (or `refreshReferralCache`) warm it
   // incrementally instead.
   if (process.env.NODE_ENV !== 'production') {
     const logger = new Logger('CacheWarmup');

@@ -9,6 +9,7 @@ import {
 import { PasswordHash } from './password-hash.value-object';
 import { DomainException } from '../shared/domain.exception';
 import type { PasswordVerifier } from './password-verifier.type';
+import type { ClinicInputProps } from './types';
 
 const MIN_PASSWORD_LENGTH = 8;
 const USERNAME_PATTERN = /^[a-zA-Z0-9_]{3,50}$/;
@@ -21,36 +22,17 @@ export class InvalidClinicIdError extends DomainException {
   }
 }
 
-export interface ClinicCreateProps {
-  /** Self-generated when absent. Expected to be a UUID string. */
-  id?: string;
-  clinicName: string;
-  username: string;
-  passwordHash?: PasswordHash | string;
-  rawPassword?: string;
-  hashedPassword?: string;
-  /** The clinic's default extraction schema id, or `null` for the LLM default. */
-  defaultExtractionSchemaId?: string | null;
-  /** Ids of the clinic's related extraction schemas (cache/read hydration). */
-  extractionSchemaIds?: string[];
-  /** Ids of the clinic's referrals (cache/read hydration). */
-  referralIds?: string[];
-  createdAt?: Date;
-  updatedAt?: Date;
-}
-
 export class Clinic {
   id: string;
   clinicName: string;
   username: string;
   private _passwordHash: PasswordHash;
   private _defaultExtractionSchemaId: string | null;
-  private _extractionSchemaIds: string[];
-  private _referralIds: string[];
+  private _extractionSchemas: ExtractionSchema[];
   createdAt: Date;
   private _updatedAt: Date;
 
-  public constructor(props: ClinicCreateProps) {
+  public constructor(props: ClinicInputProps) {
     if (!props) {
       throw new ClinicValidationError('Clinic properties are required');
     }
@@ -107,8 +89,7 @@ export class Clinic {
     this.username = props.username;
     this._passwordHash = passwordHash;
     this._defaultExtractionSchemaId = props.defaultExtractionSchemaId ?? null;
-    this._extractionSchemaIds = props.extractionSchemaIds ?? [];
-    this._referralIds = props.referralIds ?? [];
+    this._extractionSchemas = props.extractionSchemas ?? [];
 
     this.createdAt = props.createdAt ?? new Date();
     this._updatedAt = props.updatedAt ?? new Date();
@@ -131,67 +112,83 @@ export class Clinic {
     return this._defaultExtractionSchemaId;
   }
 
-  /** Ids of the clinic's related extraction schemas, hydrated at construction or via `updateRelationSchemas`. */
-  public get extractionSchemaIds(): string[] {
-    return this._extractionSchemaIds;
-  }
-
-  /** Ids of the clinic's referrals, hydrated at construction via `referralIds`. */
-  public get referralIds(): string[] {
-    return this._referralIds;
+  /** The clinic's related extraction schemas, hydrated at construction or via `updateRelationSchemas`. */
+  public get extractionSchemas(): ExtractionSchema[] {
+    return this._extractionSchemas;
   }
 
   public get updatedAt(): Date {
     return this._updatedAt;
   }
 
-  /**
-   * Hydrates the clinic's schema relations from full aggregates (the Postgres
-   * read path) — stores only their ids.
-   */
+  /** Hydrates the clinic's schema relations from full aggregates (the Postgres read path). */
   public updateRelationSchemas(extractionSchemas: ExtractionSchema[]): void {
-    this._extractionSchemaIds = extractionSchemas.map((schema) => schema.id);
+    this._extractionSchemas = extractionSchemas;
   }
 
   /**
-   * Resolves the id of the extraction schema that applies to this clinic:
+   * Resolves the extraction schema that applies to this clinic:
    * - an explicitly requested id (valid only if it is one of this clinic's
    *   schemas), or
    * - the clinic's default schema.
    *
    * Returns `null` when no schema applies (no default configured) or the
    * requested schema is not among the loaded relations — callers fall back to
-   * Postgres and treat a still-missing requested id as not-found. The full
-   * schema payload is fetched separately once the id is known.
+   * Postgres and treat a still-missing requested id as not-found.
    */
   public findExtractionSchema(
     extractionSchemaId?: string | null,
-  ): string | null {
+  ): ExtractionSchema | null {
     if (extractionSchemaId) {
-      return this._extractionSchemaIds.includes(extractionSchemaId)
-        ? extractionSchemaId
-        : null;
+      return (
+        this._extractionSchemas.find(
+          (schema) => schema.id === extractionSchemaId,
+        ) ?? null
+      );
     }
     if (!this._defaultExtractionSchemaId) {
       return null;
     }
-    return this._extractionSchemaIds.includes(this._defaultExtractionSchemaId)
-      ? this._defaultExtractionSchemaId
-      : null;
+    return (
+      this._extractionSchemas.find(
+        (schema) => schema.id === this._defaultExtractionSchemaId,
+      ) ?? null
+    );
   }
 
   public async verifyPassword(
     candidatePassword: string,
     verifier: PasswordVerifier,
   ): Promise<void> {
-    const isValid = await verifier(candidatePassword, this._passwordHash.value);
-
-    if (!isValid) {
+    try {
+      const isValid = await verifier(
+        candidatePassword,
+        this._passwordHash.value,
+      );
+      if (!isValid) {
+        throw new ClinicInvalidCredentialsError();
+      }
+    } catch (error) {
+      // The aggregate only ever surfaces domain exceptions: a raw verifier or
+      // infrastructure failure is treated as invalid credentials (fail-closed),
+      // never leaked up the stack as an unhandled error.
+      if (error instanceof DomainException) {
+        throw error;
+      }
       throw new ClinicInvalidCredentialsError();
     }
   }
 
   public changeDefaultSchema(extractionSchemaId: string | null): void {
+    if (
+      extractionSchemaId !== null &&
+      (typeof extractionSchemaId !== 'string' ||
+        extractionSchemaId.trim() === '')
+    ) {
+      throw new ClinicValidationError(
+        'Default extraction schema id must be a non-empty string or null',
+      );
+    }
     this._defaultExtractionSchemaId = extractionSchemaId;
     this._updatedAt = new Date();
   }

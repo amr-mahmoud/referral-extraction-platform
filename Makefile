@@ -9,7 +9,7 @@
 #   4. postgres/redis- Local data services (Docker Compose)
 # ==============================================================================
 
-.PHONY: help install dev dev-web dev-api dev-worker kill stop kill-all clean-dev-api kill-api build build-web build-api build-worker docker-up docker-dev docker-dev-backend docker-dev-api docker-down docker-logs docker-clean docker-give-perms fix-perms db-setup db-reset db-down-reset db-apply-migrations db-apply-notify redis-build redis-restart redis-cli lint codegen-api clean env-encrypt env-decrypt
+.PHONY: help install dev dev-web dev-api dev-worker kill stop kill-all clean-dev-api kill-api build build-web build-api build-worker docker-up docker-dev docker-dev-backend docker-dev-api docker-down docker-logs docker-clean docker-give-perms fix-perms db-setup db-reset db-down-reset db-apply-migrations db-apply-notify redis-build redis-restart redis-flush redis-flush-restart redis-reset redis-cli lint codegen-api clean env-encrypt env-decrypt
 
 # Default target when running 'make'
 .DEFAULT_GOAL := help
@@ -164,6 +164,22 @@ redis-build: ## Build and start Redis container in detached mode
 redis-restart: ## Restart the Redis container
 	@echo "--> Restarting Redis container..."
 	docker compose restart redis
+
+redis-flush: ## Flush all keys in Redis (FLUSHALL)
+	@echo "--> Flushing all keys in Redis..."
+	@docker compose exec -T redis redis-cli FLUSHALL
+	@echo "--> Redis flushed successfully."
+
+redis-flush-restart: ## Restart the Redis container and flush all keys
+	@echo "--> Restarting Redis container..."
+	docker compose restart redis
+	@echo "--> Waiting for Redis to accept connections..."
+	@until docker compose exec -T redis redis-cli ping >/dev/null 2>&1; do sleep 1; done
+	@echo "--> Flushing all keys in Redis (FLUSHALL)..."
+	@docker compose exec -T redis redis-cli FLUSHALL
+	@echo "--> Redis container restarted and flushed."
+
+redis-reset: redis-flush-restart ## Alias for 'make redis-flush-restart'
 
 redis-cli: ## Open an interactive redis-cli session inside the Redis container
 	@docker compose exec -it redis redis-cli

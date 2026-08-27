@@ -753,3 +753,27 @@ This document serves as the centralized commit history and decision log for the 
 - **Modified:** `apps/workbench-api/libs/errors/**/*`, `apps/workbench-api/src/domain/**/*`, `apps/workbench-api/src/application/**/*`, `apps/workbench-api/src/infrastructure/**/*`, `apps/workbench-api/src/interface/**/*`, `apps/web/src/**/*`, `docs/commit-log.md`
 - **Impact:** Robust error translation preventing unhandled 500s; all-or-nothing consistency on referral uploads; zero breaking changes to HTTP API contracts.
 
+---
+
+## v0.0.37 | 2026-08-26 | refactor | UNIFIED CACHE & DDD TYPES
+
+**Category:** System Architecture  
+**Summary:** Unify referral cache entity to a canonical flat schema with read-modify-write preservation, decouple layer-specific types into dedicated modules, add domain aggregate test suites, and remove unused API stubs.  
+**SuggestedCommitMessage:** refactor: unify referral cache entity, extract domain prop types, and add aggregate test suites | System Architecture
+
+### 🧠 Logic & Decisions
+
+- **The Why:**
+  - **Unified Referral Cache Entity (`CachedReferral`):** Consolidated dual cache types (`ReferralCacheEntry` and `CachedReferralView`) into a single canonical `CachedReferral` shape in `application/types.ts`. Updated `RedisService` (`setCachedReferrals`, `getCachedReferral`, `getManyCachedReferrals`) to perform pipelined read-modify-write on `referral:{id}`, preserving the worker's static `extractionSchema` while updating volatile read-model fields on status transitions.
+  - **Decoupled DDD Prop & Infrastructure Types:** Extracted constructor and command interfaces into co-located `types.ts` files across `domain/clinic`, `domain/referral`, `domain/extraction-schema`, `infrastructure/repository`, `infrastructure/notifications`, and `interface/http`, preventing circular dependencies and isolating aggregate class definitions.
+  - **Comprehensive Domain Aggregate Testing:** Added comprehensive unit tests for `Clinic` (`clinic.aggregate.spec.ts`) and `Referral` (`referral.aggregate.spec.ts`) validating invariant guard clauses, UUID generation, regex parsing, state machine transitions, and password verification.
+  - **Dead Code & Stub Elimination:** Removed unused stub endpoints (`PATCH /referrals/:id`, `GET /referrals/:id/stream`) and deprecated DTOs (`UpdateReferralRequest`, `NotImplementedError` use-cases) from `ClinicsController` and `ApplicationService`.
+  - **Tooling & Assets:** Added `redis-flush`, `redis-flush-restart`, and `redis-reset` targets to `Makefile`, updated Workbench API README with Caching Architecture documentation, and refreshed web icon assets.
+- **State Change:** Redis stores a single canonical JSON object per referral, domain aggregates have dedicated type definitions with 100% invariant test coverage, and unused controller stubs are purged.
+
+### 🔗 Dependencies
+
+- **Modified:** `Makefile`, `apps/workbench-api/**/*`, `apps/agent_worker/**/*`, `apps/web/public/**/*`, `docs/commit-log.md`
+- **Impact:** 106 tests passing in `workbench-api`; simplified Redis read/write pipelines; cleaner type imports across domain and application layers.
+
+

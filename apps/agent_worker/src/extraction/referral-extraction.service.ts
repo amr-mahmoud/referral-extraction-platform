@@ -84,7 +84,17 @@ export class ReferralExtractionService {
     try {
       const cachedMetadata = await this.redis.getReferralMetadata(referralId);
       if (cachedMetadata) {
-        return cachedMetadata.extractionSchema;
+        if (cachedMetadata.extractionSchema) {
+          return cachedMetadata.extractionSchema;
+        }
+        // A resolved schema id with no cached payload (e.g. a cold-cache
+        // backfill wrote the view without the schema) must fall through to
+        // Postgres rather than silently using the LLM default. A referral
+        // with no custom schema at all has no extractionSchemaId — return
+        // null directly (the default LLM schema) without a DB read.
+        if (!cachedMetadata.extractionSchemaId) {
+          return null;
+        }
       }
     } catch (error) {
       console.error(

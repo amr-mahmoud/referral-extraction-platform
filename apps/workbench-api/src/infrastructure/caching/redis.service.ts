@@ -6,19 +6,13 @@ import {
 } from '@nestjs/common';
 import Redis from 'ioredis';
 import { REPOSITORY_ERROR } from '../../../libs/errors/repository-error-code.enum';
-import {
-  CachedClinic,
-  CachedExtractionSchema,
-  CachedReferralView,
-  CachingServicePort,
-  ReferralCacheEntry,
-} from '../../application/ports/caching.port';
+import { CachingServicePort } from '../../application/ports/caching.port';
 import { RepositoryException } from '../errors/repository.exception';
+import { CachedClinic, CachedReferral } from 'src/application/types';
 
 const REFERRAL_KEY_PREFIX = 'referral:';
 const CLINIC_KEY_PREFIX = 'clinic:';
 const CLINIC_INDEX_KEY_SUFFIX = ':referrals';
-const REFERRAL_VIEW_FIELD = 'referral';
 
 // Self-healing backstop for the clinic index. The index is kept current by
 // two writers (referral creation, and the LISTEN/NOTIFY refresh), but a set
@@ -79,7 +73,7 @@ export class RedisService
     // fail-closed policy), not of the whole API — auth and schema
     // management don't touch it, so a Redis outage at boot must not crash
     // every endpoint. The real fail-closed guarantee is enforced per-call in
-    // `setManyReferralsToCache`.
+    // `setCachedReferrals`.
     try {
       await this.client.ping();
     } catch (error) {
@@ -93,28 +87,40 @@ export class RedisService
     await this.client.quit();
   }
 
-  public async setManyReferralsToCache(
-    entries: ReferralCacheEntry[],
-  ): Promise<void> {
+  public async setCachedReferrals(entries: CachedReferral[]): Promise<void> {
     if (entries.length === 0) {
       return;
     }
 
-    const pipeline = this.client.pipeline();
+    // Read-modify-write of the ONE flat object per referral (`referral:{id}`):
+    // creation passes the full CachedReferral, refreshes/backfills pass a fresh
+    // projection with `extractionSchema: null` — either way the static schema
+    // is carried forward from the existing entry (it is fixed at creation and
+    // never changes), so the cached value always matches what the worker and
+    // the web app consume.
+    const readPipeline = this.client.pipeline();
     for (const entry of entries) {
-      const hashFields: Record<string, string> = {
-        fileName: entry.fileName,
-        extractionSchema: entry.extractionSchema
-          ? JSON.stringify(entry.extractionSchema)
-          : '',
+      readPipeline.get(this.buildKey(entry.id));
+    }
+    const existingEntries = await readPipeline.exec();
+
+    const writePipeline = this.client.pipeline();
+    for (let index = 0; index < entries.length; index++) {
+      const entry = entries[index];
+      const existingRaw = existingEntries?.[index];
+      const existing =
+        existingRaw && existingRaw[0] === null
+          ? this.parseCachedReferral(existingRaw[1] as string | null)
+          : null;
+      const merged: CachedReferral = {
+        ...entry,
+        extractionSchema:
+          existing?.extractionSchema ?? entry.extractionSchema ?? null,
       };
-      if (entry.referralView) {
-        hashFields[REFERRAL_VIEW_FIELD] = JSON.stringify(entry.referralView);
-      }
-      pipeline.hset(this.buildKey(entry.referralId), hashFields);
+      writePipeline.set(this.buildKey(entry.id), JSON.stringify(merged));
     }
 
-    const results = await pipeline.exec();
+    const results = await writePipeline.exec();
     // ioredis never rejects on a per-command failure inside a pipeline — it
     // resolves with one [error, result] tuple per command. Scanning for a
     // non-null error is the only way to actually enforce "fail closed": a
@@ -129,92 +135,31 @@ export class RedisService
         REPOSITORY_ERROR.CACHE_WRITE_FAILED,
         `Failed to write ${failures.length} of ${entries.length} referral cache entries to Redis`,
         RedisService.name,
-        'setManyReferralsToCache',
+        'setCachedReferrals',
       );
     }
   }
 
-  public async getReferralCache(
+  public async getCachedReferral(
     referralId: string,
-  ): Promise<ReferralCacheEntry | null> {
-    try {
-      const raw = await this.client.hgetall(this.buildKey(referralId));
-      if (!raw || !raw.fileName) {
-        return null;
-      }
-
-      return {
-        referralId,
-        fileName: raw.fileName,
-        extractionSchema: raw.extractionSchema
-          ? (JSON.parse(raw.extractionSchema) as CachedExtractionSchema)
-          : null,
-      };
-    } catch (error) {
-      throw new RepositoryException(
-        REPOSITORY_ERROR.CACHE_WRITE_FAILED,
-        error instanceof Error ? error.message : String(error),
-        RedisService.name,
-        'getReferralCache',
-      );
-    }
+  ): Promise<CachedReferral | null> {
+    const raw = await this.client.get(this.buildKey(referralId));
+    return this.parseCachedReferral(raw);
   }
 
-  public async setReferralView(view: CachedReferralView): Promise<void> {
-    await this.setManyReferralViews([view]);
-  }
-
-  public async setManyReferralViews(
-    views: CachedReferralView[],
-  ): Promise<void> {
-    if (views.length === 0) {
-      return;
-    }
-
-    const pipeline = this.client.pipeline();
-    for (const view of views) {
-      // HSET onto the referral's existing hash rather than a separate key —
-      // the worker's `fileName`/`extractionSchema` fields are left untouched.
-      pipeline.hset(this.buildKey(view.id), {
-        [REFERRAL_VIEW_FIELD]: JSON.stringify(view),
-      });
-    }
-
-    const results = await pipeline.exec();
-    const failures = (results ?? []).filter(([error]) => error !== null);
-    if (failures.length > 0) {
-      throw new RepositoryException(
-        REPOSITORY_ERROR.CACHE_WRITE_FAILED,
-        `Failed to write ${failures.length} of ${views.length} referral views to Redis`,
-        RedisService.name,
-        'setManyReferralViews',
-      );
-    }
-  }
-
-  public async getReferralView(
-    referralId: string,
-  ): Promise<CachedReferralView | null> {
-    const raw = await this.client.hget(
-      this.buildKey(referralId),
-      REFERRAL_VIEW_FIELD,
-    );
-    return this.parseReferralView(raw);
-  }
-
-  public async getManyReferralViews(
+  public async getManyCachedReferrals(
     referralIds: string[],
-  ): Promise<(CachedReferralView | null)[]> {
+  ): Promise<(CachedReferral | null)[]> {
     if (referralIds.length === 0) {
       return [];
     }
 
     // One pipelined round-trip for the whole page rather than N sequential
-    // HGETs — the point of the secondary index is that a dashboard load is
+    // GETs — the point of the secondary index is that a dashboard load is
     // a single hop, and N round-trips would give that back.
     const pipeline = this.client.pipeline();
     for (const referralId of referralIds) {
-      pipeline.hget(this.buildKey(referralId), REFERRAL_VIEW_FIELD);
+      pipeline.get(this.buildKey(referralId));
     }
 
     const results = await pipeline.exec();
@@ -225,7 +170,7 @@ export class RedisService
         // the caller's Postgres fallback covers it.
         return null;
       }
-      return this.parseReferralView(entry[1] as string | null);
+      return this.parseCachedReferral(entry[1] as string | null);
     });
   }
 
@@ -307,15 +252,15 @@ export class RedisService
     }
   }
 
-  private parseReferralView(raw: string | null): CachedReferralView | null {
+  private parseCachedReferral(raw: string | null): CachedReferral | null {
     if (!raw) {
       return null;
     }
     try {
-      return JSON.parse(raw) as CachedReferralView;
+      return JSON.parse(raw) as CachedReferral;
     } catch (error) {
       this.logger.error(
-        `Discarding unparseable cached referral view: ${
+        `Discarding unparseable cached referral: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );

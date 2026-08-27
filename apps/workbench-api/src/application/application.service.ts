@@ -12,18 +12,11 @@ import {
   ReferralNotFoundError,
   ReferralValidationError,
 } from '../domain/referral/referral.errors';
-import { NotImplementedError } from './errors/not-implemented.error';
 import { translateError } from './errors/application.exception';
 import {
   CACHING_SERVICE_PORT,
-  type CachedClinic,
   type CachingServicePort,
-  type ReferralCacheEntry,
 } from './ports/caching.port';
-import type {
-  ReferralListItemView,
-  ReferralView,
-} from './read-models/referral-view.read-model';
 import {
   CLINIC_REPOSITORY_PORT,
   type ClinicRepositoryPort,
@@ -40,17 +33,19 @@ import { TOKEN_PORT, type TokenPort } from './ports/token.port';
 
 import type {
   AuthResult,
-  CorrectReferralCommand,
+  CachedClinic,
+  CachedReferral,
+  CachingNewReferralsDataCommand,
   CreateExtractionSchemaCommand,
   CreateNewReferralsWithAttachedPresignedUrlsCommand,
   LoginCommand,
+  ReferralListItem,
   ReferralWithPresignedUpload,
   SignupCommand,
 } from './types';
 
 export type {
   AuthResult,
-  CorrectReferralCommand,
   CreateExtractionSchemaCommand,
   CreateNewReferralsWithAttachedPresignedUrlsCommand,
   ListReferralsQuery,
@@ -200,22 +195,12 @@ export class ApplicationService {
     clinicId,
     referrals,
     extractionSchema,
-  }: {
-    clinicId: string;
-    referrals: Referral[];
-    extractionSchema: ExtractionSchema | null;
-  }) => {
+  }: CachingNewReferralsDataCommand) => {
     await Promise.all([
-      this.cachingService.setManyReferralsToCache(
-        referrals.map((referral): ReferralCacheEntry => ({
-          referralId: referral.id,
-          fileName: referral.fileName,
-          extractionSchema,
-          referralView: this.toReferralViewFromAggregate(
-            referral,
-            extractionSchema,
-          ),
-        })),
+      this.cachingService.setCachedReferrals(
+        referrals.map((referral): CachedReferral =>
+          this.toCachedReferralFromAggregate(referral, extractionSchema),
+        ),
       ),
       this.addToClinicIndexTolerantly(
         clinicId,
@@ -283,8 +268,7 @@ export class ApplicationService {
       // 1. Resolve the FULL schema aggregate ONCE — clinic-scoped, not
       //    file-scoped. Returning the aggregate (rather than just its id)
       //    is what lets the Redis cache-aside write below carry the actual
-      //    field definitions, not just a pointer the worker would have to
-      //    re-fetch from Postgres.
+      //    field definitions, not just a pointer
       const extractionSchema = await this.getExtractionSchema(
         command.clinicId,
         command.extractionSchemaId,
@@ -370,48 +354,51 @@ export class ApplicationService {
    *
    *   1. `getExtractionSchemaFromClinicCache` → `getFullClinicFromCache` →
    *      rehydrate a `Clinic` instance → `clinic.findExtractionSchema(...)`
-   *      resolves the schema **id** from the cached clinic's id collections,
-   *      then the full schema payload is fetched from Postgres.
-   *   2. On a miss, hydrate the clinic (with its schema ids) from Postgres; a
+   *      returns the full schema straight from the cached clinic — **zero DB
+   *      reads on a hit**.
+   *   2. On a miss, hydrate the clinic (with its schemas) from Postgres; a
    *      missing clinic throws `ClinicNotFoundError`, and an explicitly
    *      requested schema id that still resolves to nothing throws
    *      `ExtractionSchemaNotFoundError` (a foreign id must not resolve to
    *      another clinic's schema).
-   *   3. On a DB hit, `updateRelationSchemas` + `updateClinicInCache` refresh
-   *      the cached clinic's id collections as a side effect, so the next
-   *      lookup skips the clinic+schema-list reads.
+   *   3. On a DB hit, `updateClinicInCache` re-syncs the cached clinic (with
+   *      its full schemas) as a side effect, so the next lookup is a hit.
    */
   private async getExtractionSchema(
     clinicId: string,
     requestedExtractionSchemaId?: string | null,
   ): Promise<ExtractionSchema | null> {
-    const schemaFromCache = await this.getExtractionSchemaFromClinicCache(
-      clinicId,
-      requestedExtractionSchemaId,
-    );
-    if (schemaFromCache) {
-      return schemaFromCache;
+    try {
+      const schemaFromCache = await this.getExtractionSchemaFromClinicCache(
+        clinicId,
+        requestedExtractionSchemaId,
+      );
+      if (schemaFromCache) {
+        return schemaFromCache;
+      }
+
+      const clinic = await this.clinicRepository.findById(clinicId);
+      if (!clinic) {
+        throw new ClinicNotFoundError(clinicId);
+      }
+
+      const schemas =
+        await this.clinicRepository.listExtractionSchemasByClinic(clinicId);
+      clinic.updateRelationSchemas(schemas);
+
+      const schema = clinic.findExtractionSchema(requestedExtractionSchemaId);
+      if (!schema && requestedExtractionSchemaId) {
+        throw new ExtractionSchemaNotFoundError(requestedExtractionSchemaId);
+      }
+
+      // Best-effort side effect, non-blocking: the cached clinic is a
+      // self-healing projection (a miss re-syncs it), and updateClinicInCache
+      // swallows failures — so this must not add Redis latency to the request.
+      void this.updateClinicInCache(clinic);
+      return schema;
+    } catch (error) {
+      translateError(error, 'getExtractionSchema');
     }
-
-    const clinic = await this.clinicRepository.findById(clinicId);
-    if (!clinic) {
-      throw new ClinicNotFoundError(clinicId);
-    }
-
-    const schemas =
-      await this.clinicRepository.listExtractionSchemasByClinic(clinicId);
-    clinic.updateRelationSchemas(schemas);
-
-    const schemaId = clinic.findExtractionSchema(requestedExtractionSchemaId);
-    if (!schemaId && requestedExtractionSchemaId) {
-      throw new ExtractionSchemaNotFoundError(requestedExtractionSchemaId);
-    }
-    const schema =
-      schemas.find((candidate) => candidate.id === schemaId) ?? null;
-
-    //TODO isn't this supposed to be asyncrounous
-    await this.updateClinicInCache(clinic);
-    return schema;
   }
 
   private async getExtractionSchemaFromClinicCache(
@@ -422,23 +409,8 @@ export class ApplicationService {
     if (!cachedClinic) {
       return null;
     }
-    const clinic = new Clinic({
-      id: cachedClinic.id,
-      clinicName: cachedClinic.clinicName,
-      username: cachedClinic.username,
-      passwordHash: cachedClinic.passwordHash,
-      defaultExtractionSchemaId: cachedClinic.defaultExtractionSchemaId,
-      createdAt: new Date(cachedClinic.createdAt),
-      updatedAt: new Date(cachedClinic.updatedAt),
-      referralIds: cachedClinic.referralIds,
-      extractionSchemaIds: cachedClinic.extractionSchemaIds,
-    });
-    const schemaId = clinic.findExtractionSchema(requestedExtractionSchemaId);
-    if (!schemaId) {
-      return null;
-    }
-    // The cache holds ids only — fetch the full schema payload by the resolved id.
-    return this.clinicRepository.findExtractionSchemaById(schemaId);
+    const clinic = this.toClinicAggregateFromCache(cachedClinic);
+    return clinic.findExtractionSchema(requestedExtractionSchemaId);
   }
 
   private async getFullClinicFromCache(
@@ -455,14 +427,7 @@ export class ApplicationService {
   /** Best-effort cache write — Postgres remains the system of record. */
   private async updateClinicInCache(clinic: Clinic): Promise<void> {
     try {
-      // The clinic's referral ids already live in the per-clinic index
-      // (`clinic:{id}:referrals`) — carry them into the cached clinic so the
-      // aggregate rehydrates with its full id collections.
-      const referralIds =
-        (await this.readClinicIndexTolerantly(clinic.id)) ?? [];
-      await this.cachingService.setFullClinic(
-        this.toCachedClinic(clinic, referralIds),
-      );
+      await this.cachingService.setFullClinic(this.toCachedClinic(clinic));
     } catch (error) {
       this.logCacheDegradation('write clinic', error);
     }
@@ -488,21 +453,49 @@ export class ApplicationService {
     }
   }
 
-  private toCachedClinic(
-    clinic: Clinic,
-    referralIds: string[] = clinic.referralIds,
-  ): CachedClinic {
+  private toCachedClinic(clinic: Clinic): CachedClinic {
     return {
       id: clinic.id,
       clinicName: clinic.clinicName,
       username: clinic.username,
       passwordHash: clinic.passwordHash.value,
       defaultExtractionSchemaId: clinic.defaultExtractionSchemaId,
-      referralIds,
-      extractionSchemaIds: clinic.extractionSchemaIds,
+      extractionSchemas: clinic.extractionSchemas.map((schema) => ({
+        id: schema.id,
+        clinicId: clinic.id,
+        version: schema.version,
+        title: schema.title,
+        schemaDefinition: schema.schemaDefinition.map((field) => ({
+          key: field.key,
+          label: field.label,
+          description: field.description,
+        })),
+      })),
       createdAt: clinic.createdAt.toISOString(),
       updatedAt: clinic.updatedAt.toISOString(),
     };
+  }
+
+  private toClinicAggregateFromCache(cached: CachedClinic): Clinic {
+    return new Clinic({
+      id: cached.id,
+      clinicName: cached.clinicName,
+      username: cached.username,
+      passwordHash: cached.passwordHash,
+      defaultExtractionSchemaId: cached.defaultExtractionSchemaId,
+      extractionSchemas: cached.extractionSchemas.map(
+        (schema) =>
+          new ExtractionSchema({
+            id: schema.id,
+            clinicId: cached.id,
+            version: schema.version,
+            title: schema.title,
+            schemaDefinition: schema.schemaDefinition,
+          }),
+      ),
+      createdAt: new Date(cached.createdAt),
+      updatedAt: new Date(cached.updatedAt),
+    });
   }
 
   /**
@@ -517,9 +510,9 @@ export class ApplicationService {
    * from Postgres, so a cold or evicted cache degrades latency, not
    * correctness.
    */
-  public async listReferralViewsByClinic(
+  public async listClinicReferrals(
     clinicId: string,
-  ): Promise<ReferralListItemView[]> {
+  ): Promise<ReferralListItem[]> {
     try {
       const cachedReferralIds = await this.readClinicIndexTolerantly(clinicId);
 
@@ -536,9 +529,9 @@ export class ApplicationService {
       }
 
       const cachedViews =
-        await this.readReferralViewsTolerantly(cachedReferralIds);
+        await this.readCachedReferralsTolerantly(cachedReferralIds);
 
-      const viewsById = new Map<string, ReferralView>();
+      const viewsById = new Map<string, CachedReferral>();
       const missingReferralIds: string[] = [];
       cachedReferralIds.forEach((referralId, index) => {
         const view = cachedViews[index];
@@ -553,20 +546,20 @@ export class ApplicationService {
       // or was never written. Fetch just those and backfill.
       if (missingReferralIds.length > 0) {
         const backfilled =
-          await this.referralRepository.findReferralViewsByIds(
+          await this.referralRepository.findManyReferralsByIds(
             missingReferralIds,
           );
         for (const view of backfilled) {
           viewsById.set(view.id, view);
         }
-        await this.writeReferralViewsTolerantly(backfilled);
+        await this.writeCachedReferralsTolerantly(backfilled);
       }
 
       return this.attachDocumentUrls(
         this.sortNewestFirst([...viewsById.values()]),
       );
     } catch (error) {
-      translateError(error, 'listReferralViewsByClinic');
+      translateError(error, 'listClinicReferrals');
     }
   }
 
@@ -574,7 +567,7 @@ export class ApplicationService {
    * Cache-aside for a single referral (design-doc step 10, single-id form):
    * try the referral's own Redis hash first, fall back to Postgres on a
    * miss and backfill Redis either way — the same contract
-   * `listReferralViewsByClinic` applies across the whole list, applied here
+   * `listClinicReferrals` applies across the whole list, applied here
    * to one id. Powers `GET /referrals/:id`, which — per the "no new
    * fetching" constraint on the review screen — is now the single place
    * that reads referral detail, rather than the client filtering the full
@@ -586,77 +579,77 @@ export class ApplicationService {
    * so this is the only place tenant isolation has to be enforced for a
    * direct single-id lookup.
    */
-  public async getReferralViewByClinic(
+  public async getClinicReferral(
     clinicId: string,
     referralId: string,
-  ): Promise<ReferralListItemView> {
+  ): Promise<ReferralListItem> {
     try {
-      const cached = await this.readReferralViewTolerantly(referralId);
+      const cached = await this.readCachedReferralTolerantly(referralId);
       if (cached && cached.clinicId === clinicId) {
         const [served] = await this.attachDocumentUrls([cached]);
         return served;
       }
 
-      const [view] = await this.referralRepository.findReferralViewsByIds([
+      const [view] = await this.referralRepository.findManyReferralsByIds([
         referralId,
       ]);
       if (!view || view.clinicId !== clinicId) {
         throw new ReferralNotFoundError(referralId);
       }
 
-      await this.writeReferralViewsTolerantly([view]);
+      await this.writeCachedReferralsTolerantly([view]);
       const [served] = await this.attachDocumentUrls([view]);
       return served;
     } catch (error) {
-      translateError(error, 'getReferralViewByClinic');
+      translateError(error, 'getClinicReferral');
     }
   }
 
   /** Re-reads one referral from Postgres and refreshes its cache entry. */
-  public async refreshReferralViewCache(
+  public async refreshReferralCache(
     referralId: string,
-  ): Promise<ReferralListItemView | null> {
-    const [view] = await this.referralRepository.findReferralViewsByIds([
-      referralId,
-    ]);
-    if (!view) {
+  ): Promise<ReferralListItem | null> {
+    const [referral_data] =
+      await this.referralRepository.findManyReferralsByIds([referralId]);
+    if (!referral_data) {
       return null;
     }
-    await this.writeReferralViewsTolerantly([view]);
-    await this.addToClinicIndexTolerantly(view.clinicId, [view.id]);
-    const [servedView] = await this.attachDocumentUrls([view]);
+    await this.writeCachedReferralsTolerantly([referral_data]);
+    await this.addToClinicIndexTolerantly(referral_data.clinicId, [
+      referral_data.id,
+    ]);
+    const [servedView] = await this.attachDocumentUrls([referral_data]);
     return servedView ?? null;
   }
 
-  /** Dev-only warm-up: loads every referral into Redis so the cache starts hot. */
   public async warmAllReferralCaches(): Promise<number> {
-    const views = await this.referralRepository.findAllReferralViews();
-    if (views.length === 0) {
+    const referrals_data = await this.referralRepository.findAllReferrals();
+    if (referrals_data.length === 0) {
       return 0;
     }
 
-    await this.writeReferralViewsTolerantly(views);
+    await this.writeCachedReferralsTolerantly(referrals_data);
 
     const referralIdsByClinicId = new Map<string, string[]>();
-    for (const view of views) {
-      const existing = referralIdsByClinicId.get(view.clinicId) ?? [];
-      existing.push(view.id);
-      referralIdsByClinicId.set(view.clinicId, existing);
+    for (const referral of referrals_data) {
+      const existing = referralIdsByClinicId.get(referral.clinicId) ?? [];
+      existing.push(referral.id);
+      referralIdsByClinicId.set(referral.clinicId, existing);
     }
     for (const [clinicId, referralIds] of referralIdsByClinicId) {
       await this.addToClinicIndexTolerantly(clinicId, referralIds);
     }
 
-    return views.length;
+    return referrals_data.length;
   }
 
   private async rebuildClinicCacheFromDatabase(
     clinicId: string,
-  ): Promise<ReferralView[]> {
+  ): Promise<CachedReferral[]> {
     const views =
-      await this.referralRepository.findReferralViewsByClinicId(clinicId);
+      await this.referralRepository.findReferralsByClinicId(clinicId);
 
-    await this.writeReferralViewsTolerantly(views);
+    await this.writeCachedReferralsTolerantly(views);
     await this.addToClinicIndexTolerantly(
       clinicId,
       views.map((view) => view.id),
@@ -665,7 +658,7 @@ export class ApplicationService {
     return views;
   }
 
-  private sortNewestFirst(views: ReferralView[]): ReferralView[] {
+  private sortNewestFirst(views: CachedReferral[]): CachedReferral[] {
     // The index is an unordered SET, so ordering is re-derived here rather
     // than inherited from Redis. (A ZSET scored by createdAt would push this
     // into Redis and enable real pagination — see the "future improvements"
@@ -693,35 +686,35 @@ export class ApplicationService {
     }
   }
 
-  private async readReferralViewsTolerantly(
+  private async readCachedReferralsTolerantly(
     referralIds: string[],
-  ): Promise<(ReferralView | null)[]> {
+  ): Promise<(CachedReferral | null)[]> {
     try {
-      return await this.cachingService.getManyReferralViews(referralIds);
+      return await this.cachingService.getManyCachedReferrals(referralIds);
     } catch (error) {
-      this.logCacheDegradation('read referral views', error);
+      this.logCacheDegradation('read cached referrals', error);
       return referralIds.map(() => null);
     }
   }
 
-  private async readReferralViewTolerantly(
+  private async readCachedReferralTolerantly(
     referralId: string,
-  ): Promise<ReferralView | null> {
+  ): Promise<CachedReferral | null> {
     try {
-      return await this.cachingService.getReferralView(referralId);
+      return await this.cachingService.getCachedReferral(referralId);
     } catch (error) {
-      this.logCacheDegradation('read referral view', error);
+      this.logCacheDegradation('read cached referral', error);
       return null;
     }
   }
 
-  private async writeReferralViewsTolerantly(
-    views: ReferralView[],
+  private async writeCachedReferralsTolerantly(
+    views: CachedReferral[],
   ): Promise<void> {
     try {
-      await this.cachingService.setManyReferralViews(views);
+      await this.cachingService.setCachedReferrals(views);
     } catch (error) {
-      this.logCacheDegradation('write referral views', error);
+      this.logCacheDegradation('write cached referrals', error);
     }
   }
 
@@ -744,10 +737,10 @@ export class ApplicationService {
    * second database read — everything the dashboard needs is already in hand
    * at creation time, including the schema title and version resolved in step 1.
    */
-  private toReferralViewFromAggregate(
+  private toCachedReferralFromAggregate(
     referral: Referral,
     extractionSchema: ExtractionSchema | null,
-  ): ReferralView {
+  ): CachedReferral {
     return {
       id: referral.id,
       clinicId: referral.clinicId,
@@ -777,6 +770,7 @@ export class ApplicationService {
       })),
       createdAt: referral.createdAt.toISOString(),
       updatedAt: referral.updatedAt.toISOString(),
+      extractionSchema,
     };
   }
 
@@ -788,10 +782,10 @@ export class ApplicationService {
    * a cached URL would go stale silently.
    */
   private async attachDocumentUrls(
-    views: ReferralView[],
-  ): Promise<ReferralListItemView[]> {
+    views: CachedReferral[],
+  ): Promise<ReferralListItem[]> {
     return Promise.all(
-      views.map(async (view): Promise<ReferralListItemView> => {
+      views.map(async (view): Promise<ReferralListItem> => {
         const { url } = await this.storageService.presignGet({
           bucket: this.storageService.getConfiguredBucketName(),
           key: this.storageService.buildReferralPdfKey(view.clinicId, view.id),
@@ -807,27 +801,5 @@ export class ApplicationService {
         error instanceof Error ? error.message : String(error)
       }`,
     );
-  }
-
-  /**
-   * Single error boundary for every public use case. Anything already typed as
-   * an `HttpException` (domain, repository, `NotImplementedError`, Nest
-   * built-ins) passes straight through to the global filter; anything else is
-   * wrapped in an `ApplicationException` so no untyped exception can escape
-   * this layer.
-   */
-
-  public getReferralByClinic(
-    clinicId: string,
-    referralId: string,
-  ): Promise<Referral> {
-    void clinicId;
-    void referralId;
-    throw new NotImplementedError('ApplicationService.getReferralByClinic');
-  }
-
-  public correctReferral(command: CorrectReferralCommand): Promise<Referral> {
-    void command;
-    throw new NotImplementedError('ApplicationService.correctReferral');
   }
 }

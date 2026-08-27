@@ -3,19 +3,7 @@ import { BoundingBox } from '../../domain/referral/bounding-box.value-object';
 import { ExtractedField } from '../../domain/referral/extracted-field.value-object';
 import { Referral } from '../../domain/referral/referral.aggregate';
 import { ReferralStatus } from '../../domain/referral/referral-status.value-object';
-
-interface RawExtractedField {
-  key: string;
-  label: string;
-  value: string;
-  pageNumber: number;
-  boundingBox: {
-    xmin: number;
-    ymin: number;
-    xmax: number;
-    ymax: number;
-  } | null;
-}
+import type { RawExtractedField } from './types';
 
 export class ReferralMapper {
   public static toDomain(raw: PrismaReferral): Referral {

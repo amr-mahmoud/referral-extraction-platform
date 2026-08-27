@@ -1,8 +1,29 @@
 import type { FieldDefinitionInput } from '../domain/domain-types/extraction-schema.input';
-import { Clinic } from '../domain/clinic/clinic.aggregate';
-import { Referral } from '../domain/referral/referral.aggregate';
-import { ExtractedField } from '../domain/referral/extracted-field.value-object';
+import type { Clinic } from '../domain/clinic/clinic.aggregate';
+import type { ExtractionSchema } from '../domain/extraction-schema/extraction-schema.aggregate';
+import type { Referral } from '../domain/referral/referral.aggregate';
 import type { PresignedUrl } from './ports/storage.port';
+import type { ClinicInputProps } from '../domain/clinic/types';
+
+// ── Referral projection (the canonical cached/served shape) ─────────────
+
+/**
+ * One extracted field as carried in a referral projection. Every field is a
+ * primitive so the projection round-trips through `JSON.stringify` into Redis
+ * and back without a mapper — dates are ISO-8601 strings, not `Date`.
+ */
+export interface ExtractedFieldView {
+  key: string;
+  label: string;
+  value: string;
+  pageNumber: number;
+  boundingBox: {
+    xmin: number;
+    ymin: number;
+    xmax: number;
+    ymax: number;
+  } | null;
+}
 
 // ── Auth Commands & Results ──────────────────────────────────────────
 
@@ -57,8 +78,99 @@ export interface ListReferralsQuery {
   limit: number;
 }
 
-export interface CorrectReferralCommand {
+// ── Referral Cache Side-Effects ───────────────────────────────────────
+
+/** Input for the best-effort cache write that follows referral persistence. */
+export interface CachingNewReferralsDataCommand {
   clinicId: string;
-  referralId: string;
-  extractedPayload: ExtractedField[];
+  referrals: Referral[];
+  extractionSchema: ExtractionSchema | null;
 }
+
+/**
+ * The schema shape the worker rehydrates from Redis — mirrors
+ * `ExtractionSchemaMapper.toPersistence`'s field shape so the same
+ * `{key, label, description}` structure can be re-validated into a
+ * `FieldDefinitionInput[]` on the other side without translation.
+ */
+export interface CachedExtractionSchema {
+  id: string;
+  clinicId?: string;
+  version: number;
+  /** Version name — not consumed by the worker, but carried for completeness. */
+  title: string;
+  schemaDefinition: { key: string; label: string; description: string }[];
+}
+
+/**
+ * The full cached payload for `referral:{referral_id}` — ONE flat object
+ * carrying everything a referral's cache needs: the dashboard/review
+ * projection plus the worker-only full schema payload.
+ *
+ * Written once at creation (`setCachedReferrals`); on every status
+ * change the object is rewritten whole via `setCachedReferrals`
+ * (read-modify-write), which carries the static `extractionSchema` forward.
+ */
+export interface CachedReferral {
+  id: string;
+  clinicId: string;
+  fileName: string;
+  patientName: string | null;
+  status: string;
+  extractionSchemaId: string | null;
+  /** `null` means the default LLM schema (no custom schema was resolved). */
+  extractionSchemaVersion: number | null;
+  /** Version name; the dashboard prefers this over the bare version integer. */
+  extractionSchemaTitle: string | null;
+  errorMessage: string | null;
+  /** Static once written, so it is safe inside the no-expiry Redis view cache. */
+  extractedPayload: ExtractedFieldView[];
+  createdAt: string;
+  updatedAt: string;
+  /** The full schema payload the worker needs — null when no custom schema applies. */
+  extractionSchema: CachedExtractionSchema | null;
+}
+
+export type ReferralData = CachedReferral;
+/**
+ * What the read endpoints actually serve. A presigned GET URL expires (15 min
+ * default) while the Redis cache has no TTL, so `documentUrl` is computed
+ * fresh on every serve and deliberately never persisted.
+ */
+export interface ReferralListItem extends CachedReferral {
+  documentUrl: string;
+}
+
+/**
+ * The clinic aggregate as cached for the extraction-schema resolution path
+ * (`clinic:{clinicId}`). Carries the password hash so the aggregate can be
+ * fully rehydrated without a Postgres round-trip; the hash is one-way bcrypt,
+ * not a plaintext credential. Relations carry the **full schema payloads**
+ * (same `CachedExtractionSchema` shape the worker metadata uses) so a cache
+ * hit resolves the schema with zero DB reads. Referral membership lives in
+ * the `clinic:{clinicId}:referrals` index, not here.
+ *
+ * Derived from the domain's `ClinicInputProps` via `Omit`: the constructor-only
+ * password inputs (`rawPassword`/`hashedPassword`) are dropped and the shared
+ * fields (`clinicName`/`username`) stay single-sourced, while the cache-specific
+ * fields are concretized (required ids, serialized dates, cached schema shape).
+ */
+export type CachedClinic = Omit<
+  ClinicInputProps,
+  | 'id'
+  | 'passwordHash'
+  | 'rawPassword'
+  | 'hashedPassword'
+  | 'defaultExtractionSchemaId'
+  | 'extractionSchemas'
+  | 'referralIds'
+  | 'createdAt'
+  | 'updatedAt'
+> & {
+  id: string;
+  passwordHash: string;
+  defaultExtractionSchemaId: string | null;
+  extractionSchemas: CachedExtractionSchema[];
+  createdAt: string;
+  updatedAt: string;
+};

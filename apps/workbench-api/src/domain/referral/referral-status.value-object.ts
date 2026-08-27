@@ -1,5 +1,6 @@
 import { DOMAIN_ERROR } from '../../../libs/errors/domain-error-code.enum';
 import { DomainException } from '../shared/domain.exception';
+import { ReferralStatusValue } from './types';
 
 export class InvalidReferralStatusError extends DomainException {
   public readonly errorCode = DOMAIN_ERROR.REFERRAL_INVALID_STATUS;
@@ -21,15 +22,6 @@ export class InvalidReferralStatusTransitionError extends DomainException {
       `Referral cannot transition from '${from}' to '${to}'`,
     );
   }
-}
-
-export enum ReferralStatusValue {
-  AWAITING_UPLOAD = 'AWAITING_UPLOAD',
-  PENDING = 'PENDING',
-  PROCESSING = 'PROCESSING',
-  COMPLETED = 'COMPLETED',
-  FAILED = 'FAILED',
-  REJECTED = 'REJECTED',
 }
 
 const ALLOWED_TRANSITIONS: Record<

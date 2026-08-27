@@ -10,10 +10,8 @@ import { Referral } from '../../domain/referral/referral.aggregate';
 import { RepositoryException } from '../errors/repository.exception';
 import { PrismaService } from './prisma.service';
 import { ReferralMapper } from './referral.mapper';
-import type {
-  ExtractedFieldView,
-  ReferralView,
-} from '../../application/read-models/referral-view.read-model';
+import type { ReferralData, ExtractedFieldView } from '../../application/types';
+import type { CachedReferralRow } from './types';
 
 @Injectable()
 export class PrismaReferralRepository implements ReferralRepositoryPort {
@@ -154,30 +152,28 @@ export class PrismaReferralRepository implements ReferralRepositoryPort {
     }
   }
 
-  // ── Read-model queries ───────────────────────────────────────────────
-
-  public async findReferralViewsByClinicId(
+  public async findReferralsByClinicId(
     clinicId: string,
-  ): Promise<ReferralView[]> {
+  ): Promise<ReferralData[]> {
     try {
       const rows = await this.prisma.referral.findMany({
         where: { clinicId },
         orderBy: { createdAt: 'desc' },
-        select: REFERRAL_VIEW_SELECT,
+        select: CACHED_REFERRAL_SELECT,
       });
-      return rows.map(toReferralView);
+      return rows.map(toDataReferral);
     } catch (error) {
       throw this.toRepositoryException(
         error,
-        'findReferralViewsByClinicId',
+        'findReferralsByClinicId',
         REPOSITORY_ERROR.DATABASE_QUERY_FAILED,
       );
     }
   }
 
-  public async findReferralViewsByIds(
+  public async findManyReferralsByIds(
     referralIds: string[],
-  ): Promise<ReferralView[]> {
+  ): Promise<ReferralData[]> {
     try {
       if (referralIds.length === 0) {
         return [];
@@ -185,29 +181,29 @@ export class PrismaReferralRepository implements ReferralRepositoryPort {
       const rows = await this.prisma.referral.findMany({
         where: { id: { in: referralIds } },
         orderBy: { createdAt: 'desc' },
-        select: REFERRAL_VIEW_SELECT,
+        select: CACHED_REFERRAL_SELECT,
       });
-      return rows.map(toReferralView);
+      return rows.map(toDataReferral);
     } catch (error) {
       throw this.toRepositoryException(
         error,
-        'findReferralViewsByIds',
+        'findManyReferralsByIds',
         REPOSITORY_ERROR.DATABASE_QUERY_FAILED,
       );
     }
   }
 
-  public async findAllReferralViews(): Promise<ReferralView[]> {
+  public async findAllReferrals(): Promise<ReferralData[]> {
     try {
       const rows = await this.prisma.referral.findMany({
         orderBy: { createdAt: 'desc' },
-        select: REFERRAL_VIEW_SELECT,
+        select: CACHED_REFERRAL_SELECT,
       });
-      return rows.map(toReferralView);
+      return rows.map(toDataReferral);
     } catch (error) {
       throw this.toRepositoryException(
         error,
-        'findAllReferralViews',
+        'findAllReferrals',
         REPOSITORY_ERROR.DATABASE_QUERY_FAILED,
       );
     }
@@ -236,7 +232,7 @@ export class PrismaReferralRepository implements ReferralRepositoryPort {
  * warm-up at once. The nested `extractionSchema` join is what supplies the
  * dashboard's schema label (title, with `v{n}` as fallback).
  */
-const REFERRAL_VIEW_SELECT = {
+const CACHED_REFERRAL_SELECT = {
   id: true,
   clinicId: true,
   fileName: true,
@@ -249,20 +245,6 @@ const REFERRAL_VIEW_SELECT = {
   updatedAt: true,
   extractionSchema: { select: { version: true, title: true } },
 } as const;
-
-interface ReferralViewRow {
-  id: string;
-  clinicId: string;
-  fileName: string;
-  patientName: string | null;
-  status: string;
-  extractionSchemaId: string | null;
-  errorMessage: string | null;
-  extractedPayload: Prisma.JsonValue;
-  createdAt: Date;
-  updatedAt: Date;
-  extractionSchema: { version: number; title: string | null } | null;
-}
 
 /**
  * The `extractedPayload` JSONB column only ever holds the exact
@@ -278,7 +260,7 @@ function toExtractedFieldViews(raw: Prisma.JsonValue): ExtractedFieldView[] {
   return raw as unknown as ExtractedFieldView[];
 }
 
-function toReferralView(row: ReferralViewRow): ReferralView {
+function toDataReferral(row: CachedReferralRow): ReferralData {
   return {
     id: row.id,
     clinicId: row.clinicId,
@@ -294,5 +276,8 @@ function toReferralView(row: ReferralViewRow): ReferralView {
     // Redis and must survive the round-trip unchanged.
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    // The DB join carries only version/title (for the dashboard label); the
+    // full schema payload is populated from the cache, never here.
+    extractionSchema: null,
   };
 }

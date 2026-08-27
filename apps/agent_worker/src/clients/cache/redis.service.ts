@@ -17,6 +17,15 @@ const CLINIC_INDEX_TTL_SECONDS = 10 * 60;
 
 export interface ReferralMetadataFromCache {
   fileName: string;
+  /** The resolved schema id, when the referral has a custom schema. */
+  extractionSchemaId: string | null;
+  extractionSchema: CachedExtractionSchema | null;
+}
+
+/** The flat `referral:{id}` object written by workbench-api (referral projection + schema). */
+interface CachedReferralFromCache {
+  fileName: string;
+  extractionSchemaId: string | null;
   extractionSchema: CachedExtractionSchema | null;
 }
 
@@ -36,15 +45,20 @@ export class RedisService {
   public async getReferralMetadata(
     referralId: string,
   ): Promise<ReferralMetadataFromCache | null> {
-    const raw = await this.client.hgetall(`${REFERRAL_KEY_PREFIX}${referralId}`);
-    if (!raw || !raw.fileName) {
+    // The API caches the referral as ONE flat JSON object (`CachedReferral`,
+    // which is the referral projection plus the resolved schema payload).
+    const raw = await this.client.get(`${REFERRAL_KEY_PREFIX}${referralId}`);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw) as CachedReferralFromCache;
+    if (!parsed || !parsed.fileName) {
       return null;
     }
     return {
-      fileName: raw.fileName,
-      extractionSchema: raw.extractionSchema
-        ? (JSON.parse(raw.extractionSchema) as CachedExtractionSchema)
-        : null,
+      fileName: parsed.fileName,
+      extractionSchemaId: parsed.extractionSchemaId ?? null,
+      extractionSchema: parsed.extractionSchema ?? null,
     };
   }
 

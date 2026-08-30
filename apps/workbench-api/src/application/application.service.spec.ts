@@ -18,7 +18,11 @@ import type {
 import { ReferralRepositoryPort } from './ports/referral-repository.port';
 import { StoragePort } from './ports/storage.port';
 import { Clinic } from '../domain/clinic/clinic.aggregate';
-import type { CachedClinic, CachedReferral } from './types';
+import type {
+  CachedClinic,
+  CachedReferral,
+  ReferralStatusUpdateEvent,
+} from './types';
 
 const TEST_BUCKET_NAME = 'referral-workbench';
 
@@ -107,6 +111,7 @@ describe('ApplicationService.createNewReferralsWithAttachedPresignedUrls', () =>
 
     const referralRepository: ReferralRepositoryPort = {
       findReferralById: jest.fn(),
+      saveReferral: jest.fn(),
       saveReferrals: jest.fn((referrals) => Promise.resolve(referrals)),
       deleteReferralsByIds: jest.fn().mockResolvedValue(undefined),
       findReferralsByClinicId: jest.fn().mockResolvedValue([]),
@@ -445,6 +450,7 @@ describe('ApplicationService.listClinicReferrals', () => {
 
     const referralRepository: ReferralRepositoryPort = {
       findReferralById: jest.fn(),
+      saveReferral: jest.fn(),
       saveReferrals: jest.fn(),
       deleteReferralsByIds: jest.fn().mockResolvedValue(undefined),
       findReferralsByClinicId: jest.fn().mockResolvedValue([]),
@@ -640,6 +646,7 @@ describe('ApplicationService.getClinicReferral', () => {
 
     const referralRepository: ReferralRepositoryPort = {
       findReferralById: jest.fn(),
+      saveReferral: jest.fn(),
       saveReferrals: jest.fn(),
       deleteReferralsByIds: jest.fn().mockResolvedValue(undefined),
       findReferralsByClinicId: jest.fn().mockResolvedValue([]),
@@ -805,6 +812,7 @@ describe('ApplicationService.observeClinicReferralChanges', () => {
 
     const referralRepository: ReferralRepositoryPort = {
       findReferralById: jest.fn(),
+      saveReferral: jest.fn(),
       saveReferrals: jest.fn(),
       deleteReferralsByIds: jest.fn().mockResolvedValue(undefined),
       findReferralsByClinicId: jest.fn().mockResolvedValue([]),
@@ -972,5 +980,237 @@ describe('ApplicationService.observeClinicReferralChanges', () => {
     notifications$.complete();
 
     expect(await results$).toEqual([buildServedView(ownView)]);
+  });
+});
+
+describe('ApplicationService.applyReferralStatusUpdate', () => {
+  const clinicId = '11111111-1111-1111-1111-111111111111';
+  const otherClinicId = '99999999-9999-9999-9999-999999999999';
+
+  function buildService(overrides?: {
+    referralRepository?: Partial<ReferralRepositoryPort>;
+  }) {
+    const clinicRepository: ClinicRepositoryPort = {
+      findById: jest.fn(),
+      findByUsername: jest.fn(),
+      save: jest.fn(),
+      saveExtractionSchema: jest.fn(),
+      findLatestSchemaVersion: jest.fn(),
+      listExtractionSchemasByClinic: jest.fn(),
+    };
+
+    const referralRepository: ReferralRepositoryPort = {
+      findReferralById: jest.fn().mockResolvedValue(buildView()),
+      saveReferral: jest.fn(),
+      saveReferrals: jest.fn(),
+      deleteReferralsByIds: jest.fn().mockResolvedValue(undefined),
+      findReferralsByClinicId: jest.fn().mockResolvedValue([]),
+      findManyReferralsByIds: jest.fn().mockResolvedValue([]),
+      findAllReferrals: jest.fn().mockResolvedValue([]),
+      ...overrides?.referralRepository,
+    };
+
+    const cachingService: CachingServicePort = {
+      setCachedReferrals: jest.fn().mockResolvedValue(undefined),
+      getCachedReferral: jest.fn().mockResolvedValue(null),
+      getManyCachedReferrals: jest.fn().mockResolvedValue([]),
+      addReferralIdsToClinicIndex: jest.fn().mockResolvedValue(undefined),
+      getClinicReferralIds: jest.fn().mockResolvedValue(null),
+      getFullClinic: jest.fn().mockResolvedValue(null),
+      setFullClinic: jest.fn().mockResolvedValue(undefined),
+      deleteReferralsToCache: jest.fn().mockResolvedValue(undefined),
+    };
+
+    const service = new ApplicationService(
+      clinicRepository,
+      referralRepository,
+      {} as never,
+      {} as never,
+      buildStorageService(),
+      cachingService,
+      buildReferralNotificationService(),
+    );
+
+    return { service, referralRepository, cachingService };
+  }
+
+  function buildView(overrides?: Partial<CachedReferral>): CachedReferral {
+    return {
+      id: 'referral-1',
+      clinicId: clinicId,
+      fileName: 'a.pdf',
+      patientName: null,
+      status: 'PENDING',
+      extractionSchemaId: null,
+      extractionSchemaVersion: null,
+      extractionSchemaTitle: null,
+      errorMessage: null,
+      extractedPayload: [],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      extractionSchema: null,
+      ...overrides,
+    };
+  }
+
+  function buildEvent(overrides?: {
+    status?: 'PROCESSING' | 'COMPLETED' | 'REJECTED' | 'FAILED';
+  }): ReferralStatusUpdateEvent {
+    return {
+      referralId: 'referral-1',
+      clinicId,
+      status: 'COMPLETED',
+      extractedPayload: [],
+      patientName: null,
+      extractionSchemaId: null,
+      errorMessage: null,
+      extractedAt: '2026-01-01T00:00:00.000Z',
+      ...overrides,
+    };
+  }
+
+  it('rehydrates the aggregate, mutates via updateStatus, persists, and refreshes the cache', async () => {
+    const event = buildEvent();
+    const { service, referralRepository, cachingService } = buildService();
+
+    await service.applyReferralStatusUpdate(event);
+
+    expect(referralRepository.saveReferral).toHaveBeenCalledTimes(1);
+    const saved = jest.mocked(referralRepository.saveReferral).mock.calls[0][0];
+    expect(saved.id).toBe('referral-1');
+    expect(saved.clinicId).toBe(clinicId);
+    expect(saved.status.value).toBe('COMPLETED');
+    // The LISTEN-driven refresh is complemented by an eager cache write here.
+    expect(cachingService.setCachedReferrals).toHaveBeenCalled();
+    expect(cachingService.addReferralIdsToClinicIndex).toHaveBeenCalledWith(
+      clinicId,
+      ['referral-1'],
+    );
+  });
+
+  it('serves the aggregate from the cache and skips the repository fetch on a hit', async () => {
+    const { service, referralRepository, cachingService } = buildService({
+      // If the initial fetch went to the repository it would resolve null and
+      // the use case would no-op — so a save proves the cache was the source.
+      referralRepository: {
+        findReferralById: jest.fn().mockResolvedValue(null),
+      },
+    });
+
+    jest
+      .mocked(cachingService.getCachedReferral)
+      .mockResolvedValue(buildView({ status: 'PENDING' }));
+
+    await expect(
+      service.applyReferralStatusUpdate(buildEvent()),
+    ).resolves.toBeUndefined();
+
+    expect(referralRepository.saveReferral).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to the repository when the cache misses', async () => {
+    const { service, referralRepository } = buildService();
+    jest
+      .mocked(referralRepository.findReferralById)
+      .mockResolvedValue(buildView({ status: 'PENDING' }));
+
+    await service.applyReferralStatusUpdate(buildEvent());
+
+    expect(referralRepository.findReferralById).toHaveBeenCalledWith(
+      'referral-1',
+    );
+  });
+
+  it('does NOT ack an unknown referral so SQS retries it after the visibility timeout', async () => {
+    const { service, referralRepository } = buildService({
+      referralRepository: {
+        findReferralById: jest.fn().mockResolvedValue(null),
+      },
+    });
+
+    await expect(
+      service.applyReferralStatusUpdate(buildEvent({ status: 'FAILED' })),
+    ).rejects.toThrow(ReferralNotFoundError);
+
+    expect(referralRepository.saveReferral).not.toHaveBeenCalled();
+  });
+
+  it('rejects an event for a referral owned by another clinic', async () => {
+    const { service, referralRepository } = buildService({
+      referralRepository: {
+        findReferralById: jest
+          .fn()
+          .mockResolvedValue(buildView({ clinicId: otherClinicId })),
+      },
+    });
+
+    await expect(
+      service.applyReferralStatusUpdate(buildEvent()),
+    ).rejects.toThrow(ReferralNotFoundError);
+
+    expect(referralRepository.saveReferral).not.toHaveBeenCalled();
+  });
+
+  it('acks a redelivered COMPLETED event as an idempotent no-op', async () => {
+    const { service, referralRepository } = buildService({
+      referralRepository: {
+        findReferralById: jest
+          .fn()
+          .mockResolvedValue(buildView({ status: 'COMPLETED' })),
+      },
+    });
+
+    await expect(
+      service.applyReferralStatusUpdate(buildEvent({ status: 'COMPLETED' })),
+    ).resolves.toBeUndefined();
+
+    expect(referralRepository.saveReferral).not.toHaveBeenCalled();
+  });
+
+  it('moves an AWAITING_UPLOAD referral to PROCESSING on a PROCESSING event', async () => {
+    const { service, referralRepository } = buildService({
+      referralRepository: {
+        findReferralById: jest
+          .fn()
+          .mockResolvedValue(buildView({ status: 'AWAITING_UPLOAD' })),
+      },
+    });
+
+    await service.applyReferralStatusUpdate(
+      buildEvent({ status: 'PROCESSING' }),
+    );
+
+    expect(referralRepository.saveReferral).toHaveBeenCalledTimes(1);
+    const saved = jest.mocked(referralRepository.saveReferral).mock.calls[0][0];
+    expect(saved.status.value).toBe('PROCESSING');
+  });
+
+  it('acks a redelivered PROCESSING event on an already-PROCESSING referral', async () => {
+    const { service, referralRepository } = buildService({
+      referralRepository: {
+        findReferralById: jest
+          .fn()
+          .mockResolvedValue(buildView({ status: 'PROCESSING' })),
+      },
+    });
+
+    await expect(
+      service.applyReferralStatusUpdate(buildEvent({ status: 'PROCESSING' })),
+    ).resolves.toBeUndefined();
+
+    expect(referralRepository.saveReferral).not.toHaveBeenCalled();
+  });
+
+  it('lets the aggregate reject an unknown status', async () => {
+    const { service, referralRepository } = buildService();
+
+    await expect(
+      service.applyReferralStatusUpdate({
+        ...buildEvent(),
+        status: 'BOGUS' as unknown as ReferralStatusUpdateEvent['status'],
+      }),
+    ).rejects.toThrow();
+
+    expect(referralRepository.saveReferral).not.toHaveBeenCalled();
   });
 });

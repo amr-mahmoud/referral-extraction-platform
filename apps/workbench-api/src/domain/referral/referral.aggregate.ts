@@ -4,10 +4,14 @@ import { ExtractedField } from './extracted-field.value-object';
 import {
   ReferralCorrectionNotAllowedError,
   ReferralFileNameError,
+  ReferralNotFoundError,
   ReferralSchemaAlreadyFixedError,
   ReferralValidationError,
 } from './referral.errors';
-import { ReferralStatus } from './referral-status.value-object';
+import {
+  InvalidReferralStatusTransitionError,
+  ReferralStatus,
+} from './referral-status.value-object';
 import type { ReferralCreateProps } from './types';
 import { ReferralStatusValue } from './types';
 
@@ -32,10 +36,10 @@ export class Referral {
   public readonly id: string;
   public readonly clinicId: string;
   public readonly fileName: string;
-  public readonly patientName: string | null;
 
   public readonly createdAt: Date;
 
+  private _patientName: string | null;
   private _extractionSchemaId: string | null;
   private _status: ReferralStatus;
   private _extractedPayload: ExtractedField[];
@@ -62,7 +66,7 @@ export class Referral {
     this.id =
       id !== undefined && id !== null ? this.validateId(id) : this.generateId();
     this.fileName = this.validateFileName(fileName);
-    this.patientName = this.validatePatientName(patientName);
+    this._patientName = this.validatePatientName(patientName);
 
     this._extractionSchemaId = extractionSchemaId ?? null;
     this._status =
@@ -105,6 +109,18 @@ export class Referral {
 
   public get status(): ReferralStatus {
     return this._status;
+  }
+
+  public get patientName(): string | null {
+    return this._patientName;
+  }
+
+  /** COMPLETED/REJECTED are final; FAILED is retryable and deliberately excluded. */
+  public get isInTerminalState(): boolean {
+    return (
+      this._status.value === ReferralStatusValue.COMPLETED ||
+      this._status.value === ReferralStatusValue.REJECTED
+    );
   }
 
   public get extractionSchemaId(): string | null {
@@ -166,6 +182,57 @@ export class Referral {
   public readonly fail = (errorMessage: string): void => {
     this._transitionTo(ReferralStatusValue.FAILED);
     this._errorMessage = errorMessage;
+  };
+
+  /**
+   * Worker-result mutation (design: the worker publishes results via the
+   * status-update queue; the workbench owns every DB write). Validates the
+   * target is a terminal worker status and the transition is legal from the
+   * current state, then applies the payload/patientName (COMPLETED) or error
+   * (REJECTED/FAILED). COMPLETED/REJECTED rows reject any further update —
+   * the use case treats a redelivered event as a no-op by checking
+   * `isInTerminalState` before calling.
+   */
+  public readonly updateStatus = (
+    status: ReferralStatusValue,
+    extractedPayload: ExtractedField[],
+    patientName: string | null,
+    errorMessage: string | null,
+  ): void => {
+    if (
+      status !== ReferralStatusValue.COMPLETED &&
+      status !== ReferralStatusValue.REJECTED &&
+      status !== ReferralStatusValue.FAILED
+    ) {
+      throw new ReferralValidationError(
+        `'${String(status)}' is not a terminal worker status`,
+      );
+    }
+    if (this.isInTerminalState) {
+      throw new InvalidReferralStatusTransitionError(
+        this._status.value,
+        status,
+      );
+    }
+
+    this._transitionTo(status);
+
+    if (status === ReferralStatusValue.COMPLETED) {
+      this._extractedPayload = extractedPayload;
+      this._patientName = this.validatePatientName(patientName);
+      this._errorMessage = null;
+    } else {
+      // REJECTED / FAILED — persist the rejection or failure reason.
+      this._errorMessage = errorMessage;
+    }
+  };
+
+  /** Tenant guard — a referral may only be mutated by its owning clinic. */
+  public readonly assertBelongsToClinic = (clinicId: string): void => {
+    if (this.clinicId !== clinicId) {
+      // Don't leak whether a foreign referral exists.
+      throw new ReferralNotFoundError(this.id);
+    }
   };
 
   public readonly applyCorrection = (

@@ -10,10 +10,14 @@ import {
 import { ExtractionSchemaNotFoundError } from '../domain/extraction-schema/extraction-schema.errors';
 import { ExtractionSchema } from '../domain/extraction-schema/extraction-schema.aggregate';
 import { Referral } from '../domain/referral/referral.aggregate';
+import { BoundingBox } from '../domain/referral/bounding-box.value-object';
+import { ExtractedField } from '../domain/referral/extracted-field.value-object';
 import {
   ReferralNotFoundError,
   ReferralValidationError,
 } from '../domain/referral/referral.errors';
+import { ReferralStatus } from '../domain/referral/referral-status.value-object';
+import { ReferralStatusValue } from '../domain/referral/types';
 import { translateError } from './errors/application.exception';
 import {
   CACHING_SERVICE_PORT,
@@ -44,8 +48,11 @@ import type {
   CachingNewReferralsDataCommand,
   CreateExtractionSchemaCommand,
   CreateNewReferralsWithAttachedPresignedUrlsCommand,
+  ExtractedFieldView,
   LoginCommand,
+  ReferralData,
   ReferralListItem,
+  ReferralStatusUpdateEvent,
   ReferralWithPresignedUpload,
   SignupCommand,
 } from './types';
@@ -507,6 +514,45 @@ export class ApplicationService {
   }
 
   /**
+   * Rehydrates the `Referral` aggregate from its persisted read-model
+   * projection — construction re-validates identity, status, and every value
+   * object, so a row can never be mutated through a malformed shell.
+   */
+  private toReferralAggregateFromData(data: ReferralData): Referral {
+    return new Referral({
+      id: data.id,
+      clinicId: data.clinicId,
+      fileName: data.fileName,
+      patientName: data.patientName,
+      extractionSchemaId: data.extractionSchemaId,
+      status: ReferralStatus.from(data.status),
+      extractedPayload: data.extractedPayload.map((field) =>
+        this.toExtractedField(field),
+      ),
+      errorMessage: data.errorMessage,
+      createdAt: new Date(data.createdAt),
+      updatedAt: new Date(data.updatedAt),
+    });
+  }
+
+  private toExtractedField(view: ExtractedFieldView): ExtractedField {
+    return new ExtractedField(
+      view.key,
+      view.label,
+      view.value,
+      view.pageNumber,
+      view.boundingBox
+        ? new BoundingBox(
+            view.boundingBox.xmin,
+            view.boundingBox.ymin,
+            view.boundingBox.xmax,
+            view.boundingBox.ymax,
+          )
+        : null,
+    );
+  }
+
+  /**
    * Design-doc step 10. Cache-aside over the per-clinic secondary index:
    *
    *   1. `SMEMBERS clinic:{id}:referrals` for the id set.
@@ -608,6 +654,92 @@ export class ApplicationService {
       return served;
     } catch (error) {
       translateError(error, 'getClinicReferral');
+    }
+  }
+
+  /**
+   * Applies a worker result event (design: the worker publishes results to
+   * the status-update queue and never writes Postgres). Strict DDD
+   * 4-step lifecycle:
+   *
+   *   1. Fetch the aggregate root via the read-model query.
+   *   2. Rehydrate the `Referral` aggregate from its projection (value objects
+   *      re-validated in construction).
+   *   3. Mutate exclusively through domain methods — `assertBelongsToClinic`
+   *      enforces tenant isolation, `isInTerminalState` makes a redelivered
+   *      event an idempotent no-op, and `updateStatus` owns the transition +
+   *      payload/error semantics.
+   *   4. Persist the mutated aggregate via `saveReferral`.
+   *
+   * The Postgres trigger fires LISTEN/NOTIFY on the change, driving the SSE
+   * push, so this write is the notification source. The transport that
+   * delivered the event is irrelevant here; the queue adapter calls this use
+   * case.
+   */
+
+  /**
+   * Reads a referral's read-model projection cache-first (Redis), falling back
+   * to Postgres on a miss or cache degradation. Returns `null` only when the
+   * referral does not exist anywhere.
+   */
+  private async readDataFromCacheWithFallback(
+    referralId: string,
+  ): Promise<ReferralData | null> {
+    const referralFromCache =
+      await this.readCachedReferralTolerantly(referralId);
+    const referralData =
+      referralFromCache ??
+      (await this.referralRepository.findReferralById(referralId));
+    return referralData;
+  }
+
+  public async applyReferralStatusUpdate(
+    event: ReferralStatusUpdateEvent,
+  ): Promise<void> {
+    try {
+      const referralData = await this.readDataFromCacheWithFallback(
+        event.referralId,
+      );
+      if (!referralData) {
+        // Deliberately NOT acked: the referral may not be visible yet (eventual
+        // consistency), so throw and let SQS redeliver after the visibility
+        // timeout instead of losing the result permanently.
+        throw new ReferralNotFoundError(event.referralId);
+      }
+
+      const referral = this.toReferralAggregateFromData(referralData);
+
+      // 3. Mutate via domain methods.
+      referral.assertBelongsToClinic(event.clinicId);
+      const targetStatus = ReferralStatusValue[event.status];
+      if (
+        referral.isInTerminalState ||
+        referral.status.value === targetStatus
+      ) {
+        // Redelivered event — already applied, ack as a no-op rather than
+        // redelivering forever.
+        return;
+      }
+      if (event.status === 'PROCESSING') {
+        referral.startProcessing();
+      } else {
+        referral.updateStatus(
+          targetStatus,
+          event.extractedPayload.map((field) => this.toExtractedField(field)),
+          event.patientName,
+          event.errorMessage,
+        );
+      }
+
+      // 4. Persist the mutated aggregate.
+      await this.referralRepository.saveReferral(referral);
+
+      // 5. Refresh the cached read-model projection (view + clinic index) so a
+      //    cold LISTEN or an immediate client read sees the terminal state
+      //    even if the NOTIFY handler lags (the merge preserves the schema).
+      await this.refreshReferralCache(event.referralId);
+    } catch (error) {
+      translateError(error, 'applyReferralStatusUpdate');
     }
   }
 

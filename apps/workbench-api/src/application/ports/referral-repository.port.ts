@@ -6,6 +6,8 @@ export const REFERRAL_REPOSITORY_PORT = 'REFERRAL_REPOSITORY_PORT';
 export interface ReferralRepositoryPort {
   /** Single-referral read-model query — the cache-aside fallback for one id. */
   findReferralById(id: string): Promise<ReferralData | null>;
+  /** Persists one aggregate (upsert) — used by the worker-result write path. */
+  saveReferral(referral: Referral): Promise<Referral>;
   /** Persists all referrals atomically — either every row lands or none do. */
   saveReferrals(referrals: Referral[]): Promise<Referral[]>;
   /**

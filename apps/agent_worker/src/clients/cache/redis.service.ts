@@ -2,18 +2,7 @@ import Redis from 'ioredis';
 import type { CachedExtractionSchema } from '../../types/referral-job.types';
 
 const REFERRAL_KEY_PREFIX = 'referral:';
-const CLINIC_REFERRALS_KEY_PREFIX = 'clinic:';
-const CLINIC_REFERRALS_KEY_SUFFIX = ':referrals';
-
-// Must match workbench-api's RedisService CLINIC_INDEX_TTL_SECONDS — both
-// sides write the same clinic:{id}:referrals SET. If this SADD lands after
-// the API's index has expired, a plain SADD with no TTL would silently
-// recreate the key containing ONLY this one referral id, and the API's
-// cache-aside read would then wrongly trust that partial key as "the whole
-// clinic index" until it separately expired on its own. Applying the same
-// TTL here bounds that incorrect state to the same self-healing window
-// instead of letting it persist indefinitely.
-const CLINIC_INDEX_TTL_SECONDS = 10 * 60;
+const REFERRAL_CLAIM_KEY_PREFIX = 'referral-claim:';
 
 export interface ReferralMetadataFromCache {
   fileName: string;
@@ -62,16 +51,33 @@ export class RedisService {
     };
   }
 
-  public async indexReferralForClinic(
-    clinicId: string,
+  /**
+   * Atomically claims a referral for this worker via a TTL'd distributed-lock
+   * key (`SET NX EX`). `NX` makes concurrent workers racing on the same
+   * referral resolve to a single winner; `EX` guarantees a worker that dies
+   * mid-extraction releases the claim when the TTL lapses, so the upload
+   * message's redelivery can re-drive the job. Must be released on the
+   * success AND failure paths for prompt retries (the TTL is only the crash
+   * safety net).
+   */
+  public async tryClaimReferral(
     referralId: string,
-  ): Promise<void> {
-    const key = `${CLINIC_REFERRALS_KEY_PREFIX}${clinicId}${CLINIC_REFERRALS_KEY_SUFFIX}`;
-    await this.client
-      .multi()
-      .sadd(key, referralId)
-      .expire(key, CLINIC_INDEX_TTL_SECONDS)
-      .exec();
+    ttlSeconds: number,
+    workerId: string,
+  ): Promise<boolean> {
+    const result = await this.client.set(
+      `${REFERRAL_CLAIM_KEY_PREFIX}${referralId}`,
+      workerId,
+      'EX',
+      ttlSeconds,
+      'NX',
+    );
+    return result === 'OK';
+  }
+
+  /** Releases the claim so a failed/duplicate delivery can be retried promptly. */
+  public async releaseReferralClaim(referralId: string): Promise<void> {
+    await this.client.del(`${REFERRAL_CLAIM_KEY_PREFIX}${referralId}`);
   }
 
   public async disconnect(): Promise<void> {

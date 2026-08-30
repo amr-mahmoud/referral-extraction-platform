@@ -73,6 +73,26 @@ export class PrismaReferralRepository implements ReferralRepositoryPort {
       );
     }
   }
+  rev;
+  public async saveReferral(referral: Referral): Promise<Referral> {
+    try {
+      const data = ReferralMapper.toPersistence(referral);
+
+      const row = await this.prisma.referral.upsert({
+        where: { id: data.id },
+        create: data,
+        update: data,
+      });
+
+      return ReferralMapper.toDomain(row);
+    } catch (error) {
+      throw this.toRepositoryException(
+        error,
+        'saveReferral',
+        REPOSITORY_ERROR.DATABASE_WRITE_FAILED,
+      );
+    }
+  }
 
   public async findReferralsByClinicId(
     clinicId: string,
@@ -165,7 +185,9 @@ const CACHED_REFERRAL_SELECT = {
   extractedPayload: true,
   createdAt: true,
   updatedAt: true,
-  extractionSchema: { select: { version: true, title: true } },
+  extractionSchema: {
+    select: { id: true, version: true, title: true, schemaDefinition: true },
+  },
 } as const;
 
 /**
@@ -198,8 +220,33 @@ function toDataReferral(row: CachedReferralRow): ReferralData {
     // Redis and must survive the round-trip unchanged.
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
-    // The DB join carries only version/title (for the dashboard label); the
-    // full schema payload is populated from the cache, never here.
-    extractionSchema: null,
+    // The join carries the FULL schema payload (not just version/title) so a
+    // cold cache / warm-up backfill populates `referral:{id}.extractionSchema`
+    // and the worker can resolve a saved schema without any DB access.
+    extractionSchema: row.extractionSchema
+      ? {
+          id: row.extractionSchema.id,
+          version: row.extractionSchema.version,
+          title:
+            row.extractionSchema.title ??
+            `Custom schema v${row.extractionSchema.version}`,
+          schemaDefinition: toSchemaDefinition(
+            row.extractionSchema.schemaDefinition,
+          ),
+        }
+      : null,
   };
+}
+
+function toSchemaDefinition(
+  raw: Prisma.JsonValue,
+): { key: string; label: string; description: string }[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw as unknown as {
+    key: string;
+    label: string;
+    description: string;
+  }[];
 }

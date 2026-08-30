@@ -821,6 +821,31 @@ This document serves as the centralized commit history and decision log for the 
 - **Modified:** `apps/agent_worker/**/*`, `apps/workbench-api/src/application/**/*`, `apps/workbench-api/src/infrastructure/repository/**/*`, `.env.example`, `docker-compose.yml`, `docs/commit-log.md`
 - **Impact:** Continuous sustained throughput on multi-file uploads; robust transient error recovery on Gemini API calls; clean repository contracts with 110 passing unit tests.
 
+---
+
+## v0.0.40 | 2026-08-30 | feat | ASYNC WORKER DECOUPLING & SQS STATUS QUEUE
+
+**Category:** System Architecture  
+**Summary:** Completely decouple Agent Worker from Postgres via Redis distributed locks and SQS status-update publishing, and implement SQS ingestion queue consumer in Workbench API.  
+**SuggestedCommitMessage:** feat: decouple agent worker from Postgres via SQS status queue and Redis distributed locking | System Architecture
+
+### 🧠 Logic & Decisions
+
+- **The Why:**
+  - **Single Source of Truth & Zero-DB Worker:** Previously, `agent_worker` connected directly to Postgres via Prisma to claim and write extraction results, violating microservice bounded contexts and competing for connection pool slots.
+  - **Asynchronous Status Updates via SQS:** Replaced direct DB writes with an outbound SQS publisher (`SqsStatusUpdatePublisher`). Worker publishes terminal status events (`COMPLETED`, `REJECTED`, `FAILED`) to a dedicated status-update queue upon extraction completion.
+  - **In-Memory Claim Deduplication (Redis Lock):** Replaced database `claimReferral` with atomic `tryAcquireClaimLock` in `RedisService` (`SET lock:claim:{id} NX EX 300`), providing sub-millisecond deduplication with automatic TTL recovery on worker crashes.
+  - **Workbench API Ingestion Port (`QueueServicePort` & `SqsService`):** Introduced `QueueServicePort` and `SqsService` in `workbench-api` to continuously consume worker result messages and invoke `ApplicationService.applyReferralStatusUpdate`.
+  - **Conditional Idempotent DB Transitions:** Implemented `applyTerminalStatusUpdate` in `PrismaReferralRepository` with status guards (`status: { notIn: ['COMPLETED', 'REJECTED'] }`), ensuring redelivered completion events act as idempotent no-ops while permitting retried `FAILED` jobs to land on `COMPLETED`.
+  - **Unit Test Suite:** Added test suite in `application.service.spec.ts` verifying rehydration, persistence, cache backfilling, foreign clinic rejection, and redelivered event idempotency.
+- **State Change:** `workbench-api` is the exclusive owner and writer of Postgres; `agent_worker` is a purely stateless compute engine holding zero database credentials.
+
+### 🔗 Dependencies
+
+- **Modified:** `apps/agent_worker/**/*`, `apps/workbench-api/src/application/**/*`, `apps/workbench-api/src/infrastructure/**/*`, `apps/workbench-api/src/domain/**/*`, `apps/workbench-api/src/interface/**/*`, `docs/commit-log.md`
+- **Impact:** 115 passing unit tests; eliminates shared DB connections between API and worker; worker can scale to arbitrary concurrency without DB contention.
+
+
 
 
 

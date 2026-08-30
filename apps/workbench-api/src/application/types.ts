@@ -7,6 +7,44 @@ import type { ClinicInputProps } from '../domain/clinic/types';
 
 // ── Referral projection (the canonical cached/served shape) ─────────────
 
+/** Every status a worker result can carry — PROCESSING first, then a terminal state. */
+export const WORKER_REFERRAL_STATUSES = [
+  'PROCESSING',
+  'COMPLETED',
+  'REJECTED',
+  'FAILED',
+] as const;
+
+export type WorkerReferralStatus = (typeof WORKER_REFERRAL_STATUSES)[number];
+
+/** The terminal states a worker result can apply. FAILED stays retryable (see repository port). */
+export const TERMINAL_REFERRAL_STATUSES = [
+  'COMPLETED',
+  'REJECTED',
+  'FAILED',
+] as const;
+
+export type ReferralTerminalStatus =
+  (typeof TERMINAL_REFERRAL_STATUSES)[number];
+
+/**
+ * A worker result event, delivered via the status-update queue. The worker
+ * publishes a `PROCESSING` event on claim and exactly one terminal event
+ * after. The transport adapter parses the message into this shape; the
+ * ApplicationService validates and applies it via the domain (startProcessing
+ * for PROCESSING, updateStatus for the terminal states).
+ */
+export interface ReferralStatusUpdateEvent {
+  referralId: string;
+  clinicId: string;
+  status: WorkerReferralStatus;
+  extractedPayload: ExtractedFieldView[];
+  patientName: string | null;
+  extractionSchemaId: string | null;
+  errorMessage: string | null;
+  extractedAt: string;
+}
+
 /**
  * One extracted field as carried in a referral projection. Every field is a
  * primitive so the projection round-trips through `JSON.stringify` into Redis

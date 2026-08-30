@@ -32,18 +32,29 @@ const ALLOWED_TRANSITIONS: Record<
     ReferralStatusValue.PENDING,
     ReferralStatusValue.PROCESSING,
     ReferralStatusValue.FAILED,
+    ReferralStatusValue.COMPLETED,
+    ReferralStatusValue.REJECTED,
   ],
   [ReferralStatusValue.PENDING]: [
     ReferralStatusValue.PROCESSING,
     ReferralStatusValue.FAILED,
+    ReferralStatusValue.COMPLETED,
+    ReferralStatusValue.REJECTED,
   ],
   [ReferralStatusValue.PROCESSING]: [
     ReferralStatusValue.COMPLETED,
     ReferralStatusValue.FAILED,
     ReferralStatusValue.REJECTED,
   ],
+  // FAILED is retryable: a re-processed job moves back to PROCESSING and then
+  // lands on any terminal state.
+  [ReferralStatusValue.FAILED]: [
+    ReferralStatusValue.PROCESSING,
+    ReferralStatusValue.COMPLETED,
+    ReferralStatusValue.REJECTED,
+    ReferralStatusValue.FAILED,
+  ],
   [ReferralStatusValue.COMPLETED]: [],
-  [ReferralStatusValue.FAILED]: [],
   [ReferralStatusValue.REJECTED]: [],
 };
 

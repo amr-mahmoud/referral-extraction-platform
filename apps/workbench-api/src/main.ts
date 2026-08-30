@@ -1,3 +1,5 @@
+import { resolve } from 'path';
+import { config as loadDotEnvFromFile } from 'dotenv';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -6,6 +8,12 @@ import type { Response } from 'express';
 import { AppModule } from './app.module';
 import { ApplicationService } from './application/application.service';
 import { AllExceptionFilter } from './infrastructure/filters/all-exception.filter';
+
+// The workspace script runs with cwd = apps/workbench-api, but the single
+// `.env` lives at the repo root. Resolve it from this file's location (src or
+// dist both sit three levels under the root) so local dev matches the Docker
+// env_file behavior. Never overrides variables already in process.env.
+loadDotEnvFromFile({ path: resolve(__dirname, '../../../.env') });
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);

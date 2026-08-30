@@ -1,8 +1,9 @@
+import { randomUUID } from 'crypto';
 import { GeminiClient } from './clients/ai/gemini-client.service';
 import { S3StorageService } from './clients/aws/s3.service';
 import { SqsConsumerService } from './clients/aws/sqs-consumer.service';
+import { SqsStatusUpdatePublisher } from './clients/aws/sqs-status-update-publisher.service';
 import { RedisService } from './clients/cache/redis.service';
-import { PrismaService } from './clients/database/prisma.service';
 import { loadWorkerEnvConfig } from './config/env.config';
 import { ReferralExtractionService } from './extraction/referral-extraction.service';
 import { createHealthcheckServer } from './server/healthcheck';
@@ -10,12 +11,22 @@ import { createHealthcheckServer } from './server/healthcheck';
 async function main(): Promise<void> {
   const env = loadWorkerEnvConfig();
 
-  const prisma = new PrismaService(env.DATABASE_URL);
   const redis = new RedisService(env.REDIS_URL);
   const s3 = new S3StorageService(env.AWS_REGION);
   const gemini = new GeminiClient(env.GEMINI_API_KEY, env.GEMINI_MODEL);
+  const statusUpdatePublisher = new SqsStatusUpdatePublisher(
+    env.AWS_REGION,
+    env.SQS_STATUS_UPDATE_URL,
+  );
 
-  const extractionService = new ReferralExtractionService(prisma, redis, s3, gemini);
+  const extractionService = new ReferralExtractionService(
+    redis,
+    s3,
+    gemini,
+    statusUpdatePublisher,
+    env.REFERRAL_CLAIM_TTL_SECONDS,
+    `${randomUUID()}`,
+  );
 
   const consumer = new SqsConsumerService({
     region: env.AWS_REGION,
@@ -44,7 +55,6 @@ async function main(): Promise<void> {
       );
     }
     healthcheck.close();
-    await prisma.disconnect();
     await redis.disconnect();
     process.exit(0);
   };

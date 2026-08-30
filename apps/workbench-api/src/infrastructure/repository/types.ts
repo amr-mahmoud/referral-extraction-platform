@@ -26,5 +26,10 @@ export interface CachedReferralRow {
   extractedPayload: Prisma.JsonValue;
   createdAt: Date;
   updatedAt: Date;
-  extractionSchema: { version: number; title: string | null } | null;
+  extractionSchema: {
+    id: string;
+    version: number;
+    title: string | null;
+    schemaDefinition: Prisma.JsonValue;
+  } | null;
 }

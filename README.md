@@ -1,6 +1,6 @@
 # Plena Referral Extraction Platform
 
-A high-throughput medical referral extraction workbench. Ingests medical referral PDFs, extracts structured clinical data using **Gemini 2.5 Flash** with **spatial bounding-box grounding**, and streams live updates into a **Next.js** review interface.
+A high-throughput medical referral extraction workbench. Ingests medical referral PDFs, extracts structured clinical data using **Gemini** with **spatial bounding-box grounding**, and streams live updates into a **Next.js** review interface.
 
 ---
 
@@ -76,20 +76,29 @@ docker compose down  # Stops Postgres & Redis containers
 ## 🏗️ Architecture & Apps
 
 ```text
-Browser / Next.js UI ──(Direct S3 PUT)──▶ AWS S3 ──(Event)──▶ AWS SQS
-                                                                │
-                                                        Worker Daemon (Gemini)
-                                                                │
-Postgres (System of Record) ◀──(LISTEN/NOTIFY)── Workbench API ◀┘
-       │                                              │
-Redis (Cache-Aside Index) ──────────────────────────(SSE)──▶ Real-Time Dashboard
+Browser / Next.js UI ─(Direct S3 PUT)─▶ AWS S3 ─(ObjectCreated)─▶ SQS (upload events)
+                                                                      │
+                                                              Agent Worker
+                                                          (Redis claim, Gemini)
+                                                                      │
+                               publishes PROCESSING / COMPLETED / REJECTED / FAILED
+                                                                      │
+                                                        SQS (status updates)
+                                                                      │
+                                            Workbench API ─(applies DB transition)─▶ Postgres
+                                                 │                                │
+                                                 │◀────────(LISTEN/NOTIFY)─────────┘
+                                                 │
+                                           Redis (cache-aside index) ◀─(SSE)─▶ Real-Time Dashboard
 ```
+
+The Agent Worker is **fully decoupled from the database**: it claims referrals via a TTL'd Redis lock and publishes status events to the status-update SQS queue. The Workbench API is the **only** writer to Postgres — it consumes those events, applies idempotent status transitions, and refreshes the cache. The worker never holds Postgres credentials.
 
 | Application | Directory | Stack | Port | Purpose |
 |---|---|---|---|---|
 | **Web** | `apps/web` | Next.js 16 (App Router), Tailwind CSS, React-PDF | `3000` | Review interface, direct-to-S3 uploads, spatial bounding boxes |
-| **Workbench API** | `apps/workbench-api` | NestJS, Prisma, Redis, PostgreSQL | `8001` | Multi-tenant auth, schemas, presigned URLs, SSE stream |
-| **Agent Worker** | `apps/agent_worker` | Node.js, TypeScript, Gemini 2.5 Flash, AWS SQS | `8002` | Async queue processor, AI extraction, and spatial grounding |
+| **Workbench API** | `apps/workbench-api` | NestJS, Prisma, Redis, PostgreSQL, AWS SQS | `8001` | Multi-tenant auth, schemas, presigned URLs, SSE stream, status-update queue consumer |
+| **Agent Worker** | `apps/agent_worker` | Node.js, TypeScript, Gemini, AWS SQS | `8002` | Async queue processor, AI extraction, spatial grounding |
 
 ---
 
@@ -99,10 +108,10 @@ Redis (Cache-Aside Index) ──────────────────
 2. **Request Upload Slot**: API resolves schema, records referral as `AWAITING_UPLOAD` in PostgreSQL, and issues a presigned S3 PUT URL.
 3. **Redis Cache-Aside Metadata**: API caches schema & filename in Redis so the worker recovers context in $O(1)$ without database round-trips.
 4. **Direct S3 Upload**: Browser streams PDF bytes directly to AWS S3, bypassing the API to eliminate server bandwidth bottlenecks.
-5. **Queue Trigger**: S3 `ObjectCreated` event pushes a notification with the object key into the AWS SQS queue.
-6. **Pre-Extraction Validation**: Worker consumes SQS job, marks status `PROCESSING`, and validates the PDF before invoking the LLM.
-7. **Gemini Extraction**: Worker sends PDF and schema to Gemini 2.5 Flash, extracting clinical fields and normalized bounding boxes.
-8. **Database Write & Cache Update**: Worker persists payload to Postgres, sets status to `COMPLETED`, and adds referral ID to the clinic's Redis set.
+5. **Queue Trigger**: S3 `ObjectCreated` event pushes a notification with the object key into the AWS SQS upload queue.
+6. **Claim & Signal Processing**: Worker claims the referral via a TTL'd Redis lock, then publishes a `PROCESSING` status event; the Workbench API applies it to Postgres.
+7. **Gemini Extraction**: Worker sends the PDF and resolved schema to Gemini, extracting clinical fields and normalized bounding boxes.
+8. **Status Write-back (queue-driven)**: The worker publishes a terminal result (`COMPLETED` / `REJECTED` / `FAILED` with the payload or reason) to the status-update queue. The Workbench API — the only writer to Postgres — applies the idempotent transition, persists the payload/reason, and refreshes the Redis view cache.
 9. **Real-Time Notification (Notify + Fetch)**: Postgres emits a `LISTEN/NOTIFY` ping; API fetches fresh payload and pushes it over SSE to the browser.
 10. **High-Speed Clinic Lookups**: Dashboard loads referrals instantly from the per-clinic Redis set in $O(1)$ time, bypassing table scans.
 11. **Review UI & Spatial Highlighting**: Next.js displays PDF and fields side-by-side; clicking a field highlights its bounding box on the PDF.
@@ -148,15 +157,17 @@ Redis (Cache-Aside Index) ──────────────────
 
 | Variable | Description | Default |
 |---|---|---|
-| `DATABASE_URL` | PostgreSQL connection string | `postgresql://referral:referral@localhost:5434/referral_extraction` |
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql://referral:referral@localhost:5434/referral_extraction?connection_limit=15` |
 | `REDIS_URL` | Redis connection string | `redis://localhost:6379` |
-| `JWT_SECRET` | JWT signing secret | `dev-jwt-secret-key-change-in-production` |
+| `JWT_SECRET` | JWT signing secret | `plena-dev-secret-change-me` |
 | `AWS_ACCESS_KEY_ID` | AWS IAM Access Key for S3/SQS | — |
 | `AWS_SECRET_ACCESS_KEY` | AWS IAM Secret Key for S3/SQS | — |
-| `S3_BUCKET_NAME` | Target S3 bucket for referral PDFs | — |
+| `S3_BUCKET_NAME` | Target S3 bucket for referral PDFs | `referral-workbench` |
 | `SQS_QUEUE_URL` | AWS SQS Queue URL for upload events | — |
+| `SQS_STATUS_UPDATE_URL` | AWS SQS Queue the worker publishes status results to (consumed by the Workbench API) | — |
+| `REFERRAL_CLAIM_TTL_SECONDS` | Worker's Redis claim-lock TTL — must exceed worst-case extraction time | `600` |
 | `GEMINI_API_KEY` | Google Gemini API Key | — |
-| `GEMINI_MODEL` | Gemini extraction model | `gemini-2.5-flash` |
+| `GEMINI_MODEL` | Gemini extraction model | `gemini-2.0-flash` |
 
 ---
 

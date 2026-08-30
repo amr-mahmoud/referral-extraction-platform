@@ -1,58 +1,67 @@
 # Agent Worker
 
-> Lives at `worker-agent/` in the monorepo, alongside `workbench-api/` (NestJS) and `client/` (Next.js).
+> Lives at `apps/agent_worker/` in the monorepo, alongside `apps/workbench-api` (NestJS) and `apps/web` (Next.js).
 
 ## What this is
 
-The Agent Worker is a standalone TypeScript process — no framework, no HTTP surface — that
-turns a completed S3 upload into a structured, reviewable referral. Its entire lifecycle is:
+The Agent Worker is a standalone TypeScript daemon — no framework, no HTTP surface beyond a
+liveness probe — that turns a completed S3 upload into a structured, reviewable referral. Its
+lifecycle is:
 
-**pull a message → download a PDF → call Gemini → write a row → delete the message.**
+**pull an upload message → claim (Redis) → publish `PROCESSING` → download the PDF → Gemini → publish a terminal result (`COMPLETED` / `REJECTED` / `FAILED`) → delete the upload message.**
 
-It has no routes, no sessions, no knowledge of who's connected to the frontend, and no
-opinion about how results reach the browser. It updates Postgres; the WorkBench API
-(via `LISTEN`/`NOTIFY` and SSE) is what turns that write into something the client sees.
+It has no routes, no sessions, no knowledge of who's connected to the frontend, and no opinion
+about how results reach the browser. Crucially, it **never touches Postgres**: it holds no
+database credentials. The Workbench API is the only writer to the database — the worker
+communicates results by publishing to the status-update SQS queue, and the API applies the
+idempotent DB transition (which in turn fires `LISTEN`/`NOTIFY` → SSE).
 
 ## Why not NestJS or Express
 
-Both are frameworks built around handling inbound HTTP requests — routing, middleware,
-guards, a request/response lifecycle. This service never receives a request; it only makes
-outbound calls (SQS, S3, Gemini, Postgres) in a loop. Adding either would mean bootstrapping
-machinery this component structurally doesn't use. The WorkBench API is deliberately NestJS,
-where that machinery earns its keep — the split is a judgment call about matching the tool
-to what each service actually does, not an oversight of the assignment's "NestJS" stack line.
+Both are frameworks built around handling inbound HTTP requests — routing, middleware, guards,
+a request/response lifecycle. This service never receives a request; it only makes outbound
+calls (SQS, S3, Gemini, Redis) in a loop. Adding either would mean bootstrapping machinery this
+component structurally doesn't use. The Workbench API is deliberately NestJS, where that
+machinery earns its keep.
 
 ## Processing flow
 
-1. Long-poll SQS (`WaitTimeSeconds: 20`) for S3 `ObjectCreated` event notifications.
+1. Long-poll the **upload queue** (`WaitTimeSeconds: 20`) for S3 `ObjectCreated` notifications.
 2. Parse the event to recover `bucket`, `key`, and the `referral_id` embedded in the key
-   (`referrals/{clinic_id}/{referral_id}.pdf`) — no extra DB lookup needed to identify the row.
-3. Set `Referral.status = PROCESSING`.
-4. Run a cheap pre-check: valid PDF, page count and size sane, quick "is this a referral"
-   pass. Fails here → `status = REJECTED`, `error_message` set, message deleted, done.
-5. Download the PDF bytes from S3.
-6. Resolve the extraction schema for this referral: referral-specific override → clinic's
-   `default_extraction_schema_id` → null (LLM default field set). The resolved id is what
-   gets persisted on the referral row — not just whatever was requested at upload time.
-7. Call Gemini 2.5 multimodal with the PDF and the resolved schema, requesting the nested
+   (`referrals/{clinic_id}/{referral_id}.pdf`).
+3. **Claim** the referral with an atomic TTL'd Redis lock (`SET referral-claim:{id} NX EX
+   {ttl}`). If another worker holds the claim, the message is skipped and deleted. The TTL
+   (default 600s, `REFERRAL_CLAIM_TTL_SECONDS`) must exceed worst-case extraction time; it also
+   auto-releases the claim if the worker crashes mid-flight.
+4. Publish a `PROCESSING` status event to the status-update queue (the dashboard shows the job
+   in flight).
+5. Resolve the extraction schema from the cached `referral:{id}` projection written by the
+   Workbench API at creation (referral-specific override → clinic default → null, meaning the
+   default LLM field set). The resolved schema id is carried on the `COMPLETED` event.
+6. Download the PDF bytes from S3 and run a cheap pre-check (valid PDF, sane size). Fails
+   here → publish `REJECTED` with the reason.
+7. Call Gemini with the PDF and the resolved schema, requesting the nested
    `{ value, page_number, bounding_box }` shape per field.
-8. Write `extracted_payload` (JSONB) and `status = COMPLETED` to Postgres.
-9. Delete the SQS message **only after** the DB write succeeds.
-10. On any exception in steps 4–8: write `status = FAILED` with `error_message`, and leave
-    the message alone — SQS's visibility timeout will redeliver it, up to `maxReceiveCount`,
-    after which it lands in the DLQ for manual inspection instead of looping forever.
+8. Publish the terminal event to the status-update queue:
+   - `COMPLETED` with `extractedPayload` + `patientName` + resolved schema id,
+   - `REJECTED` with the reason (content-level rejection, e.g. not a valid referral),
+   - `FAILED` with the error message on any unexpected exception.
+9. Delete the upload message **only after** the terminal publish succeeds. On failure the
+   claim is released and the message redelivers after the SQS visibility timeout (at-least-once
+   end-to-end).
 
-## Status values this service writes
+## Status values this service publishes
 
 | Status | Meaning |
 |---|---|
-| `PROCESSING` | Picked up off the queue, work in progress |
-| `COMPLETED` | Extraction succeeded, `extracted_payload` populated |
-| `FAILED` | System/processing error (timeout, malformed response, DB issue) — retryable |
+| `PROCESSING` | Claimed off the queue, work in progress |
+| `COMPLETED` | Extraction succeeded, `extractedPayload` populated |
+| `FAILED` | System/processing error (timeout, malformed response) — retryable |
 | `REJECTED` | Content-level rejection (not a valid referral, unreadable) — not retried |
 
-(`AWAITING_UPLOAD` and `PENDING` are set by the WorkBench API before this service ever
-sees the referral.)
+`AWAITING_UPLOAD` is set by the Workbench API at creation. The DB status transitions are
+applied by the Workbench API from these events (`AWAITING_UPLOAD → PROCESSING → COMPLETED`
+directly, or `→ REJECTED`/`FAILED`), so the worker never performs a DB write.
 
 ## Bounding boxes: graceful degradation
 
@@ -66,56 +75,66 @@ whole extraction.
 | Variable | Purpose |
 |---|---|
 | `AWS_REGION` | Region for SQS + S3 clients |
-| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | Scoped IAM credentials (S3 read, SQS consume only) |
-| `SQS_QUEUE_URL` | Queue to poll |
-| `S3_BUCKET` | Bucket holding uploaded referral PDFs |
-| `DATABASE_URL` | Postgres connection string (same schema as `workbench-api`) |
-| `GEMINI_API_KEY` | Gemini 2.5 multimodal API key |
-| `MAX_CONCURRENT_MESSAGES` | Number of independent polling lanes — i.e. sustained concurrency (default: 10) |
-| `POLL_WAIT_SECONDS` | Long-poll duration per lane (default: 15) |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | Scoped IAM credentials (S3 read, SQS consume + publish) |
+| `SQS_QUEUE_URL` | Upload queue to poll (S3 `ObjectCreated` events) |
+| `SQS_STATUS_UPDATE_URL` | Status-update queue to publish `PROCESSING` / `COMPLETED` / `REJECTED` / `FAILED` events |
+| `S3_BUCKET_NAME` | Bucket holding uploaded referral PDFs |
+| `REDIS_URL` | Redis used for the claim lock and schema metadata reads |
+| `GEMINI_API_KEY` | Gemini multimodal API key |
+| `GEMINI_MODEL` | Gemini model name |
+| `REFERRAL_CLAIM_TTL_SECONDS` | Claim-lock TTL in seconds — must exceed worst-case extraction time (default: 600) |
+| `MAX_CONCURRENT_MESSAGES` | Max messages pulled per long-poll receive (default: 5) |
+| `POLL_WAIT_SECONDS` | Long-poll duration per receive (default: 15) |
+| `HEALTHCHECK_PORT` | Liveness probe port (default: 8002) |
 
 ## Project structure
 
 ```
-worker-agent/
+apps/agent_worker/
   src/
-    index.ts        # entry point, poll loop
-    extractor.ts     # schema resolution + Gemini call
-    s3.ts            # download helper
-    db.ts            # Prisma client, status writes
-    healthcheck.ts   # optional node:http liveness endpoint for container orchestration
+    index.ts                           # entry point, wiring, SIGINT/SIGTERM shutdown
+    config/env.config.ts               # zod-validated environment config
+    clients/
+      aws/sqs-consumer.service.ts      # upload-queue polling (long-poll + retry backoff)
+      aws/sqs-status-update-publisher.service.ts  # publishes status events
+      aws/s3.service.ts                # PDF download helper
+      ai/gemini-client.service.ts      # Gemini multimodal extraction call
+      cache/redis.service.ts           # claim lock + cached schema metadata reads
+    extraction/
+      referral-extraction.service.ts   # orchestration: claim → extract → publish
+      pre-validator.service.ts         # cheap PDF sanity checks
+      payload-normalizer.ts            # normalizes LLM output + bounding boxes
+      extraction-schema.ts             # builds the Gemini response schema
+      extraction-logger.ts             # per-job result logging
+    server/healthcheck.ts              # node:http liveness endpoint
+    types/                             # event / job / extraction types
   package.json
   tsconfig.json
-  Dockerfile
-  .env.example
 ```
 
-`db.ts` imports the same generated Prisma client as `workbench-api` (shared `prisma/schema.prisma`
-at the repo root) — one schema, one source of truth, no duplicated model definitions between
-the two services.
+There is no `Dockerfile` here — the shared `docker/Dockerfile.dev` builds the workspace, and
+`docker-compose.yml` runs it with the source bind-mounted and hot-reloaded via `tsx watch`.
 
 ## Running locally
 
 ```bash
-cd worker-agent
-cp .env.example .env   # fill in AWS creds, queue URL, bucket, DB URL, Gemini key
-npm install
-npm run dev
+# From the repo root — the worker loads .env from the repo root automatically.
+npm run dev:worker
 ```
 
-Requires the SQS queue and S3 bucket to already exist and be wired together (see the root
-`infra/setup-aws.sh`), and Postgres reachable at `DATABASE_URL` (the root `docker-compose.yml`
-starts it if you're running everything locally).
+Requires the SQS queues and S3 bucket to exist and be wired together (S3 bucket → SQS
+upload-queue notification), a reachable Redis (`REDIS_URL`), and the Workbench API running
+(which owns the database writes). The worker publishes results to `SQS_STATUS_UPDATE_URL`; the
+Workbench API consumes that queue.
 
-The worker holds no listening port by default. If deploying to an orchestrator that expects
-a liveness probe, `healthcheck.ts` starts a one-route `node:http` server (not Express) purely
-to answer `200 ok`.
+The worker holds no listening port by default; `server/healthcheck.ts` starts a one-route
+`node:http` server purely to answer the orchestrator liveness probe (`/healthz`).
 
 ## Assumptions & limitations
 
-- Single-instance polling for the demo; horizontal scaling is "run more copies of this same
-  process," since SQS consumer competition handles message distribution for free — no
-  coordination logic needed in the worker itself.
+- Single process per claim lock is inherent to the TTL'd lock; horizontal scaling is "run more
+  copies of this same process" — SQS consumer competition plus the Redis claim distributes work
+  with no coordination logic needed in the worker.
 - No built-in rate limiting against the Gemini API beyond SQS's natural backpressure (a slow
   consumer just means messages queue longer, not that anything is dropped).
 - Bounding-box grounding accuracy on low-quality fax scans hasn't been validated at scale;

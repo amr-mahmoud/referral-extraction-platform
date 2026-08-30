@@ -1,6 +1,6 @@
-# Client
+# Web (Next.js)
 
-> Lives at `client/` in the monorepo, alongside `workbench-api/` and `worker-agent/`.
+> Lives at `apps/web/` in the monorepo, alongside `apps/workbench-api` (NestJS) and `apps/agent_worker` (SQS → Gemini extraction).
 
 ## What this is
 
@@ -12,48 +12,39 @@ its extracted fields, with click-to-highlight sourced from `page_number` + `boun
 
 | Layer | Technology |
 |---|---|
-| Framework | Next.js (App Router) |
+| Framework | Next.js 16 (App Router) |
 | Language | TypeScript |
-| Styling | Tailwind CSS + Shadcn UI (Radix primitives underneath) |
-| API Client | `openapi-fetch` |
+| Styling | Tailwind CSS v4 (shadcn-style primitives via `class-variance-authority` + `tailwind-merge`) |
+| API Client | `openapi-fetch` + `axios` |
 | Code Generation | `openapi-typescript` — types generated from the WorkBench API's own OpenAPI document, the same one Scalar renders at `/reference` |
-| Client State | Zustand (persisted stores) |
-| Server State / Caching | `next/cache` (`unstable_cache`, `revalidateTag`) |
-| Real-time | Native `EventSource` (SSE) against `/referrals/:id/stream` |
-| PDF Rendering | `pdfjs-dist` / `react-pdf` — renders the referral and draws the bounding-box highlight overlay |
+| Real-time | Native `EventSource` (SSE), proxied through `app/api/referrals/stream` to the WorkBench API's `GET /referrals/stream` |
+| PDF Rendering | `react-pdf` — renders the referral and draws the bounding-box highlight overlay |
 
 ## How data flows here
 
-- Server Components and Server Actions call the typed REST client (`openapi-fetch`)
-  directly — never `fetch` with a hand-written URL string, so a backend contract change
+- Server Components, Server Actions, and client code call the typed REST client
+  (`openapi-fetch` / `axios`) against the generated types — a backend contract change
   surfaces as a type error here, not a runtime bug.
-- Anything cacheable is wrapped in `unstable_cache` with a tag; mutations that should
-  invalidate it call `revalidateTag`/`revalidatePath` from the Server Action, not from
-  the client.
-- Referral status changes arrive over a single `EventSource` connection per open referral
-  detail view — no polling, no manual refetch loop.
-- Zustand only holds state that has **no server source of truth**: the currently selected
-  field, the active highlight, transient upload progress. Anything that originated on the
-  server is fetched and cached through `next/cache`, never duplicated into a store.
+- Referral status changes arrive over a single `EventSource` connection
+  (`/api/referrals/stream`, proxied to the WorkBench API), consumed by
+  `use-referral-status-stream` — no polling, no manual refetch loop.
+- Auth: the API returns a JWT bearer token on login; a Server Action persists it in an
+  httpOnly cookie, and server actions / the SSE proxy forward it as the bearer token.
+- Uploads go **directly to S3** via the presigned PUT URL the API returns — the browser never
+  sends PDF bytes through the app server.
 
 ## Running locally
 
 ```bash
-cd client
-cp .env.example .env   # WORKBENCH_API_URL, etc.
-npm install
-npm run codegen         # runs openapi-typescript against the running WorkBench API
-npm run dev
+# From the repo root
+npm run dev:web
 ```
 
-`workbench-api` needs to be running and reachable for the codegen step, since it generates
-types from the live OpenAPI document rather than a checked-in schema file.
+`workbench-api` must be running and reachable for codegen, since the app generates its API
+types from the live OpenAPI document (`npm run codegen-api` at the repo root / `make codegen-api`).
 
 ## Assumptions & limitations
 
-- Form validation library isn't committed yet — Zod is the natural fit given the
-  TypeScript-first stack and would pair cleanly with Server Actions, but this hasn't been
-  decided, so `server-actions/` currently validates by hand where it validates at all.
-- No i18n/locale strategy has been scoped. The folder structure (see
-  `frontend-file-structure.md`) leaves room for it in `assets/` and `public/` without
-  assuming it's needed for the 2-day build.
+- No i18n/locale strategy has been scoped.
+- Review-screen highlighting is best-effort: fields without a grounded bounding box render
+  normally but aren't click-to-highlight.

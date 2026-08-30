@@ -1,31 +1,11 @@
 import { Referral } from '../../domain/referral/referral.aggregate';
-import type { CachedReferral } from '../types';
+import type { ReferralData } from '../types';
 
 export const REFERRAL_REPOSITORY_PORT = 'REFERRAL_REPOSITORY_PORT';
 
-export interface Paginated<T> {
-  items: T[];
-  total: number;
-  page: number;
-  limit: number;
-}
-
-export interface ListReferralOptions {
-  page: number;
-  limit: number;
-}
-
 export interface ReferralRepositoryPort {
-  findReferralById(id: string): Promise<Referral | null>;
-  findReferralByIdForClinic(
-    id: string,
-    clinicId: string,
-  ): Promise<Referral | null>;
-  findPaginatedReferralsByClinicId(
-    clinicId: string,
-    options: ListReferralOptions,
-  ): Promise<Paginated<Referral>>;
-  saveReferral(referral: Referral): Promise<Referral>;
+  /** Single-referral read-model query — the cache-aside fallback for one id. */
+  findReferralById(id: string): Promise<ReferralData | null>;
   /** Persists all referrals atomically — either every row lands or none do. */
   saveReferrals(referrals: Referral[]): Promise<Referral[]>;
   /**
@@ -35,16 +15,10 @@ export interface ReferralRepositoryPort {
    */
   deleteReferralsByIds(referralIds: string[]): Promise<void>;
 
-  // ── Read-model queries (the cache-aside fallback path) ────────────────
-  // These return `CachedReferral`, not the aggregate: they join the extraction
-  // schema's version for the dashboard label, and are only ever read. The
-  // full `extractionSchema` payload is left null here — it's populated by the
-  // cache, not by the DB join.
-
   /** Newest-first. The Postgres fallback when the clinic index is a cache miss. */
-  findReferralsByClinicId(clinicId: string): Promise<CachedReferral[]>;
+  findReferralsByClinicId(clinicId: string): Promise<ReferralData[]>;
   /** Backfills the specific referrals that missed the cache. */
-  findManyReferralsByIds(referralIds: string[]): Promise<CachedReferral[]>;
+  findManyReferralsByIds(referralIds: string[]): Promise<ReferralData[]>;
   /** Every referral in the database — used only by the dev cache warm-up. */
-  findAllReferrals(): Promise<CachedReferral[]>;
+  findAllReferrals(): Promise<ReferralData[]>;
 }

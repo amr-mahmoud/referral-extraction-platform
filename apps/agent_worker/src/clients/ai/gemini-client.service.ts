@@ -1,5 +1,44 @@
-import { GoogleGenAI, type Schema } from '@google/genai';
+import {
+  ApiError,
+  GoogleGenAI,
+  type GenerateContentParameters,
+  type GenerateContentResponse,
+  type Schema,
+} from '@google/genai';
 import type { RawLlmOutput } from '../../types/extraction.types';
+
+// Retry budget for a single extraction call. Capped low and fast on purpose:
+// this worker now runs many concurrent lanes (see sqs-consumer.service.ts),
+// so a burst of parallel Gemini calls can realistically trip a rate limit
+// together. Three attempts with jittered exponential backoff absorbs a
+// transient 429/5xx without materially risking the SQS visibility timeout
+// (180s) — worst case here is under 25s of added latency, not tens of
+// seconds per lane compounding into minutes.
+const MAX_GEMINI_ATTEMPTS = 3;
+const BASE_RETRY_DELAY_MS = 1000;
+const MAX_RETRY_DELAY_MS = 8000;
+
+/** Rate-limited (429) or a transient server-side failure (5xx) — worth retrying. A 4xx other than 429 means our request itself is wrong and retrying won't help. */
+function isRetryableGeminiError(error: unknown): error is ApiError {
+  return (
+    error instanceof ApiError && (error.status === 429 || error.status >= 500)
+  );
+}
+
+/**
+ * Exponential backoff with full jitter: the delay is a random value between
+ * 0 and the exponential cap, not the cap itself. Without jitter, every lane
+ * that got rate-limited by the same burst would retry at the exact same
+ * instant and immediately trip the rate limit again together.
+ */
+function computeBackoffDelayMs(attempt: number): number {
+  const exponentialDelayMs = BASE_RETRY_DELAY_MS * 2 ** attempt;
+  return Math.random() * Math.min(exponentialDelayMs, MAX_RETRY_DELAY_MS);
+}
+
+function sleep(delayMs: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, delayMs));
+}
 
 /**
  * Framing + reading order. Weak models jump straight to pattern-matching the
@@ -162,7 +201,7 @@ export class GeminiClient {
     responseSchema: Schema,
     fieldInstructions: string | null,
   ): Promise<RawLlmOutput> {
-    const result = await this.ai.models.generateContent({
+    const result = await this.generateContentWithRetry({
       model: this.model,
       contents: [
         {
@@ -192,6 +231,34 @@ export class GeminiClient {
       throw new Error('Gemini returned an empty response');
     }
     return JSON.parse(rawText) as RawLlmOutput;
+  }
+
+  /**
+   * Wraps `generateContent` with retry-on-429/5xx. Every other error
+   * (malformed request, auth failure, quota exhausted permanently) is
+   * rethrown immediately on the first attempt — retrying those wastes time
+   * without any chance of succeeding.
+   */
+  private async generateContentWithRetry(
+    params: GenerateContentParameters,
+  ): Promise<GenerateContentResponse> {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await this.ai.models.generateContent(params);
+      } catch (error) {
+        if (
+          !isRetryableGeminiError(error) ||
+          attempt >= MAX_GEMINI_ATTEMPTS - 1
+        ) {
+          throw error;
+        }
+        const delayMs = computeBackoffDelayMs(attempt);
+        console.warn(
+          `[Gemini] Retryable error (status ${error.status}) on attempt ${attempt + 1}/${MAX_GEMINI_ATTEMPTS}; retrying in ${Math.round(delayMs)}ms`,
+        );
+        await sleep(delayMs);
+      }
+    }
   }
 
   private buildPrompt(fieldInstructions: string | null): string {

@@ -1,11 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { REPOSITORY_ERROR } from '../../../libs/errors/repository-error-code.enum';
-import {
-  ListReferralOptions,
-  Paginated,
-  ReferralRepositoryPort,
-} from '../../application/ports/referral-repository.port';
+import { ReferralRepositoryPort } from '../../application/ports/referral-repository.port';
 import { Referral } from '../../domain/referral/referral.aggregate';
 import { RepositoryException } from '../errors/repository.exception';
 import { PrismaService } from './prisma.service';
@@ -17,97 +13,23 @@ import type { CachedReferralRow } from './types';
 export class PrismaReferralRepository implements ReferralRepositoryPort {
   public constructor(private readonly prisma: PrismaService) {}
 
-  public async findReferralById(id: string): Promise<Referral | null> {
+  public async findReferralById(id: string): Promise<ReferralData | null> {
     try {
       const row = await this.prisma.referral.findUnique({
         where: { id },
+        select: CACHED_REFERRAL_SELECT,
       });
 
       if (!row) {
         return null;
       }
 
-      return ReferralMapper.toDomain(row);
+      return toDataReferral(row);
     } catch (error) {
       throw this.toRepositoryException(
         error,
         'findReferralById',
         REPOSITORY_ERROR.DATABASE_QUERY_FAILED,
-      );
-    }
-  }
-
-  public async findReferralByIdForClinic(
-    id: string,
-    clinicId: string,
-  ): Promise<Referral | null> {
-    try {
-      const row = await this.prisma.referral.findFirst({
-        where: { id, clinicId },
-      });
-
-      if (!row) {
-        return null;
-      }
-
-      return ReferralMapper.toDomain(row);
-    } catch (error) {
-      throw this.toRepositoryException(
-        error,
-        'findReferralByIdForClinic',
-        REPOSITORY_ERROR.DATABASE_QUERY_FAILED,
-      );
-    }
-  }
-
-  public async findPaginatedReferralsByClinicId(
-    clinicId: string,
-    options: ListReferralOptions,
-  ): Promise<Paginated<Referral>> {
-    try {
-      const skip = (options.page - 1) * options.limit;
-
-      const [rows, total] = await this.prisma.$transaction([
-        this.prisma.referral.findMany({
-          where: { clinicId },
-          orderBy: { createdAt: 'desc' },
-          skip,
-          take: options.limit,
-        }),
-        this.prisma.referral.count({ where: { clinicId } }),
-      ]);
-
-      return {
-        items: rows.map((row) => ReferralMapper.toDomain(row)),
-        total,
-        page: options.page,
-        limit: options.limit,
-      };
-    } catch (error) {
-      throw this.toRepositoryException(
-        error,
-        'findPaginatedReferralsByClinicId',
-        REPOSITORY_ERROR.DATABASE_TRANSACTION_FAILED,
-      );
-    }
-  }
-
-  public async saveReferral(referral: Referral): Promise<Referral> {
-    try {
-      const data = ReferralMapper.toPersistence(referral);
-
-      const row = await this.prisma.referral.upsert({
-        where: { id: data.id },
-        create: data,
-        update: data,
-      });
-
-      return ReferralMapper.toDomain(row);
-    } catch (error) {
-      throw this.toRepositoryException(
-        error,
-        'saveReferral',
-        REPOSITORY_ERROR.DATABASE_WRITE_FAILED,
       );
     }
   }

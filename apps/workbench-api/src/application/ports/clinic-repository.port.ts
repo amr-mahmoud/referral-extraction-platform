@@ -9,6 +9,5 @@ export interface ClinicRepositoryPort {
   save(clinic: Clinic): Promise<Clinic>;
   saveExtractionSchema(schema: ExtractionSchema): Promise<ExtractionSchema>;
   findLatestSchemaVersion(clinicId: string): Promise<number>;
-  findExtractionSchemaById(id: string): Promise<ExtractionSchema | null>;
   listExtractionSchemasByClinic(clinicId: string): Promise<ExtractionSchema[]>;
 }

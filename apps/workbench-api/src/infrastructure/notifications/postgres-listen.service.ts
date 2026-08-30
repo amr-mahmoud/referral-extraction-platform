@@ -6,7 +6,10 @@ import {
 } from '@nestjs/common';
 import { Client } from 'pg';
 import { Subject, type Observable } from 'rxjs';
-import type { ReferralChangedNotification } from './types';
+import type {
+  ReferralChangedNotification,
+  ReferralNotificationPort,
+} from '../../application/ports/referral-notification.port';
 
 const NOTIFY_CHANNEL = 'referral_changed';
 const RECONNECT_DELAY_MS = 2000;
@@ -25,7 +28,9 @@ const RECONNECT_DELAY_MS = 2000;
  * the ping as "this changed, go read it".
  */
 @Injectable()
-export class PostgresListenService implements OnModuleInit, OnModuleDestroy {
+export class PostgresListenService
+  implements ReferralNotificationPort, OnModuleInit, OnModuleDestroy
+{
   private readonly logger = new Logger(PostgresListenService.name);
   private readonly referralChanged$ =
     new Subject<ReferralChangedNotification>();

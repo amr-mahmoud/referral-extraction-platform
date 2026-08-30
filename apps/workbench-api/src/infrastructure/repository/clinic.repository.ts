@@ -112,28 +112,6 @@ export class PrismaClinicRepository implements ClinicRepositoryPort {
     }
   }
 
-  public async findExtractionSchemaById(
-    id: string,
-  ): Promise<ExtractionSchema | null> {
-    try {
-      const row = await this.prisma.extractionSchema.findUnique({
-        where: { id },
-      });
-
-      if (!row) {
-        return null;
-      }
-
-      return ExtractionSchemaMapper.toDomain(row);
-    } catch (error) {
-      throw this.toRepositoryException(
-        error,
-        'findExtractionSchemaById',
-        REPOSITORY_ERROR.DATABASE_QUERY_FAILED,
-      );
-    }
-  }
-
   public async listExtractionSchemasByClinic(
     clinicId: string,
   ): Promise<ExtractionSchema[]> {

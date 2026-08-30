@@ -776,4 +776,51 @@ This document serves as the centralized commit history and decision log for the 
 - **Modified:** `Makefile`, `apps/workbench-api/**/*`, `apps/agent_worker/**/*`, `apps/web/public/**/*`, `docs/commit-log.md`
 - **Impact:** 106 tests passing in `workbench-api`; simplified Redis read/write pipelines; cleaner type imports across domain and application layers.
 
+---
+
+## v0.0.38 | 2026-08-30 | refactor | NOTIFICATION PORT & STREAM
+
+**Category:** System Architecture  
+**Summary:** Decouple SSE real-time stream via ReferralNotificationPort, encapsulate tenant filtering and serialized cache refresh in ApplicationService, and decouple ClinicsController.  
+**SuggestedCommitMessage:** refactor: decouple real-time notifications via ReferralNotificationPort and encapsulate SSE stream in application layer | System Architecture
+
+### 🧠 Logic & Decisions
+
+- **The Why:**
+  - **Clean Architecture & Hexagonal Purity:** Previously, `ClinicsController` directly imported and injected concrete `PostgresListenService` from the infrastructure layer, executing tenant filtering and cache synchronization pipelines inside the HTTP controller.
+  - **Application Notification Port (`ReferralNotificationPort`):** Introduced `REFERRAL_NOTIFICATION_PORT` in `application/ports/referral-notification.port.ts` implemented by `PostgresListenService`, isolating the specific Postgres `LISTEN/NOTIFY` transport behind an application interface.
+  - **Encapsulated Stream Orchestration in Use Case:** Added `observeClinicReferralChanges` to `ApplicationService`. Tenant filtering (`clinicId` match) and serialized cache refreshes (`concatMap(this.refreshReferralCache)`) now execute in the application layer, preventing concurrent read fan-out on notification bursts.
+  - **Ultra-Thin Interface Controller:** `ClinicsController.streamClinicReferrals` now delegates entirely to `applicationService.observeClinicReferralChanges`, mapping emitted domain items to SSE event envelopes with zero infrastructure knowledge.
+  - **Unit Test Coverage:** Added unit test suite in `application.service.spec.ts` covering foreign tenant notification drops, deleted referral drops, cache/index re-sync on matching notifications, and multi-tenant stream isolation.
+- **State Change:** Real-time event transport is fully abstracted behind an application port, and `ClinicsController` has zero direct infrastructure dependencies.
+
+### 🔗 Dependencies
+
+- **Modified:** `apps/workbench-api/src/application/ports/referral-notification.port.ts`, `apps/workbench-api/src/application/application.service.ts`, `apps/workbench-api/src/application/application.service.spec.ts`, `apps/workbench-api/src/infrastructure/infrastructure.module.ts`, `apps/workbench-api/src/infrastructure/notifications/postgres-listen.service.ts`, `apps/workbench-api/src/interface/http/clinics/clinics.controller.ts`, `docs/commit-log.md`
+- **Impact:** 110 unit tests passing in `workbench-api`; infrastructure notification transport can be swapped (e.g. to Redis Pub/Sub or Kafka) with zero controller changes.
+
+---
+
+## v0.0.39 | 2026-08-30 | feat | PARALLEL LANES & REPO STREAMLINING
+
+**Category:** System Architecture  
+**Summary:** Implement parallel independent polling lanes and jittered exponential backoff in Agent Worker, streamline repository query ports with structured error handling, and purge dead repository methods.  
+**SuggestedCommitMessage:** feat: implement parallel polling lanes, Gemini retry jitter, and streamlined repository ports | System Architecture
+
+### 🧠 Logic & Decisions
+
+- **The Why:**
+  - **Independent Polling Lanes in SQS Worker:** Replaced batch-based polling in `SqsConsumerService` with $N$ concurrent, independent worker lanes (`runLane`). Each lane continuously long-polls for 1 message (`MaxNumberOfMessages: 1`), eliminating the batch head-of-line blocking bottleneck where faster extractions waited on the slowest document in a batch.
+  - **Gemini Rate-Limit Resilience (Jittered Exponential Backoff):** Added `generateContentWithRetry` in `GeminiClient` with a 3-attempt budget for HTTP 429 and 5xx errors using randomized full jitter. This prevents thundering-herd retry storms across parallel worker lanes during high-concurrency ingestion bursts.
+  - **Streamlined Repository Ports & Single-Id Lookups:** Refactored `ReferralRepositoryPort` and `PrismaReferralRepository` to provide `findReferralById` returning `ReferralData` using projection `CACHED_REFERRAL_SELECT`. Updated `getClinicReferral` and `refreshReferralCache` in `ApplicationService` to use `findReferralById` directly.
+  - **Dead Repository Method Purge & Structured Error Wrapping:** Removed unused repository methods (`findReferralByIdForClinic`, `findPaginatedReferralsByClinicId`, `saveReferral`, `findExtractionSchemaById`) and wrapped all Prisma queries with `toRepositoryException` throwing structured `RepositoryException`.
+- **State Change:** Agent worker achieves sustained concurrent throughput without batch lockups, Gemini API calls gracefully absorb rate limits, and repository layers enforce strict single-responsibility read-model querying.
+
+### 🔗 Dependencies
+
+- **Modified:** `apps/agent_worker/**/*`, `apps/workbench-api/src/application/**/*`, `apps/workbench-api/src/infrastructure/repository/**/*`, `.env.example`, `docker-compose.yml`, `docs/commit-log.md`
+- **Impact:** Continuous sustained throughput on multi-file uploads; robust transient error recovery on Gemini API calls; clean repository contracts with 110 passing unit tests.
+
+
+
 

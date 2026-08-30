@@ -16,9 +16,8 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { Observable } from 'rxjs';
-import { concatMap, filter, map } from 'rxjs/operators';
+import { map } from 'rxjs/operators';
 import { ApplicationService } from '../../../application/application.service';
-import { PostgresListenService } from '../../../infrastructure/notifications/postgres-listen.service';
 import { normalizeExtractionSchemaFields } from '../dto/extraction-schema-input.mapper';
 import {
   ClinicDto,
@@ -31,13 +30,13 @@ import {
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import type { AuthenticatedRequest } from '../types';
 
+/** SSE event name — the wire contract with the frontend's `useReferralStatusStream`. */
+const REFERRAL_CHANGED_EVENT_NAME = 'referral-changed';
+
 @ApiBearerAuth('JWT-auth')
 @Controller()
 export class ClinicsController {
-  public constructor(
-    private readonly applicationService: ApplicationService,
-    private readonly postgresListenService: PostgresListenService,
-  ) {}
+  public constructor(private readonly applicationService: ApplicationService) {}
 
   @ApiTags('Clinics')
   @UseGuards(JwtAuthGuard)
@@ -169,25 +168,14 @@ export class ClinicsController {
   public streamClinicReferrals(
     @Req() req: AuthenticatedRequest,
   ): Observable<MessageEvent> {
-    const clinicId = req.user.clinicId;
-
-    return this.postgresListenService.observeReferralChanges().pipe(
-      // Tenant isolation on the stream: NOTIFY is database-wide, so every
-      // connected clinic sees every ping and must filter to its own before
-      // the fetch, not after.
-      filter((notification) => notification.clinicId === clinicId),
-      concatMap(async (notification) => {
-        const view = await this.applicationService.refreshReferralCache(
-          notification.referralId,
-        );
-        return view;
-      }),
-      filter((view): view is NonNullable<typeof view> => view !== null),
-      map((view) => ({
-        type: 'referral-changed',
-        data: ReferralListItemDto.fromReadModel(view),
-      })),
-    );
+    return this.applicationService
+      .observeClinicReferralChanges(req.user.clinicId)
+      .pipe(
+        map((referral) => ({
+          type: REFERRAL_CHANGED_EVENT_NAME,
+          data: ReferralListItemDto.fromReadModel(referral),
+        })),
+      );
   }
 
   @ApiTags('Referrals')

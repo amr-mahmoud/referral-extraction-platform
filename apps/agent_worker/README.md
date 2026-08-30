@@ -71,8 +71,8 @@ whole extraction.
 | `S3_BUCKET` | Bucket holding uploaded referral PDFs |
 | `DATABASE_URL` | Postgres connection string (same schema as `workbench-api`) |
 | `GEMINI_API_KEY` | Gemini 2.5 multimodal API key |
-| `MAX_CONCURRENT_MESSAGES` | `ReceiveMessage` batch size (default: 5) |
-| `POLL_WAIT_SECONDS` | Long-poll duration (default: 20) |
+| `MAX_CONCURRENT_MESSAGES` | Number of independent polling lanes — i.e. sustained concurrency (default: 10) |
+| `POLL_WAIT_SECONDS` | Long-poll duration per lane (default: 15) |
 
 ## Project structure
 

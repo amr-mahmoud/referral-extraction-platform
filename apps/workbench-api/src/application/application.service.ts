@@ -1,4 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Observable } from 'rxjs';
+import { concatMap, filter } from 'rxjs/operators';
 import { Clinic } from '../domain/clinic/clinic.aggregate';
 import {
   ClinicInvalidCredentialsError,
@@ -22,6 +24,10 @@ import {
   type ClinicRepositoryPort,
 } from './ports/clinic-repository.port';
 import { ENCRYPTION_PORT, type EncryptionPort } from './ports/encryption.port';
+import {
+  REFERRAL_NOTIFICATION_PORT,
+  type ReferralNotificationPort,
+} from './ports/referral-notification.port';
 import {
   REFERRAL_REPOSITORY_PORT,
   type ReferralRepositoryPort,
@@ -73,6 +79,8 @@ export class ApplicationService {
     private readonly storageService: StoragePort,
     @Inject(CACHING_SERVICE_PORT)
     private readonly cachingService: CachingServicePort,
+    @Inject(REFERRAL_NOTIFICATION_PORT)
+    private readonly referralNotificationService: ReferralNotificationPort,
   ) {}
 
   // ── Auth ─────────────────────────────────────────────────────────
@@ -590,9 +598,7 @@ export class ApplicationService {
         return served;
       }
 
-      const [view] = await this.referralRepository.findManyReferralsByIds([
-        referralId,
-      ]);
+      const view = await this.referralRepository.findReferralById(referralId);
       if (!view || view.clinicId !== clinicId) {
         throw new ReferralNotFoundError(referralId);
       }
@@ -605,20 +611,45 @@ export class ApplicationService {
     }
   }
 
-  /** Re-reads one referral from Postgres and refreshes its cache entry. */
-  public async refreshReferralCache(
+  /**
+   * Design-doc step 9's serving half: a per-clinic stream of full,
+   * cache-refreshed referrals, built on top of the raw NOTIFY feed.
+   *
+   * Owns both rules that used to live in the controller — tenant isolation
+   * (NOTIFY is database-wide; every connected clinic sees every ping and
+   * must filter to its own BEFORE the fetch, not after) and the
+   * notify-then-refresh workflow — so they're covered by the same tests as
+   * every other read path and can't drift from `listClinicReferrals`'s
+   * cache-aside contract.
+   */
+  public observeClinicReferralChanges(
+    clinicId: string,
+  ): Observable<ReferralListItem> {
+    return this.referralNotificationService.observeReferralChanges().pipe(
+      filter((notification) => notification.clinicId === clinicId),
+      // concatMap, not mergeMap: serialises the per-notification refreshes
+      // so a burst of pings can't fan out into unbounded concurrent
+      // Postgres reads.
+      concatMap((notification) =>
+        this.refreshReferralCache(notification.referralId),
+      ),
+      filter((referral): referral is ReferralListItem => referral !== null),
+    );
+  }
+
+  private async refreshReferralCache(
     referralId: string,
   ): Promise<ReferralListItem | null> {
-    const [referral_data] =
-      await this.referralRepository.findManyReferralsByIds([referralId]);
-    if (!referral_data) {
+    const referralData =
+      await this.referralRepository.findReferralById(referralId);
+    if (!referralData) {
       return null;
     }
-    await this.writeCachedReferralsTolerantly([referral_data]);
-    await this.addToClinicIndexTolerantly(referral_data.clinicId, [
-      referral_data.id,
+    await this.writeCachedReferralsTolerantly([referralData]);
+    await this.addToClinicIndexTolerantly(referralData.clinicId, [
+      referralData.id,
     ]);
-    const [servedView] = await this.attachDocumentUrls([referral_data]);
+    const [servedView] = await this.attachDocumentUrls([referralData]);
     return servedView ?? null;
   }
 

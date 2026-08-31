@@ -7,14 +7,13 @@ import {
 } from '@google/genai';
 import type { RawLlmOutput } from '../../types/extraction.types';
 
-// Retry budget for a single extraction call. Capped low and fast on purpose:
-// this worker now runs many concurrent lanes (see sqs-consumer.service.ts),
-// so a burst of parallel Gemini calls can realistically trip a rate limit
-// together. Three attempts with jittered exponential backoff absorbs a
-// transient 429/5xx without materially risking the SQS visibility timeout
-// (180s) — worst case here is under 25s of added latency, not tens of
-// seconds per lane compounding into minutes.
-const MAX_GEMINI_ATTEMPTS = 3;
+// Retry budget for a single extraction call. The default is capped low on
+// purpose: many concurrent lanes (see sqs-consumer.service.ts) can trip a rate
+// limit together. Three attempts with jittered exponential backoff absorbs a
+// transient 429/5xx without materially risking the SQS visibility timeout.
+// Set `GEMINI_MAX_ATTEMPTS` higher on paid tiers to ride out rate-limit bursts
+// instead of failing the message and sending it toward the DLQ.
+const DEFAULT_MAX_GEMINI_ATTEMPTS = 3;
 const BASE_RETRY_DELAY_MS = 1000;
 const MAX_RETRY_DELAY_MS = 8000;
 
@@ -182,12 +181,15 @@ const PROMPT_SPATIAL_GROUNDING_RULES = `
 
 export class GeminiClient {
   private readonly ai: GoogleGenAI;
+  private readonly maxAttempts: number;
 
   public constructor(
     private readonly apiKey: string,
     private readonly model: string,
+    maxAttempts?: number,
   ) {
     this.ai = new GoogleGenAI({ apiKey });
+    this.maxAttempts = maxAttempts ?? DEFAULT_MAX_GEMINI_ATTEMPTS;
   }
 
   /**
@@ -248,13 +250,13 @@ export class GeminiClient {
       } catch (error) {
         if (
           !isRetryableGeminiError(error) ||
-          attempt >= MAX_GEMINI_ATTEMPTS - 1
+          attempt >= this.maxAttempts - 1
         ) {
           throw error;
         }
         const delayMs = computeBackoffDelayMs(attempt);
         console.warn(
-          `[Gemini] Retryable error (status ${error.status}) on attempt ${attempt + 1}/${MAX_GEMINI_ATTEMPTS}; retrying in ${Math.round(delayMs)}ms`,
+          `[Gemini] Retryable error (status ${error.status}) on attempt ${attempt + 1}/${this.maxAttempts}; retrying in ${Math.round(delayMs)}ms`,
         );
         await sleep(delayMs);
       }

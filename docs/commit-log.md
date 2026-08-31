@@ -888,6 +888,28 @@ This document serves as the centralized commit history and decision log for the 
 - **Modified:** `apps/web/src/hooks/use-custom-upload-files-to-presigned-urls-with-progress.ts`, `apps/web/src/server-hooks/referrals/use-create-referrals.ts`, `docs/commit-log.md`
 - **Impact:** Eliminates UI navigation lag during active batch uploads; prevents frame drops from high-frequency progress state updates.
 
+---
+
+## v0.0.43 | 2026-08-31 | feat | CONFIGURABLE GEMINI RETRIES
+
+**Category:** Infrastructure Services  
+**Summary:** Add configurable maximum retry attempts for Gemini multimodal extraction calls with jittered exponential backoff.  
+**SuggestedCommitMessage:** feat: add configurable retry attempts for Gemini extraction calls | Infrastructure Services
+
+### 🧠 Logic & Decisions
+
+- **The Why:**
+  - **Tunable Rate-Limit Resilience:** Different deployment environments (e.g. Free vs Tier 1 / Tier 2 paid tiers) have vastly different Gemini RPM and TPM quotas. Hardcoded retry counts lacked operational flexibility.
+  - **Configurable Attempt Budget:** Introduced `GEMINI_MAX_ATTEMPTS` in `env.config.ts` (defaulting to 3), validated via Zod and injected directly into `GeminiClient`.
+  - **Jittered Backoff with SQS Budgeting:** Allows production deployments on higher tier plans to increase retry tolerance to absorb rate-limit spikes without failing jobs to the dead-letter queue (DLQ), while keeping total retry time safely bounded within the SQS queue visibility timeout.
+- **State Change:** Operators can configure `GEMINI_MAX_ATTEMPTS` via `.env` without modifying worker extraction code.
+
+### 🔗 Dependencies
+
+- **Modified:** `.env.example`, `apps/agent_worker/src/config/env.config.ts`, `apps/agent_worker/src/clients/ai/gemini-client.service.ts`, `apps/agent_worker/src/index.ts`, `docs/commit-log.md`
+- **Impact:** Increases AI extraction fault-tolerance under high load; prevents premature DLQ routing during temporary provider rate limiting.
+
+
 
 
 

@@ -26,6 +26,13 @@ const workerEnvSchema = z.object({
   MAX_CONCURRENT_MESSAGES: z.coerce.number().int().positive().default(15),
   POLL_WAIT_SECONDS: z.coerce.number().int().positive().default(15),
   HEALTHCHECK_PORT: z.coerce.number().int().positive().default(8002),
+  /**
+   * How many times a single Gemini call is attempted before giving up (429/5xx
+   * get jittered exponential backoff between attempts). Raise this on paid
+   * tiers to ride out rate-limit bursts instead of DLQ-ing; keep the SQS
+   * visibility timeout comfortably above the worst-case total.
+   */
+  GEMINI_MAX_ATTEMPTS: z.coerce.number().int().positive().default(3),
 });
 
 export type WorkerEnvConfig = z.infer<typeof workerEnvSchema>;

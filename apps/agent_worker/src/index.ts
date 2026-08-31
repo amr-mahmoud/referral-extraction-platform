@@ -13,7 +13,11 @@ async function main(): Promise<void> {
 
   const redis = new RedisService(env.REDIS_URL);
   const s3 = new S3StorageService(env.AWS_REGION);
-  const gemini = new GeminiClient(env.GEMINI_API_KEY, env.GEMINI_MODEL);
+  const gemini = new GeminiClient(
+    env.GEMINI_API_KEY,
+    env.GEMINI_MODEL,
+    env.GEMINI_MAX_ATTEMPTS,
+  );
   const statusUpdatePublisher = new SqsStatusUpdatePublisher(
     env.AWS_REGION,
     env.SQS_STATUS_UPDATE_URL,

@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useTransition,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useCustomUploadFilesToPresignedUrlsWithProgress } from "@/hooks/use-custom-upload-files-to-presigned-urls-with-progress";
 import type { AcceptedUploadCandidate } from "@/managers/upload-candidate.manager";
@@ -55,7 +48,6 @@ export interface UseCreateReferralsResult {
 export function useCreateReferrals(
   options?: UseCreateReferralsOptions,
 ): UseCreateReferralsResult {
-  const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [phase, setPhase] = useState<UploadPhase>("idle");
   const uploads = useCustomUploadFilesToPresignedUrlsWithProgress();
@@ -76,20 +68,13 @@ export function useCreateReferrals(
     uploads.reset();
   }, [uploads]);
 
-  const execute = useCallback(
-    (input: {
+  /** Creates the referral rows, then PUTs every file to its presigned slot, advancing `phase` as it goes. */
+  const runUploadBatch = useCallback(
+    async (input: {
       candidates: AcceptedUploadCandidate[];
       schema: SchemaSelection;
-    }) => {
-      if (completeTimeoutRef.current) clearTimeout(completeTimeoutRef.current);
-      setError(null);
-      // Cleared up front, not just at the start of a fresh batch — a prior
-      // batch's progress must not leak into this one's average, which is
-      // scoped to whatever's currently in `uploads.progressByFileId`.
-      uploads.reset();
-      setPhase("creating");
-
-      startTransition(async () => {
+    }): Promise<void> => {
+      try {
         const result = await createReferrals({
           files: input.candidates.map((candidate) => ({
             fileName: candidate.name,
@@ -122,9 +107,38 @@ export function useCreateReferrals(
         completeTimeoutRef.current = setTimeout(() => {
           setPhase("idle");
         }, COMPLETE_HOLD_MS);
-      });
+      } catch {
+        // Without this the phase would stay non-idle forever, leaving the
+        // submit button stuck mid-progress with no way back.
+        setPhase("idle");
+        setError("Upload could not be started. Please try again.");
+      }
     },
     [uploads, onFileUploaded],
+  );
+
+  const execute = useCallback(
+    (input: {
+      candidates: AcceptedUploadCandidate[];
+      schema: SchemaSelection;
+    }) => {
+      if (completeTimeoutRef.current) clearTimeout(completeTimeoutRef.current);
+      setError(null);
+      // Cleared up front, not just at the start of a fresh batch — a prior
+      // batch's progress must not leak into this one's average, which is
+      // scoped to whatever's currently in `uploads.progressByFileId`.
+      uploads.reset();
+      setPhase("creating");
+
+      // Deliberately NOT wrapped in `startTransition`: this stays pending for
+      // the whole batch (server action + every S3 PUT), and React entangles
+      // transition updates — a transition still in flight parks any later one,
+      // including the `router.push` behind a ReferralRow click. Wrapping it
+      // made completed rows look dead until the upload finished. `phase`
+      // already reports in-flight state, so nothing here needs a transition.
+      void runUploadBatch(input);
+    },
+    [uploads, runUploadBatch],
   );
 
   const hasErrors = useMemo(
@@ -138,7 +152,7 @@ export function useCreateReferrals(
   const progressPercent = phase === "complete" ? 100 : uploads.overallPercent;
 
   return {
-    isLoading: isPending || phase !== "idle",
+    isLoading: phase !== "idle",
     isError: error !== null,
     error,
     fileStatus: uploads.progressByFileId,

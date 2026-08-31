@@ -867,6 +867,28 @@ This document serves as the centralized commit history and decision log for the 
 - **Modified:** `apps/workbench-api/src/application/application.service.ts`, `apps/workbench-api/src/application/application.service.spec.ts`, `apps/workbench-api/src/main.ts`, `docs/commit-log.md`
 - **Impact:** 130 passing unit tests across 6 test suites; prevents partial Redis index corruption; guarantees clean input sanitization across all REST controllers.
 
+---
+
+## v0.0.42 | 2026-08-31 | perf | THROTTLED UPLOADS & RESPONSIVE UI
+
+**Category:** Interface Services  
+**Summary:** Minor optimzation to throttle high-frequency S3 upload progress state commits and untangle React transition blocking to ensure instant UI responsiveness during multi-file uploads.  
+**SuggestedCommitMessage:** perf: Minor optimzation to  throttle upload progress updates and untangle React transition states during batch uploads | Interface Services
+
+### 🧠 Logic & Decisions
+
+- **The Why:**
+  - **Upload Progress Throttling:** During multi-file S3 uploads, Axios's `onUploadProgress` fires hundreds of times per second per stream, causing excessive React re-renders. Added `shouldCommitThrottledUploadProgressUpdate` with a ref-based throttle window and 100% completion bypass, minimizing state re-renders while preserving smooth progress visuals.
+  - **Untangling React Transition Blocking:** Removed `useTransition` / `startTransition` from `useCreateReferrals`. React entangles in-flight transitions across components, which caused route navigation (`router.push` when clicking a `ReferralRow` to inspect an in-flight or completed document) to be delayed until the entire multi-file upload batch finished.
+  - **Defensive Error Recovery:** Added explicit try/catch wrapping around `runUploadBatch` ensuring that unhandled upload startup failures always reset `phase` to `idle` and surface actionable error feedback.
+- **State Change:** Clicking any dashboard row navigates immediately without waiting for background upload batches to complete, and CPU usage during large batch uploads is drastically reduced.
+
+### 🔗 Dependencies
+
+- **Modified:** `apps/web/src/hooks/use-custom-upload-files-to-presigned-urls-with-progress.ts`, `apps/web/src/server-hooks/referrals/use-create-referrals.ts`, `docs/commit-log.md`
+- **Impact:** Eliminates UI navigation lag during active batch uploads; prevents frame drops from high-frequency progress state updates.
+
+
 
 
 

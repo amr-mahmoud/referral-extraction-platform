@@ -1,7 +1,7 @@
 "use client";
 
 import axios from "axios";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import { REFERRAL_ACCEPTED_MIME_TYPE } from "@/constants/referrals";
 import {
@@ -9,6 +9,9 @@ import {
   type ReferralUploadSlot,
 } from "@/managers/direct-upload.manager";
 import type { AcceptedUploadCandidate } from "@/managers/upload-candidate.manager";
+
+/** Min gap between progress re-renders per file — XHR ticks fire far faster than the UI needs, and unthrottled they saturate the main thread and delay clicks elsewhere on the page. */
+const PROGRESS_UPDATE_THROTTLE_MILLISECONDS = 150;
 
 export type FileUploadPhaseStatus = "idle" | "uploading" | "done" | "error";
 
@@ -30,11 +33,7 @@ export interface UploadOutcome {
 export interface UseCustomUploadFilesToPresignedUrlsWithProgressResult {
   /** Per-file progress, keyed by candidate id. */
   progressByFileId: Record<string, FileUploadProgress>;
-  /**
-   * Average of every file's own percent — equal weight per file regardless
-   * of size. For 2 files, each is worth 50% of this number: one file at 20%
-   * with the other untouched reads as 10% overall.
-   */
+  /** Average of every file's own percent — equal weight per file regardless of size. */
   overallPercent: number;
   /** PUTs every matched (slot, candidate) pair directly to S3, concurrently, via axios. */
   upload: (
@@ -44,21 +43,48 @@ export interface UseCustomUploadFilesToPresignedUrlsWithProgressResult {
   reset: () => void;
 }
 
-/**
- * Owns the entire browser-side "PUT every file to its presigned S3 URL, with
- * live per-file progress" concern in one place — the axios call, the
- * progress math, and the state — so a caller just hands it (slots,
- * candidates) and reads back progress. Lives in `hooks/`, not
- * `server-hooks/`: it wraps a browser upload, not a Server Action.
- */
+/** PUTs every file to its presigned S3 URL with live per-file progress. In `hooks/`, not `server-hooks/`: wraps a browser upload, not a Server Action. */
 export function useCustomUploadFilesToPresignedUrlsWithProgress(): UseCustomUploadFilesToPresignedUrlsWithProgressResult {
   const [progressByFileId, setProgressByFileId] = useState<
     Record<string, FileUploadProgress>
   >({});
 
+  /** Last percent/timestamp committed to state per candidate id — a ref so reading it never forces a render. */
+  const lastCommittedProgressByFileId = useRef<
+    Record<string, { percent: number; timestampMs: number }>
+  >({});
+
   const reset = useCallback(() => {
     setProgressByFileId({});
+    lastCommittedProgressByFileId.current = {};
   }, []);
+
+  /** Throttle guard for `onUploadProgress`: true (and records the new baseline) only if the percent changed and either the window elapsed or it's the final 100%. */
+  const shouldCommitThrottledUploadProgressUpdate = useCallback(
+    (candidateId: string, percent: number): boolean => {
+      const lastCommitted = lastCommittedProgressByFileId.current[candidateId];
+      const hasPercentActuallyChanged =
+        lastCommitted === undefined || lastCommitted.percent !== percent;
+      const hasThrottleWindowElapsed =
+        lastCommitted === undefined ||
+        Date.now() - lastCommitted.timestampMs >=
+          PROGRESS_UPDATE_THROTTLE_MILLISECONDS;
+
+      const shouldCommit =
+        hasPercentActuallyChanged &&
+        (hasThrottleWindowElapsed || percent === 100);
+
+      if (shouldCommit) {
+        lastCommittedProgressByFileId.current[candidateId] = {
+          percent,
+          timestampMs: Date.now(),
+        };
+      }
+
+      return shouldCommit;
+    },
+    [],
+  );
 
   const uploadOne = useCallback(
     async (
@@ -68,17 +94,20 @@ export function useCustomUploadFilesToPresignedUrlsWithProgress(): UseCustomUplo
       try {
         await axios.put(slot.uploadUrl, candidate.file, {
           headers: {
-            // Must exactly match what the backend signed into the URL —
-            // S3StorageService bakes ContentType: 'application/pdf' into the
-            // SigV4 signature, so this can never be `candidate.file.type`
-            // (the browser-sniffed MIME): any mismatch gets a
-            // 403 SignatureDoesNotMatch from S3.
+            // Must match what was signed into the URL, not the browser-sniffed MIME — a mismatch is a 403 SignatureDoesNotMatch.
             "Content-Type": REFERRAL_ACCEPTED_MIME_TYPE,
           },
           onUploadProgress: (progressEvent) => {
             const percent = progressEvent.total
               ? Math.round((progressEvent.loaded * 100) / progressEvent.total)
               : 0;
+
+            if (
+              !shouldCommitThrottledUploadProgressUpdate(candidate.id, percent)
+            ) {
+              return;
+            }
+
             setProgressByFileId((current) => ({
               ...current,
               [candidate.id]: { status: "uploading", percent },
@@ -100,9 +129,7 @@ export function useCustomUploadFilesToPresignedUrlsWithProgress(): UseCustomUplo
       } catch {
         const message = "Upload failed. Please try again.";
 
-        // Keep whatever percent it last reached rather than snapping back to
-        // 0 — the failure is conveyed by `status`/`error`, not by erasing
-        // the progress the file actually made.
+        // Keep the last-reached percent rather than snapping back to 0.
         setProgressByFileId((current) => ({
           ...current,
           [candidate.id]: {
@@ -120,7 +147,7 @@ export function useCustomUploadFilesToPresignedUrlsWithProgress(): UseCustomUplo
         };
       }
     },
-    [],
+    [shouldCommitThrottledUploadProgressUpdate],
   );
 
   const upload = useCallback(

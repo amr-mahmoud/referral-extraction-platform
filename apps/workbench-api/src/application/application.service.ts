@@ -735,9 +735,10 @@ export class ApplicationService {
       await this.referralRepository.saveReferral(referral);
 
       // 5. Refresh the cached read-model projection (view + clinic index) so a
-      //    cold LISTEN or an immediate client read sees the terminal state
-      //    even if the NOTIFY handler lags (the merge preserves the schema).
-      await this.refreshReferralCache(event.referralId);
+      //    cold LISTEN or an immediate client read sees the terminal state even
+      //    if the NOTIFY handler lags. No presigned URL here — this is the
+      //    write path, nothing is served to a client.
+      await this.refreshCachedReferral(event.referralId);
     } catch (error) {
       translateError(error, 'applyReferralStatusUpdate');
     }
@@ -763,24 +764,36 @@ export class ApplicationService {
       // so a burst of pings can't fan out into unbounded concurrent
       // Postgres reads.
       concatMap((notification) =>
-        this.refreshReferralCache(notification.referralId),
+        this.refreshReferralCacheWithDocumentUrl(notification.referralId),
       ),
       filter((referral): referral is ReferralListItem => referral !== null),
     );
   }
 
-  private async refreshReferralCache(
+  /**
+   * Refreshes the cached read-model projection (`referral:{id}` view) WITHOUT
+   * attaching a presigned document URL
+  
+   */
+  private async refreshCachedReferral(
     referralId: string,
-  ): Promise<ReferralListItem | null> {
+  ): Promise<ReferralData | null> {
     const referralData =
       await this.referralRepository.findReferralById(referralId);
     if (!referralData) {
       return null;
     }
     await this.writeCachedReferralsTolerantly([referralData]);
-    await this.addToClinicIndexTolerantly(referralData.clinicId, [
-      referralData.id,
-    ]);
+    return referralData;
+  }
+
+  private async refreshReferralCacheWithDocumentUrl(
+    referralId: string,
+  ): Promise<ReferralListItem | null> {
+    const referralData = await this.refreshCachedReferral(referralId);
+    if (!referralData) {
+      return null;
+    }
     const [servedView] = await this.attachDocumentUrls([referralData]);
     return servedView ?? null;
   }

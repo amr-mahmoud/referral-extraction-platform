@@ -940,13 +940,9 @@ describe('ApplicationService.observeClinicReferralChanges', () => {
     notifications$.complete();
 
     expect(await results$).toEqual([buildServedView(view)]);
-    // Re-fetching a changed referral must also refresh its cache entry and
-    // clinic-index membership, same as the SSE handler always did.
+
     expect(cachingService.setCachedReferrals).toHaveBeenCalledWith([view]);
-    expect(cachingService.addReferralIdsToClinicIndex).toHaveBeenCalledWith(
-      clinicId,
-      [view.id],
-    );
+    expect(cachingService.addReferralIdsToClinicIndex).not.toHaveBeenCalled();
   });
 
   it('filters foreign-clinic notifications out of a mixed stream without disrupting the ones that match', async () => {
@@ -1080,12 +1076,10 @@ describe('ApplicationService.applyReferralStatusUpdate', () => {
     expect(saved.id).toBe('referral-1');
     expect(saved.clinicId).toBe(clinicId);
     expect(saved.status.value).toBe('COMPLETED');
-    // The LISTEN-driven refresh is complemented by an eager cache write here.
+    // The LISTEN-driven refresh is complemented by an eager cache write here;
+    // the clinic index is deliberately left untouched (partial-index safety).
     expect(cachingService.setCachedReferrals).toHaveBeenCalled();
-    expect(cachingService.addReferralIdsToClinicIndex).toHaveBeenCalledWith(
-      clinicId,
-      ['referral-1'],
-    );
+    expect(cachingService.addReferralIdsToClinicIndex).not.toHaveBeenCalled();
   });
 
   it('serves the aggregate from the cache and skips the repository fetch on a hit', async () => {

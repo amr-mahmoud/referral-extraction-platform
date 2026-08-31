@@ -845,6 +845,29 @@ This document serves as the centralized commit history and decision log for the 
 - **Modified:** `apps/agent_worker/**/*`, `apps/workbench-api/src/application/**/*`, `apps/workbench-api/src/infrastructure/**/*`, `apps/workbench-api/src/domain/**/*`, `apps/workbench-api/src/interface/**/*`, `docs/commit-log.md`
 - **Impact:** 115 passing unit tests; eliminates shared DB connections between API and worker; worker can scale to arbitrary concurrency without DB contention.
 
+---
+
+## v0.0.41 | 2026-08-31 | refactor | CACHE REFRESH & GLOBAL VALIDATION
+
+**Category:** System Architecture  
+**Summary:** Decouple cached referral refresh from presigned document URL signing, prevent partial clinic-index cache pollution, and enforce global DTO validation pipes with strict anti-tampering guards.  
+**SuggestedCommitMessage:** refactor: decouple cache refresh from document signing, enforce global validation pipes, and secure clinic index | System Architecture
+
+### 🧠 Logic & Decisions
+
+- **The Why:**
+  - **Separation of Concerns in Cache Refresh:** Split `refreshReferralCache` into `refreshCachedReferral` (pure cache synchronization without expensive presigned URL generation) and `refreshReferralCacheWithDocumentUrl` (specifically for SSE stream emission). The status-update write path now executes lightweight cache invalidation without signing redundant presigned URLs that no client is currently reading.
+  - **Partial-Index Pollution Prevention:** Removed `addToClinicIndexTolerantly` from single-referral cache refreshes. When a referral's status updates, refreshing its individual cache projection must not trigger a single-item `SADD` to the clinic index, which could create a corrupt partial index that `listClinicReferrals` would mistakenly trust as complete.
+  - **Global Validation Pipeline & Anti-Tampering:** Configured global `ValidationPipe` in `main.ts` with `whitelist: true`, `forbidNonWhitelisted: true`, and `transform: true` to prevent mass assignment vulnerabilities, enforce schema integrity across all HTTP endpoints, and auto-hydrate typed DTO instances.
+  - **Dev-Only Cache Pre-Warming & OpenAPI Endpoint:** Added non-production cache warm-up on boot (`warmAllReferralCaches`) to eliminate cold-cache latency during local development and testing, and exposed `/docs-json` for typed client codegen (`openapi-typescript`).
+- **State Change:** Write path status updates do not generate unneeded presigned S3 URLs, clinic index integrity is strictly preserved during status transitions, and all inbound HTTP requests undergo global DTO validation.
+
+### 🔗 Dependencies
+
+- **Modified:** `apps/workbench-api/src/application/application.service.ts`, `apps/workbench-api/src/application/application.service.spec.ts`, `apps/workbench-api/src/main.ts`, `docs/commit-log.md`
+- **Impact:** 130 passing unit tests across 6 test suites; prevents partial Redis index corruption; guarantees clean input sanitization across all REST controllers.
+
+
 
 
 

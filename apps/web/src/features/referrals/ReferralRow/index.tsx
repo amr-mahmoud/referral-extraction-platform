@@ -13,7 +13,7 @@ import { ChevronRightIcon } from "@/shared/Icon";
 import { StatusPill } from "@/shared/StatusPill";
 import {
   REFERRAL_STATUSES,
-  type ReferralRowView,
+  type ReferralDisplayRowView,
 } from "@/types/referrals/referral";
 
 import {
@@ -32,7 +32,12 @@ export interface ReferralRowProps extends Omit<
   React.ButtonHTMLAttributes<HTMLButtonElement>,
   "children"
 > {
-  referral: ReferralRowView;
+  /**
+   * A row already resolved to its presentation status (see
+   * `toReferralRowDisplayViews`) — its `status` may be the client-only
+   * `UPLOADING` while this tab is still PUTting the PDF to S3.
+   */
+  referral: ReferralDisplayRowView;
   onOpen?: (id: string) => void;
 }
 

@@ -26,7 +26,7 @@ $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS referral_changed_notify ON referrals;
 
--- Fires on insert (a new AWAITING_UPLOAD slot appearing in the dashboard) and
+-- Fires on insert (a new PENDING slot appearing in the dashboard) and
 -- on the columns the worker actually mutates. Scoping the UPDATE to those
 -- columns keeps unrelated writes from waking every connected SSE client.
 CREATE TRIGGER referral_changed_notify

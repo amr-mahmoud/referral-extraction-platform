@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCustomUploadFilesToPresignedUrlsWithProgress } from "@/hooks/use-custom-upload-files-to-presigned-urls-with-progress";
 import type { AcceptedUploadCandidate } from "@/managers/upload-candidate.manager";
 import { createReferrals } from "@/server-actions/referrals";
+import { useReferralUploadStore } from "@/stores/referral-upload.store";
 import type { SchemaSelection } from "@/types/extraction-schemas/schema";
 
 /** How long the "Documents uploaded" state holds before the button resets. */
@@ -53,6 +54,16 @@ export function useCreateReferrals(
   const uploads = useCustomUploadFilesToPresignedUrlsWithProgress();
   const completeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const registerUploadingReferralIds = useReferralUploadStore(
+    (state) => state.registerUploadingReferralIds,
+  );
+  const clearUploadedReferralIds = useReferralUploadStore(
+    (state) => state.clearUploadedReferralIds,
+  );
+  const clearAllUploadingReferralIds = useReferralUploadStore(
+    (state) => state.clearAllUploadingReferralIds,
+  );
+
   const { onFileUploaded } = options ?? {};
 
   useEffect(() => {
@@ -66,7 +77,8 @@ export function useCreateReferrals(
     setError(null);
     setPhase("idle");
     uploads.reset();
-  }, [uploads]);
+    clearAllUploadingReferralIds();
+  }, [uploads, clearAllUploadingReferralIds]);
 
   /** Creates the referral rows, then PUTs every file to its presigned slot, advancing `phase` as it goes. */
   const runUploadBatch = useCallback(
@@ -92,6 +104,14 @@ export function useCreateReferrals(
 
         setPhase("uploading");
 
+        // The referral rows now exist (status PENDING) but no file has reached
+        // S3 yet — mark the batch as uploading so the dashboard table shows
+        // these rows as "Uploading" instead of "Pending" while the PUTs run.
+        const uploadedReferralIds = result.data.slots.map(
+          (slot) => slot.referralId,
+        );
+        registerUploadingReferralIds(uploadedReferralIds);
+
         const outcomes = await uploads.upload(
           result.data.slots,
           input.candidates,
@@ -103,18 +123,30 @@ export function useCreateReferrals(
           }
         }
 
+        // Every PUT has settled (success or error) — lift the client-side
+        // "Uploading" overlay so each row resumes showing its server status.
+        clearUploadedReferralIds(uploadedReferralIds);
+
         setPhase("complete");
         completeTimeoutRef.current = setTimeout(() => {
           setPhase("idle");
         }, COMPLETE_HOLD_MS);
       } catch {
         // Without this the phase would stay non-idle forever, leaving the
-        // submit button stuck mid-progress with no way back.
+        // submit button stuck mid-progress with no way back. Also lifts any
+        // "Uploading" overlay registered for a batch that never settled.
         setPhase("idle");
+        clearAllUploadingReferralIds();
         setError("Upload could not be started. Please try again.");
       }
     },
-    [uploads, onFileUploaded],
+    [
+      uploads,
+      onFileUploaded,
+      registerUploadingReferralIds,
+      clearUploadedReferralIds,
+      clearAllUploadingReferralIds,
+    ],
   );
 
   const execute = useCallback(

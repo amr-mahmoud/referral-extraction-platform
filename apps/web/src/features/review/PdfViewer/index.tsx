@@ -13,13 +13,11 @@ import {
   ZoomOutIcon,
 } from "@/shared/Icon";
 import {
-  REFERRAL_STATUSES,
   type ExtractedFieldView,
   type ReferralDetailView,
 } from "@/types/referrals/referral";
 
 import {
-  pdfViewerHighlightTagVariants,
   pdfViewerHighlightVariants,
   pdfViewerIconButtonVariants,
   pdfViewerNoSourceVariants,
@@ -92,8 +90,6 @@ const PdfViewer = forwardRef<HTMLDivElement, PdfViewerProps>(
       selectedField,
       selectedFieldIndex,
     );
-
-    const hasDocument = referral.status !== REFERRAL_STATUSES.AWAITING_UPLOAD;
 
     const highlightRect =
       selectedField?.boundingBox && renderedPageSize
@@ -186,71 +182,59 @@ const PdfViewer = forwardRef<HTMLDivElement, PdfViewerProps>(
               No source location was extracted for this field.
             </div>
           ) : null}
-          {!hasDocument ? (
-            <div className={cn(pdfViewerPlaceholderVariants())}>
-              <p className={cn(pdfViewerPlaceholderTitleVariants())}>
-                Waiting for upload
-              </p>
-              <p className={cn(pdfViewerPlaceholderHintVariants())}>
-                The source PDF will render here once the upload completes.
-              </p>
-            </div>
-          ) : (
-            <Document
-              file={referral.documentUrl}
-              onLoadSuccess={(pdf) => {
-                setNumPages(pdf.numPages);
-                setPageNumber((current) => Math.min(current, pdf.numPages));
-              }}
-              onLoadError={() => setNumPages(null)}
-              loading={
-                <div className={cn(pdfViewerPlaceholderVariants())}>
-                  <p className={cn(pdfViewerPlaceholderTitleVariants())}>
-                    Loading PDF…
-                  </p>
-                </div>
-              }
-              error={
-                <div className={cn(pdfViewerPlaceholderVariants())}>
-                  <p className={cn(pdfViewerPlaceholderTitleVariants())}>
-                    Couldn’t load the document
-                  </p>
-                  <p className={cn(pdfViewerPlaceholderHintVariants())}>
-                    The presigned link may have expired — head back and reopen
-                    it.
-                  </p>
-                </div>
-              }
-            >
-              <div className={cn(pdfViewerPageWrapVariants())}>
-                <Page
-                  pageNumber={pageNumber}
-                  scale={scale}
-                  onRenderSuccess={(page) =>
-                    setRenderedPageSize({
-                      width: page.width,
-                      height: page.height,
-                    })
-                  }
-                  renderTextLayer={false}
-                  renderAnnotationLayer={false}
-                />
-                {highlightRect ? (
-                  <span
-                    aria-hidden
-                    data-component="PdfHighlight"
-                    className={cn(pdfViewerHighlightVariants())}
-                    style={{
-                      left: highlightRect.x - 4,
-                      top: highlightRect.y - 4,
-                      width: highlightRect.width + 10,
-                      height: highlightRect.height + 8,
-                    }}
-                  />
-                ) : null}
+          <Document
+            file={referral.documentUrl}
+            onLoadSuccess={(pdf) => {
+              setNumPages(pdf.numPages);
+              setPageNumber((current) => Math.min(current, pdf.numPages));
+            }}
+            onLoadError={() => setNumPages(null)}
+            loading={
+              <div className={cn(pdfViewerPlaceholderVariants())}>
+                <p className={cn(pdfViewerPlaceholderTitleVariants())}>
+                  Loading PDF…
+                </p>
               </div>
-            </Document>
-          )}
+            }
+            error={
+              <div className={cn(pdfViewerPlaceholderVariants())}>
+                <p className={cn(pdfViewerPlaceholderTitleVariants())}>
+                  Couldn’t load the document
+                </p>
+                <p className={cn(pdfViewerPlaceholderHintVariants())}>
+                  The presigned link may have expired — head back and reopen it.
+                </p>
+              </div>
+            }
+          >
+            <div className={cn(pdfViewerPageWrapVariants())}>
+              <Page
+                pageNumber={pageNumber}
+                scale={scale}
+                onRenderSuccess={(page) =>
+                  setRenderedPageSize({
+                    width: page.width,
+                    height: page.height,
+                  })
+                }
+                renderTextLayer={false}
+                renderAnnotationLayer={false}
+              />
+              {highlightRect ? (
+                <span
+                  aria-hidden
+                  data-component="PdfHighlight"
+                  className={cn(pdfViewerHighlightVariants())}
+                  style={{
+                    left: highlightRect.x - 4,
+                    top: highlightRect.y - 4,
+                    width: highlightRect.width + 10,
+                    height: highlightRect.height + 8,
+                  }}
+                />
+              ) : null}
+            </div>
+          </Document>
         </div>
       </div>
     );

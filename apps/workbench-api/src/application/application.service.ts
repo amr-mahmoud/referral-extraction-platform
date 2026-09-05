@@ -927,7 +927,7 @@ export class ApplicationService {
       extractionSchemaVersion: extractionSchema?.version ?? null,
       extractionSchemaTitle: extractionSchema?.title ?? null,
       errorMessage: referral.errorMessage,
-      // Fresh aggregates are always `AWAITING_UPLOAD` with an empty payload —
+      // Fresh aggregates are always `PENDING` with an empty payload —
       // mirror `ReferralMapper.toPersistence` so the cached shape can never
       // drift from what a Postgres read of the same row would produce.
       extractedPayload: referral.extractedPayload.map((field) => ({

@@ -29,7 +29,7 @@ export class InvalidReferralIdError extends DomainException {
 const PDF_FILE_NAME_PATTERN = /\.pdf$/i;
 
 /**
- * A single referral upload, tracked from `AWAITING_UPLOAD` through to a
+ * A single referral upload, tracked from `PENDING` through to a
  * terminal `COMPLETED`/`FAILED` extraction result.
  */
 export class Referral {
@@ -69,8 +69,7 @@ export class Referral {
     this._patientName = this.validatePatientName(patientName);
 
     this._extractionSchemaId = extractionSchemaId ?? null;
-    this._status =
-      status ?? ReferralStatus.from(ReferralStatusValue.AWAITING_UPLOAD);
+    this._status = status ?? ReferralStatus.from(ReferralStatusValue.PENDING);
     this._extractedPayload = extractedPayload ?? [];
     this._errorMessage = errorMessage ?? null;
     this.createdAt = createdAt ?? new Date();
@@ -140,10 +139,7 @@ export class Referral {
   }
 
   public readonly resolveSchema = (extractionSchemaId: string): void => {
-    if (
-      this._status.value !== ReferralStatusValue.AWAITING_UPLOAD &&
-      this._status.value !== ReferralStatusValue.PENDING
-    ) {
+    if (this._status.value !== ReferralStatusValue.PENDING) {
       throw new ReferralSchemaAlreadyFixedError(this.id);
     }
     if (
@@ -163,10 +159,6 @@ export class Referral {
       throw new InvalidReferralIdError(id);
     }
     return id.trim();
-  };
-
-  public readonly markUploaded = (): void => {
-    this._transitionTo(ReferralStatusValue.PENDING);
   };
 
   public readonly startProcessing = (): void => {

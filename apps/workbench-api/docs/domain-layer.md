@@ -43,7 +43,7 @@ small — a small aggregate is a healthy aggregate. Referenced everywhere else b
 | `createdAt` / `updatedAt` | `Date` |
 
 **Reason:** owns the **transactional invariant** of the extraction state machine — an
-invalid jump (`AWAITING_UPLOAD → COMPLETED`) must be structurally rejected inside a
+invalid jump (`PROCESSING → PENDING`) must be structurally rejected inside a
 single transaction, not merely discouraged by convention. The highest-**throughput**
 aggregate in the system, so its independence from `Clinic`/`ExtractionSchema` writes
 is what keeps referral ingestion from contending with unrelated operations.

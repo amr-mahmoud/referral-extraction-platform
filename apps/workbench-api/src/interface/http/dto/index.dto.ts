@@ -268,7 +268,7 @@ export class PresignedUploadDto {
 }
 
 export class CreateReferralResponseDto {
-  /** The newly created referral, in `AWAITING_UPLOAD` status. */
+  /** The newly created referral, in `PENDING` status. */
   public readonly referral!: ReferralDto;
 
   /** Presigned S3 upload slot for the referral PDF. */

@@ -19,10 +19,12 @@ import {
   mergeReferralRowView,
   mergeReferralRowViews,
   sortReferralRowsNewestFirst,
+  toReferralRowDisplayViews,
   toReferralRowView,
 } from "@/managers/referral-view.manager";
 import { referralDetailRoute } from "@/routes";
 import { Tabs } from "@/shared/Tabs";
+import { useUploadingReferralIds } from "@/stores/referral-upload.store";
 import type { ReferralRowView } from "@/types/referrals/referral";
 
 import { ReferralRow } from "../ReferralRow";
@@ -73,18 +75,33 @@ const ReferralsTable = React.forwardRef<HTMLElement, ReferralsTableProps>(
       }, []),
     );
 
+    // Referral ids this tab is still PUTting to S3. They are folded into the
+    // rows below so the Uploading tab, counts, and pills all treat the
+    // client-only `UPLOADING` status like any other (see
+    // `toReferralRowDisplayViews`).
+    const uploadingReferralIds = useUploadingReferralIds();
+
+    // Pure server rows (as SSE delivers them) resolved to their presentation
+    // status: rows being uploaded show `UPLOADING`, everything else keeps its
+    // server status. Everything downstream — filters, counts, pills — reads
+    // from this projection.
+    const displayReferrals = React.useMemo(
+      () => toReferralRowDisplayViews(liveReferrals, uploadingReferralIds),
+      [liveReferrals, uploadingReferralIds],
+    );
+
     const counts = React.useMemo(
-      () => countReferralsByFilter(liveReferrals),
-      [liveReferrals],
+      () => countReferralsByFilter(displayReferrals),
+      [displayReferrals],
     );
 
     const visible = React.useMemo(
       () =>
         filterReferrals(
-          sortReferralRowsNewestFirst(liveReferrals),
+          sortReferralRowsNewestFirst(displayReferrals),
           filter,
         ),
-      [filter, liveReferrals],
+      [filter, displayReferrals],
     );
 
     const items = React.useMemo(
@@ -121,8 +138,9 @@ const ReferralsTable = React.forwardRef<HTMLElement, ReferralsTableProps>(
                 Nothing here yet
               </p>
               <p className={cn(referralsTableEmptyHintVariants())}>
-                Referrals matching “{REFERRAL_FILTER_LABELS[filter]}” will
-                appear as soon as extraction reports back.
+                {filter === REFERRAL_FILTERS.UPLOADING
+                  ? "Uploads you start will appear here until their PDFs finish uploading."
+                  : `Referrals matching “${REFERRAL_FILTER_LABELS[filter]}” will appear as soon as extraction reports back.`}
               </p>
             </div>
           ) : (

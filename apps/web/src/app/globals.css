@@ -31,12 +31,21 @@
 }
 
 /* Status tones — one tinted fill + one legible foreground per referral state.
-   Added for the dashboard's status pills; the ink/brand roles above cover the rest. */
+   Each referral status gets its own color (no two pills share a tone):
+   Pending = neutral, Uploading = info blue, Processing = brand indigo,
+   Completed = success green, Failed = danger red, Rejected = warning amber.
+   The ink/brand roles above cover the rest. */
 @theme {
   --color-shell: #f4f4fb;
+
+  --color-info: #0369a1;
+  --color-info-tint: #e0f2fe;
 
   --color-success: #1f7a4d;
   --color-success-tint: #e7f6ee;
 
   --color-danger-tint: #fdecea;
+
+  --color-warning: #b45309;
+  --color-warning-tint: #fdf1dc;
 }

@@ -59,8 +59,8 @@ machinery earns its keep.
 | `FAILED` | System/processing error (timeout, malformed response) — retryable |
 | `REJECTED` | Content-level rejection (not a valid referral, unreadable) — not retried |
 
-`AWAITING_UPLOAD` is set by the Workbench API at creation. The DB status transitions are
-applied by the Workbench API from these events (`AWAITING_UPLOAD → PROCESSING → COMPLETED`
+`PENDING` is set by the Workbench API at creation. The DB status transitions are
+applied by the Workbench API from these events (`PENDING → PROCESSING → COMPLETED`
 directly, or `→ REJECTED`/`FAILED`), so the worker never performs a DB write.
 
 ## Bounding boxes: graceful degradation

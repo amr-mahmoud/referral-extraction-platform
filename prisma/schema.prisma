@@ -11,7 +11,6 @@ datasource db {
 }
 
 enum ReferralStatus {
-  AWAITING_UPLOAD
   PENDING
   PROCESSING
   COMPLETED
@@ -70,7 +69,7 @@ model Referral {
   fileName           String         @map("file_name")
   clinicId           String         @map("clinic_id") @db.Uuid
   extractionSchemaId String?        @map("extraction_schema_id") @db.Uuid
-  status             ReferralStatus @default(AWAITING_UPLOAD)
+  status             ReferralStatus @default(PENDING)
   s3Bucket           String         @map("s3_bucket")
   s3Key              String         @map("s3_key")
   // ExtractedField[] VO collection — { value, pageNumber, boundingBox: {xmin,ymin,xmax,ymax} | null }[]

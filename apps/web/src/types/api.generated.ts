@@ -292,7 +292,7 @@ export interface components {
             expiresAt: string;
         };
         CreateReferralResponseDto: {
-            /** @description The newly created referral, in `AWAITING_UPLOAD` status. */
+            /** @description The newly created referral, in `PENDING` status. */
             referral: components["schemas"]["ReferralDto"];
             /** @description Presigned S3 upload slot for the referral PDF. */
             upload: components["schemas"]["PresignedUploadDto"];

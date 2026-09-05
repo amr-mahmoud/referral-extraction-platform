@@ -1,20 +1,22 @@
 import { cva, type VariantProps } from "class-variance-authority";
 
 export const authBrandPanelVariants = cva([
-  "flex flex-col justify-start gap-10 px-8 py-14 sm:px-10 ",
+  "flex flex-col justify-center  gap-10 px-8 py-16 sm:px-10 min-h-[300px]",
   "bg-[linear-gradient(160deg,#efeffe_0%,#e4e2fd_55%,#dcd9fc_100%)] ",
 ]);
 
-export const authBrandPanelCopyVariants = cva("flex flex-col gap-4");
+export const authBrandPanelCopyVariants = cva(
+  "flex flex-col gap-4 lg:h-[510px] md:h-full sm:h-full ",
+);
 
 export const authBrandPanelHeadlineVariants = cva(
-  "text-[38px]/[1.08] font-extrabold tracking-[-0.02em] text-ink",
+  "text-[50px]/[1.08] font-extrabold tracking-[-0.02em] text-ink",
 );
 
 export const authBrandPanelAccentVariants = cva("text-brand");
 
 export const authBrandPanelBlurbVariants = cva(
-  "max-w-[300px] text-sm/[1.6] text-ink-soft",
+  " lg:max-w-[380px] md:max-w-[450px] text-md/[1.6] text-ink-soft",
 );
 
 export const authBrandPanelRuleVariants = cva(

@@ -26,7 +26,7 @@ const BrandLockup = React.forwardRef<HTMLSpanElement, BrandLockupProps>(
         className={cn(brandLockupVariants({ size: "md", className }))}
       >
         <img
-          src="/logo-wordmark.png"
+          src="/combinedlogo.png"
           alt={name}
           className={cn(brandLockupImageVariants())}
         />

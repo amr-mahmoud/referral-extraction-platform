@@ -105,7 +105,7 @@ The Agent Worker is **fully decoupled from the database**: it claims referrals v
 ## 🔄 End-to-End Workflow
 
 1. **Authentication & Tenant Isolation**: Clinic logs in with JWT; claims strictly isolate referrals, schemas, and streams per clinic.
-2. **Request Upload Slot**: API resolves schema, records referral as `AWAITING_UPLOAD` in PostgreSQL, and issues a presigned S3 PUT URL.
+2. **Request Upload Slot**: API resolves schema, records referral as `PENDING` in PostgreSQL, and issues a presigned S3 PUT URL.
 3. **Redis Cache-Aside Metadata**: API caches schema & filename in Redis so the worker recovers context in $O(1)$ without database round-trips.
 4. **Direct S3 Upload**: Browser streams PDF bytes directly to AWS S3, bypassing the API to eliminate server bandwidth bottlenecks.
 5. **Queue Trigger**: S3 `ObjectCreated` event pushes a notification with the object key into the AWS SQS upload queue.
@@ -124,7 +124,7 @@ The Agent Worker is **fully decoupled from the database**: it claims referrals v
 - **Direct-to-S3 Uploads**: High-throughput file uploads via short-lived presigned URLs with zero server bandwidth bottlenecks.
 - **Custom Extraction Schemas**: Create named schema versions in-app, upload JSON schema definitions, or fallback to default clinical schemas.
 - **Spatial Grounding**: Every extracted field is mapped with normalized coordinates `[ymin, xmin, ymax, xmax]` for click-to-highlight PDF verification.
-- **Real-Time SSE Streaming**: Live referral lifecycle updates (`AWAITING_UPLOAD → PROCESSING → COMPLETED`) pushed via Postgres `LISTEN/NOTIFY` and Redis.
+- **Real-Time SSE Streaming**: Live referral lifecycle updates (`PENDING → PROCESSING → COMPLETED`) pushed via Postgres `LISTEN/NOTIFY` and Redis.
 
 ---
 

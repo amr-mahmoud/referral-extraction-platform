@@ -289,7 +289,7 @@ describe('ApplicationService.createNewReferralsWithAttachedPresignedUrls', () =>
     expect(entries[0]).toMatchObject({
       id: results[0].referral.id,
       fileName: 'a.pdf',
-      status: 'AWAITING_UPLOAD',
+      status: 'PENDING',
       extractionSchemaId: schemaId,
       extractionSchemaTitle: 'Q3 Insurance Forms',
       extractionSchemaVersion: 2,
@@ -490,7 +490,7 @@ describe('ApplicationService.listClinicReferrals', () => {
       clinicId: clinicId,
       fileName: 'a.pdf',
       patientName: null,
-      status: 'AWAITING_UPLOAD',
+      status: 'PENDING',
       extractionSchemaId: null,
       extractionSchemaVersion: null,
       extractionSchemaTitle: null,
@@ -1161,12 +1161,12 @@ describe('ApplicationService.applyReferralStatusUpdate', () => {
     expect(referralRepository.saveReferral).not.toHaveBeenCalled();
   });
 
-  it('moves an AWAITING_UPLOAD referral to PROCESSING on a PROCESSING event', async () => {
+  it('moves a PENDING referral to PROCESSING on a PROCESSING event', async () => {
     const { service, referralRepository } = buildService({
       referralRepository: {
         findReferralById: jest
           .fn()
-          .mockResolvedValue(buildView({ status: 'AWAITING_UPLOAD' })),
+          .mockResolvedValue(buildView({ status: 'PENDING' })),
       },
     });
 

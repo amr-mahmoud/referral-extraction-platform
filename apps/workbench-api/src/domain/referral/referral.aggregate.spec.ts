@@ -30,16 +30,15 @@ function buildReferral(
   });
 }
 
-/** A referral in the `PROCESSING` state (AWAITING_UPLOAD → PENDING → PROCESSING). */
+/** A referral in the `PROCESSING` state (PENDING → PROCESSING). */
 function toProcessing(referral: Referral): Referral {
-  referral.markUploaded();
   referral.startProcessing();
   return referral;
 }
 
 describe('Referral', () => {
   describe('construction', () => {
-    it('creates a valid referral with a generated id and AWAITING_UPLOAD defaults', () => {
+    it('creates a valid referral with a generated id and PENDING defaults', () => {
       const referral = buildReferral();
 
       expect(referral.id).toMatch(UUID_REGEX);
@@ -47,7 +46,7 @@ describe('Referral', () => {
       expect(referral.fileName).toBe('referral.pdf');
       expect(referral.patientName).toBeNull();
       expect(referral.extractionSchemaId).toBeNull();
-      expect(referral.status.value).toBe(ReferralStatusValue.AWAITING_UPLOAD);
+      expect(referral.status.value).toBe(ReferralStatusValue.PENDING);
       expect(referral.extractedPayload).toEqual([]);
       expect(referral.errorMessage).toBeNull();
       expect(referral.createdAt).toBeInstanceOf(Date);
@@ -121,15 +120,8 @@ describe('Referral', () => {
   });
 
   describe('resolveSchema', () => {
-    it('resolves a schema id on a fresh referral', () => {
+    it('resolves a schema id on a fresh (PENDING) referral', () => {
       const referral = buildReferral();
-      referral.resolveSchema('schema-1');
-      expect(referral.extractionSchemaId).toBe('schema-1');
-    });
-
-    it('resolves a schema id on a PENDING referral', () => {
-      const referral = buildReferral();
-      referral.markUploaded();
       referral.resolveSchema('schema-1');
       expect(referral.extractionSchemaId).toBe('schema-1');
     });
@@ -159,13 +151,7 @@ describe('Referral', () => {
   });
 
   describe('state machine', () => {
-    it('moves AWAITING_UPLOAD → PENDING via markUploaded', () => {
-      const referral = buildReferral();
-      referral.markUploaded();
-      expect(referral.status.value).toBe(ReferralStatusValue.PENDING);
-    });
-
-    it('moves AWAITING_UPLOAD → PROCESSING via startProcessing', () => {
+    it('moves a fresh PENDING referral to PROCESSING via startProcessing', () => {
       const referral = buildReferral();
       referral.startProcessing();
       expect(referral.status.value).toBe(ReferralStatusValue.PROCESSING);
@@ -196,9 +182,6 @@ describe('Referral', () => {
       const referral = toProcessing(buildReferral());
       referral.complete([buildField()]);
 
-      expect(() => referral.markUploaded()).toThrow(
-        InvalidReferralStatusTransitionError,
-      );
       expect(() => referral.startProcessing()).toThrow(
         InvalidReferralStatusTransitionError,
       );
@@ -248,7 +231,7 @@ describe('Referral', () => {
       expect(referral.errorMessage).toBeNull();
     });
 
-    it('completes a fresh AWAITING_UPLOAD referral directly, skipping PROCESSING', () => {
+    it('completes a fresh PENDING referral directly, skipping PROCESSING', () => {
       const referral = buildReferral();
 
       referral.updateStatus(ReferralStatusValue.COMPLETED, [], null, null);

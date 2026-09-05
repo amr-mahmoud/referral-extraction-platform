@@ -133,15 +133,15 @@ export async function createReferrals(
     }
 
     // No `revalidatePath` here, deliberately: the Postgres NOTIFY trigger
-    // fires on INSERT as well as status UPDATE, so these new AWAITING_UPLOAD
-    // rows already reach the client over the open SSE stream in real time.
+    // fires on INSERT as well as status UPDATE, so these new PENDING rows
+    // already reach the client over the open SSE stream in real time.
     // Forcing a full RSC re-render here used to race that stream — a
     // dashboard refresh would re-run `getReferralRows()` against whatever
     // Postgres looked like at THIS instant (before any file had even started
     // uploading), and if that stale snapshot's response landed after SSE had
     // already pushed a later status, it would overwrite the live table back
-    // to AWAITING_UPLOAD until SSE caught back up — a visible flicker on
-    // every multi-file batch.
+    // to PENDING until SSE caught back up — a visible flicker on every
+    // multi-file batch.
 
     return {
       success: true,

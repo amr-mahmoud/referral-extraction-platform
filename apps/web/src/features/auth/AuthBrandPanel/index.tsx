@@ -14,8 +14,7 @@ import {
 } from "./AuthBrandPanel.styles";
 
 export interface AuthBrandPanelProps
-  extends React.HTMLAttributes<HTMLDivElement>,
-    AuthBrandPanelVariantProps {}
+  extends React.HTMLAttributes<HTMLDivElement>, AuthBrandPanelVariantProps {}
 
 const AuthBrandPanel = React.forwardRef<HTMLDivElement, AuthBrandPanelProps>(
   ({ className, ...props }, ref) => {
@@ -26,7 +25,7 @@ const AuthBrandPanel = React.forwardRef<HTMLDivElement, AuthBrandPanelProps>(
         {...props}
         className={cn(authBrandPanelVariants({ className }))}
       >
-        <BrandLockup size="lg" />
+        {/* <BrandLockup size="lg" /> */}
 
         <div className={cn(authBrandPanelCopyVariants())}>
           <h1 className={cn(authBrandPanelHeadlineVariants())}>
@@ -42,7 +41,7 @@ const AuthBrandPanel = React.forwardRef<HTMLDivElement, AuthBrandPanelProps>(
           </p>
         </div>
 
-        <span aria-hidden className={cn(authBrandPanelRuleVariants())} />
+        {/* <span aria-hidden className={cn(authBrandPanelRuleVariants())} /> */}
       </div>
     );
   },

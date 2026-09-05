@@ -3,7 +3,6 @@ import type { ReferralStatus } from './referral-status.value-object';
 
 /** The lifecycle states a referral passes through. */
 export enum ReferralStatusValue {
-  AWAITING_UPLOAD = 'AWAITING_UPLOAD',
   PENDING = 'PENDING',
   PROCESSING = 'PROCESSING',
   COMPLETED = 'COMPLETED',

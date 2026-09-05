@@ -1,8 +1,13 @@
 import { formatRelativeTime } from "@/lib/format";
 import type { components } from "@/types/api.generated";
-import { REFERRAL_STATUSES } from "@/types/referrals/referral";
+import {
+  CLIENT_REFERRAL_STATUSES,
+  REFERRAL_STATUSES,
+} from "@/types/referrals/referral";
 import type {
   ReferralDetailView,
+  ReferralDisplayRowView,
+  ReferralDisplayStatus,
   ReferralRowView,
   ReferralStatus,
 } from "@/types/referrals/referral";
@@ -134,14 +139,63 @@ export function mergeReferralRowViews(
 }
 
 /**
+ * True when a row's PDF is still being PUT to S3 by this browser tab.
+ * Guarded on the server status too: "Uploading" only makes sense while the
+ * referral is still `PENDING` server-side — once SSE has moved a row to
+ * `PROCESSING`/terminal the object already exists, so any stale store entry
+ * must not hold the row hostage in an overlay.
+ */
+export function isReferralCurrentlyUploading(
+  referral: Pick<ReferralRowView, "id" | "status">,
+  uploadingReferralIds: ReadonlySet<string>,
+): boolean {
+  return (
+    referral.status === REFERRAL_STATUSES.PENDING &&
+    uploadingReferralIds.has(referral.id)
+  );
+}
+
+/**
+ * The status a row should present right now: the client-only `UPLOADING`
+ * overlay when the PDF is still being PUT to S3, otherwise the server status.
+ */
+export function toReferralDisplayStatus(
+  referral: Pick<ReferralRowView, "id" | "status">,
+  uploadingReferralIds: ReadonlySet<string>,
+): ReferralDisplayStatus {
+  return isReferralCurrentlyUploading(referral, uploadingReferralIds)
+    ? CLIENT_REFERRAL_STATUSES.UPLOADING
+    : referral.status;
+}
+
+/**
+ * Overlays the client-only upload state onto server rows so the whole table
+ * pipeline (filters, tab counts, pills) sees `UPLOADING` as a normal status
+ * for the duration of a PUT. The server rows themselves are untouched — this
+ * is a pure render-time projection, and the raw `PENDING` status is what SSE
+ * merges keep operating on.
+ */
+export function toReferralRowDisplayViews(
+  referrals: readonly ReferralRowView[],
+  uploadingReferralIds: ReadonlySet<string>,
+): ReferralDisplayRowView[] {
+  return referrals.map((referral) => ({
+    ...referral,
+    status: toReferralDisplayStatus(referral, uploadingReferralIds),
+  }));
+}
+
+/**
  * Guaranteed presentation order for the table: newest first by `createdAt`.
  * ISO-8601 UTC strings compare lexicographically, so a plain string compare is
  * correct. Applied defensively before rendering so the UI stays ordered no
  * matter what order the API list or the SSE stream happens to deliver rows in.
+ * Generic over any row shape carrying `createdAt` (server rows and the
+ * display projection built from them both sort identically).
  */
-export function sortReferralRowsNewestFirst(
-  rows: readonly ReferralRowView[],
-): ReferralRowView[] {
+export function sortReferralRowsNewestFirst<
+  TReferralRow extends { createdAt: string },
+>(rows: readonly TReferralRow[]): TReferralRow[] {
   return [...rows].sort((left, right) =>
     right.createdAt.localeCompare(left.createdAt),
   );

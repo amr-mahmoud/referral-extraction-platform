@@ -909,10 +909,24 @@ This document serves as the centralized commit history and decision log for the 
 - **Modified:** `.env.example`, `apps/agent_worker/src/config/env.config.ts`, `apps/agent_worker/src/clients/ai/gemini-client.service.ts`, `apps/agent_worker/src/index.ts`, `docs/commit-log.md`
 - **Impact:** Increases AI extraction fault-tolerance under high load; prevents premature DLQ routing during temporary provider rate limiting.
 
+---
 
+## v0.0.44 | 2026-09-05 | refactor | LIFECYCLE STATUS REFACTOR
 
+**Category:** System Architecture  
+**Summary:** Unify initial referral lifecycle status to PENDING across domain and database, and introduce client-side UPLOADING presentation state via Zustand during direct S3 uploads.  
+**SuggestedCommitMessage:** refactor: unify initial status to PENDING and add client-side upload presentation state | System Architecture
 
+### 🧠 Logic & Decisions
 
+- **The Why:**
+  - **Prune Redundant `AWAITING_UPLOAD` State:** Referrals were previously initialized in database and domain as `AWAITING_UPLOAD` before transitioning to `PENDING`. Removing `AWAITING_UPLOAD` streamlines the aggregate state machine and database schema, initializing fresh referral slots directly as `PENDING` awaiting asynchronous worker pickup.
+  - **Decouple Client Upload Presentation (`UPLOADING` State):** While the backend persists `PENDING` upon slot creation, the user interface needs immediate visual feedback while the browser actively streams file bytes to S3 presigned URLs. Introduced a lightweight Zustand store (`useReferralUploadStore`) and client display status `UPLOADING` (`ReferralDisplayStatus`) overlaid onto rows in `ReferralsTable` without mutating the canonical server domain model.
+  - **Review Interface Simplification:** Removed legacy `AWAITING_UPLOAD` placeholder branching in `PdfViewer`, allowing the PDF document container to render directly with presigned document URLs.
+  - **Design System Color Tokens:** Added `info` and `warning` variants to `StatusPill` styles and updated referral status label and tone mappings to visually distinguish pending and uploading documents.
+- **State Change:** Referral records are created with `PENDING` by default across Prisma schema and domain aggregates, and the frontend dashboard overlays a transient `UPLOADING` pill during in-flight browser S3 PUT operations.
 
+### 🔗 Dependencies
 
-
+- **Modified:** `prisma/schema.prisma`, `apps/workbench-api/src/domain/referral/**/*`, `apps/workbench-api/src/application/**/*`, `apps/web/src/**/*`, `apps/web/package.json`, `package-lock.json`, `README.md`, `apps/agent_worker/README.md`, `apps/workbench-api/README.md`, `docs/commit-log.md`
+- **Impact:** Aligns backend domain models and Prisma schema; preserves SSE reactivity while providing clear client-side upload feedback; requires running Prisma migration / db push for Postgres enum change.

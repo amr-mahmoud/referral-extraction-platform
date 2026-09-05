@@ -4,7 +4,6 @@
  */
 
 export const REFERRAL_STATUSES = {
-  AWAITING_UPLOAD: "AWAITING_UPLOAD",
   COMPLETED: "COMPLETED",
   PROCESSING: "PROCESSING",
   PENDING: "PENDING",
@@ -16,6 +15,23 @@ export const REFERRAL_STATUSES = {
 export type ReferralStatus =
   (typeof REFERRAL_STATUSES)[keyof typeof REFERRAL_STATUSES];
 
+/**
+ * Statuses the table renders that the API never emits — purely client-side
+ * presentation state. Kept separate from `REFERRAL_STATUSES` (which mirrors
+ * the backend enum 1:1) so a status cast from a server payload can never
+ * accidentally produce one of these.
+ */
+export const CLIENT_REFERRAL_STATUSES = {
+  /** The referral's PDF is still being PUT to S3 by this browser tab. */
+  UPLOADING: "UPLOADING",
+} as const;
+
+export type ClientReferralStatus =
+  (typeof CLIENT_REFERRAL_STATUSES)[keyof typeof CLIENT_REFERRAL_STATUSES];
+
+/** The full set of statuses a referral row can display — a server status or a client-only state. */
+export type ReferralDisplayStatus = ReferralStatus | ClientReferralStatus;
+
 export interface ReferralSummary {
   id: string;
   /** `null` until extraction resolves a patient — failed rows never get one. */
@@ -26,7 +42,7 @@ export interface ReferralSummary {
   /**
    * Number of extracted fields once extraction completed. `null` (rendered as
    * "N/A") until the worker reports back — there is no count to show while a
-   * referral is awaiting upload, pending, or processing.
+   * referral is pending or processing.
    */
   extractionCount: number | null;
   /** ISO-8601. Formatted for display at the server boundary, not in the table. */
@@ -49,6 +65,16 @@ export interface ReferralRowView extends Omit<ReferralSummary, "submittedAt"> {
    */
   updatedAt: string;
   submittedLabel: string;
+}
+
+/**
+ * A `ReferralRowView` resolved to its final presentation status. Built on the
+ * client just before render by overlaying the client-only `UPLOADING` state
+ * onto rows whose PDF is still being PUT to S3 — the raw server row keeps its
+ * `PENDING` status, so this shape is what the table rows and filters consume.
+ */
+export interface ReferralDisplayRowView extends Omit<ReferralRowView, "status"> {
+  status: ReferralDisplayStatus;
 }
 
 /**

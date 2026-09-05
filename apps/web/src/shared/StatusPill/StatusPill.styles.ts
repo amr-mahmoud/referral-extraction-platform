@@ -12,6 +12,8 @@ export const statusPillVariants = cva(
         brand: "bg-brand-tint text-brand-deep",
         neutral: "bg-shell text-muted",
         danger: "bg-danger-tint text-danger",
+        info: "bg-info-tint text-info",
+        warning: "bg-warning-tint text-warning",
       },
     },
     defaultVariants: {

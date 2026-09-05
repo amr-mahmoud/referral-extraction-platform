@@ -32,7 +32,6 @@ import {
 } from "./ExtractedFieldsPanel.styles";
 
 const EXTRACTION_IN_PROGRESS_STATUSES: readonly ReferralStatus[] = [
-  REFERRAL_STATUSES.AWAITING_UPLOAD,
   REFERRAL_STATUSES.PENDING,
   REFERRAL_STATUSES.PROCESSING,
 ];

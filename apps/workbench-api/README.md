@@ -54,7 +54,7 @@ guard clauses that throw typed `DomainException`s at the boundary (see Error han
 |---|---|---|---|---|
 | `Clinic` | `domain/clinic/clinic.aggregate.ts` | The tenant account — owns credentials, its default schema, and the schema family it can resolve | clinicName non-empty; username matches `^[a-zA-Z0-9_]{3,50}$`; password ≥ 8 chars; always has a password hash; own id non-empty | `extractionSchemas[]` (hydrated relations), `defaultExtractionSchemaId` |
 | `ExtractionSchema` | `domain/extraction-schema/extraction-schema.aggregate.ts` | A versioned set of field definitions telling Gemini what to extract | non-empty `schemaDefinition`; no duplicate slugified keys; positive-integer version (`oldVersion + 1`); UUID id; immutable once built; title falls back to `Custom schema v{n}` | belongs to a `Clinic`; referenced by `Referral.extractionSchemaId` |
-| `Referral` | `domain/referral/referral.aggregate.ts` | A single PDF upload tracked from `AWAITING_UPLOAD` to a terminal state | `fileName` ends in `.pdf`; patientName optional but non-empty; state machine `AWAITING_UPLOAD/PENDING → PROCESSING → COMPLETED/FAILED/REJECTED` (with `AWAITING_UPLOAD → COMPLETED` and `FAILED → PROCESSING` retry paths, driven by the worker's status events); schema fixed once resolved; correction only when `COMPLETED` | `clinicId`, `extractionSchemaId`, `extractedPayload` (`ExtractedField[]`) |
+| `Referral` | `domain/referral/referral.aggregate.ts` | A single PDF upload tracked from `PENDING` to a terminal state | `fileName` ends in `.pdf`; patientName optional but non-empty; state machine `PENDING → PROCESSING → COMPLETED/FAILED/REJECTED` (with `PENDING → COMPLETED` and `FAILED → PROCESSING` retry paths, driven by the worker's status events); schema fixed once resolved; correction only when `COMPLETED` | `clinicId`, `extractionSchemaId`, `extractedPayload` (`ExtractedField[]`) |
 
 Every method that can fail rejects fast with a domain exception — no aggregate method lets an
 invalid state or an unexpected error escape unhandled. The one external call,
@@ -90,7 +90,7 @@ leaks across tenants.
 ## Presigned upload flow
 
 `POST /referrals` resolves the extraction schema for the batch (see cache-aside below), builds
-a `Referral` aggregate per file (`status = AWAITING_UPLOAD`), presigns an S3 `PUT` URL scoped
+a `Referral` aggregate per file (`status = PENDING`), presigns an S3 `PUT` URL scoped
 to `referrals/{clinic_id}/{referral_id}.pdf`, then **persists rows and writes cache
 concurrently** with a compensating saga (see below). Presigning happens before the DB write so
 a presigning failure leaves zero rows committed.
@@ -221,7 +221,7 @@ make dev-api        # nest start --watch on :8001
 
 Or run the whole stack with `npm run docker:up` (see the root README). The API requires
 `SQS_STATUS_UPDATE_URL` to be set (the status-update consumer is part of the process); it will
-otherwise boot fine without `agent_worker` running — referrals simply sit in `AWAITING_UPLOAD`
+otherwise boot fine without `agent_worker` running — referrals simply sit in `PENDING`
 until the extraction pipeline is up.
 
 ## Assumptions & limitations

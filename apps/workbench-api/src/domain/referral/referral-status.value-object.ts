@@ -28,13 +28,6 @@ const ALLOWED_TRANSITIONS: Record<
   ReferralStatusValue,
   readonly ReferralStatusValue[]
 > = {
-  [ReferralStatusValue.AWAITING_UPLOAD]: [
-    ReferralStatusValue.PENDING,
-    ReferralStatusValue.PROCESSING,
-    ReferralStatusValue.FAILED,
-    ReferralStatusValue.COMPLETED,
-    ReferralStatusValue.REJECTED,
-  ],
   [ReferralStatusValue.PENDING]: [
     ReferralStatusValue.PROCESSING,
     ReferralStatusValue.FAILED,

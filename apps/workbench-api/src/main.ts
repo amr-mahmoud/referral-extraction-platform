@@ -15,14 +15,12 @@ import { AllExceptionFilter } from './infrastructure/filters/all-exception.filte
 // env_file behavior. Never overrides variables already in process.env.
 loadDotEnvFromFile({ path: resolve(__dirname, '../../../.env') });
 
-
-
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true, 
+      whitelist: true,
       transform: true,
       forbidNonWhitelisted: true,
     }),

@@ -132,9 +132,8 @@ export class ApplicationService {
       );
       if (!clinic) throw new ClinicInvalidCredentialsError();
 
-      await clinic.verifyPassword(
-        command.password,
-        this.encryptionService.verify.bind(this.encryptionService),
+      await clinic.verifyPassword(command.password, (plainText, hashedText) =>
+        this.encryptionService.verify(plainText, hashedText),
       );
 
       const token = this.tokenService.sign({

@@ -930,3 +930,23 @@ This document serves as the centralized commit history and decision log for the 
 
 - **Modified:** `prisma/schema.prisma`, `apps/workbench-api/src/domain/referral/**/*`, `apps/workbench-api/src/application/**/*`, `apps/web/src/**/*`, `apps/web/package.json`, `package-lock.json`, `README.md`, `apps/agent_worker/README.md`, `apps/workbench-api/README.md`, `docs/commit-log.md`
 - **Impact:** Aligns backend domain models and Prisma schema; preserves SSE reactivity while providing clear client-side upload feedback; requires running Prisma migration / db push for Postgres enum change.
+
+---
+
+## v0.0.45 | 2026-09-10 | fix | AUTH TYPE SAFETY
+
+**Category:** Application Services  
+**Summary:** Eliminate unsafe `any` argument warning in auth password verification and clean up formatting in main bootstrap.  
+**SuggestedCommitMessage:** fix: resolve unsafe argument type warning in auth password verification | Application Services
+
+### 🧠 Logic & Decisions
+
+- **The Why:**
+  - **Strict Type Safety in Auth:** Standard JavaScript `Function.prototype.bind` returns `any` under TypeScript ESLint rules, triggering `@typescript-eslint/no-unsafe-argument` when passing `this.encryptionService.verify.bind(...)` into `clinic.verifyPassword`. Replacing `.bind()` with an inline arrow function preserves the explicit `PasswordVerifier` callback signature `(plainText, hashedText) => Promise<boolean>`, achieving zero lint warnings across `workbench-api`.
+  - **Bootstrap Hygiene:** Removed redundant blank lines and trailing whitespace in `main.ts` `ValidationPipe` configuration.
+- **State Change:** Zero TypeScript ESLint warnings in `apps/workbench-api` without modifying runtime authentication logic.
+
+### 🔗 Dependencies
+
+- **Modified:** `apps/workbench-api/src/application/application.service.ts`, `apps/workbench-api/src/main.ts`, `docs/commit-log.md`
+- **Impact:** All 128 tests continue to pass; cleaner static analysis pass across the API.

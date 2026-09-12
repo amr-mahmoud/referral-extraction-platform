@@ -1,14 +1,12 @@
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
-import { BrandLockup } from "@/shared/BrandLockup";
 
 import {
   authBrandPanelAccentVariants,
   authBrandPanelBlurbVariants,
   authBrandPanelCopyVariants,
   authBrandPanelHeadlineVariants,
-  authBrandPanelRuleVariants,
   authBrandPanelVariants,
   type AuthBrandPanelVariantProps,
 } from "./AuthBrandPanel.styles";
@@ -25,8 +23,6 @@ const AuthBrandPanel = React.forwardRef<HTMLDivElement, AuthBrandPanelProps>(
         {...props}
         className={cn(authBrandPanelVariants({ className }))}
       >
-        {/* <BrandLockup size="lg" /> */}
-
         <div className={cn(authBrandPanelCopyVariants())}>
           <h1 className={cn(authBrandPanelHeadlineVariants())}>
             Referral
@@ -40,8 +36,6 @@ const AuthBrandPanel = React.forwardRef<HTMLDivElement, AuthBrandPanelProps>(
             results — per clinic, in one place.
           </p>
         </div>
-
-        {/* <span aria-hidden className={cn(authBrandPanelRuleVariants())} /> */}
       </div>
     );
   },

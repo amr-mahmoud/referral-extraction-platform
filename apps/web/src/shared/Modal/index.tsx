@@ -15,6 +15,8 @@ export interface ModalProps {
   onClose: () => void;
   children: React.ReactNode;
   className?: string;
+  /** Optional class override for the backdrop overlay (e.g. scoping dim below the header). */
+  backdropClassName?: string;
 }
 
 /**
@@ -23,7 +25,13 @@ export interface ModalProps {
  * while open — unmounting is what resets any state the panel's contents own,
  * so no separate "reset on open" plumbing is needed.
  */
-const Modal = ({ labelledBy, onClose, children, className }: ModalProps) => {
+const Modal = ({
+  labelledBy,
+  onClose,
+  children,
+  className,
+  backdropClassName,
+}: ModalProps) => {
   const panelRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
@@ -70,7 +78,7 @@ const Modal = ({ labelledBy, onClose, children, className }: ModalProps) => {
   return (
     <div
       data-component="Modal"
-      className={cn(modalBackdropVariants())}
+      className={cn(modalBackdropVariants(), backdropClassName)}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}

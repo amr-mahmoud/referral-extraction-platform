@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import { AUTH_MODE_HEADINGS, AUTH_MODES } from "@/constants/auth";
+import { AUTH_MODE_HEADINGS, AUTH_MODES, type AuthMode } from "@/constants/auth";
 import { useAuthMode } from "@/hooks/use-auth-mode";
 import { cn } from "@/lib/utils";
 import { useLogin } from "@/server-hooks/auth/use-login";
@@ -20,11 +20,14 @@ import {
 
 export interface AuthPanelProps
   extends React.HTMLAttributes<HTMLDivElement>,
-    AuthPanelVariantProps {}
+    AuthPanelVariantProps {
+  /** Mode to open on; defaults to sign-in. */
+  initialMode?: AuthMode;
+}
 
 const AuthPanel = React.forwardRef<HTMLDivElement, AuthPanelProps>(
-  ({ className, ...props }, ref) => {
-    const { mode, isSignIn, items, setMode } = useAuthMode();
+  ({ className, initialMode, ...props }, ref) => {
+    const { mode, isSignIn, items, setMode } = useAuthMode(initialMode);
 
     const {
       execute: loginExecute,

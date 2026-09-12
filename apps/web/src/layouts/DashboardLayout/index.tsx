@@ -6,16 +6,20 @@ import {
   dashboardLayoutContentVariants,
   dashboardLayoutMainVariants,
   dashboardLayoutVariants,
+  type DashboardLayoutContentWidth,
   type DashboardLayoutVariantProps,
 } from "./DashboardLayout.styles";
 
 export interface DashboardLayoutProps
-  extends React.HTMLAttributes<HTMLDivElement>,
-    DashboardLayoutVariantProps {
+  extends React.HTMLAttributes<HTMLDivElement>, DashboardLayoutVariantProps {
   /** Full-bleed strip above the header — throughput stats, incident notices. */
   banner?: React.ReactNode;
   /** The application header bar. */
   header: React.ReactNode;
+  /** `contained` (default) pads/centres the content column; `full` bleeds it edge-to-edge. */
+  contentWidth?: DashboardLayoutContentWidth;
+  /** Optional class override for the content container (`DashboardLayout-content`). */
+  contentClassName?: string;
 }
 
 /**
@@ -23,7 +27,18 @@ export interface DashboardLayoutProps
  * then a scrolling content column that owns the remaining height.
  */
 const DashboardLayout = React.forwardRef<HTMLDivElement, DashboardLayoutProps>(
-  ({ banner, children, className, header, ...props }, ref) => {
+  (
+    {
+      banner,
+      children,
+      className,
+      contentClassName,
+      contentWidth,
+      header,
+      ...props
+    },
+    ref,
+  ) => {
     return (
       <div
         ref={ref}
@@ -35,7 +50,16 @@ const DashboardLayout = React.forwardRef<HTMLDivElement, DashboardLayoutProps>(
         {header}
 
         <main className={cn(dashboardLayoutMainVariants())}>
-          <div className={cn(dashboardLayoutContentVariants())}>{children}</div>
+          <div
+            data-component="DashboardLayout-content"
+            data-width={contentWidth ?? "contained"}
+            className={cn(
+              dashboardLayoutContentVariants({ width: contentWidth }),
+              contentClassName,
+            )}
+          >
+            {children}
+          </div>
         </main>
       </div>
     );

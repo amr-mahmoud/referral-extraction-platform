@@ -149,6 +149,17 @@ export async function getMeAction(): Promise<ActionResult<ClinicProfile>> {
 }
 
 /**
+ * Non-redirecting session probe for pages that must render for both guests and
+ * authenticated clinics — the public About page and the gated dashboard
+ * preview. Returns `null` instead of redirecting so the caller decides whether
+ * to show the page, a registration gate, or the authenticated view.
+ */
+export async function getAuthenticatedClinic(): Promise<ClinicProfile | null> {
+  const result = await getMeAction();
+  return result.success && result.data ? result.data : null;
+}
+
+/**
  * Server-side authentication guard for protected layouts and views.
  * Validates the session against the backend (`GET /clinics/me`).
  * If unauthenticated, expired, or if the clinic no longer exists in the DB,

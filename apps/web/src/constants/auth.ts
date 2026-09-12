@@ -21,6 +21,28 @@ export const AUTH_MODE_HEADINGS: Record<AuthMode, string> = {
   [AUTH_MODES.SIGN_UP]: "Create your clinic account",
 };
 
+/** Parses the `?mode=` query value into a known auth mode, defaulting to sign-in. */
+export function parseAuthMode(value: string | undefined): AuthMode {
+  return value === AUTH_MODES.SIGN_UP ? AUTH_MODES.SIGN_UP : AUTH_MODES.SIGN_IN;
+}
+
+/** Label for the guest header CTA that routes straight to the sign-up form. */
+export const AUTH_GUEST_REGISTER_LABEL = "Register";
+
+/**
+ * Copy for the registration gate shown over the dashboard when a visitor is
+ * not signed in. Kept here (not inline in the component) so the wording is a
+ * single source and reusable by any future gated surface.
+ */
+export const AUTH_REQUIRED_DIALOG = {
+  eyebrow: "Demo access",
+  title: "Registration required",
+  message:
+    "Please sign in or create a demo clinic account to access the extraction workbench and review referral documents.",
+  registerLabel: "Create an account",
+  signInLabel: "Sign in",
+} as const;
+
 /** Minimum password length accepted by the sign-up form. */
 export const PASSWORD_MIN_LENGTH = 8;
 

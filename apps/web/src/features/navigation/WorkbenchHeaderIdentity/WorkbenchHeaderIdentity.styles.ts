@@ -1,6 +1,8 @@
 import { cva, type VariantProps } from "class-variance-authority";
 
-export const workbenchHeaderIdentityVariants = cva("relative shrink-0");
+export const workbenchHeaderIdentityVariants = cva(
+  "relative ml-auto shrink-0",
+);
 
 export const workbenchHeaderIdentityTriggerVariants = cva(
   [

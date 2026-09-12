@@ -873,7 +873,7 @@ This document serves as the centralized commit history and decision log for the 
 
 **Category:** Interface Services  
 **Summary:** Minor optimzation to throttle high-frequency S3 upload progress state commits and untangle React transition blocking to ensure instant UI responsiveness during multi-file uploads.  
-**SuggestedCommitMessage:** perf: Minor optimzation to  throttle upload progress updates and untangle React transition states during batch uploads | Interface Services
+**SuggestedCommitMessage:** perf: Minor optimzation to throttle upload progress updates and untangle React transition states during batch uploads | Interface Services
 
 ### 🧠 Logic & Decisions
 
@@ -933,20 +933,24 @@ This document serves as the centralized commit history and decision log for the 
 
 ---
 
-## v0.0.45 | 2026-09-10 | fix | AUTH TYPE SAFETY
+## v0.0.45 | 2026-09-12 | feat | ABOUT PAGE & AUTH PREVIEW GATE
 
-**Category:** Application Services  
-**Summary:** Eliminate unsafe `any` argument warning in auth password verification and clean up formatting in main bootstrap.  
-**SuggestedCommitMessage:** fix: resolve unsafe argument type warning in auth password verification | Application Services
+**Category:** Interface Services  
+**Summary:** Add public About page, unauthenticated demo preview gate, proxy expired-token cleanup, responsive mobile dual-tier header, and BrandLockup image optimization.  
+**SuggestedCommitMessage:** feat: add About page, unauthenticated preview gate, proxy token expiration handling, and responsive header | Interface Services
 
 ### 🧠 Logic & Decisions
 
 - **The Why:**
-  - **Strict Type Safety in Auth:** Standard JavaScript `Function.prototype.bind` returns `any` under TypeScript ESLint rules, triggering `@typescript-eslint/no-unsafe-argument` when passing `this.encryptionService.verify.bind(...)` into `clinic.verifyPassword`. Replacing `.bind()` with an inline arrow function preserves the explicit `PasswordVerifier` callback signature `(plainText, hashedText) => Promise<boolean>`, achieving zero lint warnings across `workbench-api`.
-  - **Bootstrap Hygiene:** Removed redundant blank lines and trailing whitespace in `main.ts` `ValidationPipe` configuration.
-- **State Change:** Zero TypeScript ESLint warnings in `apps/workbench-api` without modifying runtime authentication logic.
+  - **Public About Page (`/about`):** Publicly accessible route presenting the workbench's architecture narrative — a scale-claim hero, stat strip (20M docs, ~300/s throughput, 15 parallel lanes), 8-step workflow lifecycle grid, concurrency model callout with lane ticks, "what makes it scale" lever list, tech stack chip grid, and a business-scope callout. Center-constrained in a responsive container.
+  - **Unauthenticated Dashboard Preview Gate:** Allows `/dashboard` to preview for unauthenticated visitors by displaying a focused, accessible modal (`AuthRequiredGate`) prompting demo account registration, backed by `getAuthenticatedClinic()` session probe.
+  - **Responsive Mobile Header:** Designed an adaptive header that stays single-row on desktop (`sm:min-h-18`) with inline navigators, and transforms gracefully on mobile into a lean top bar (logo + right actions/avatar) plus an integrated segmented sub-bar for navigators ("Referrals", "About"), ensuring zero wrapping, zero clipping, and touch-friendly targets across all viewports.
+  - **Proxy Expired-Token Handling:** Decodes JWT expiration in Next.js `proxy.ts` middleware and purges stale session cookies, eliminating infinite redirect loops when tokens expire.
+  - **Dynamic Auth Deep-Linking:** Added `?mode=sign-in` and `?mode=sign-up` query param routing to `/auth`, keyed in `AuthApp` to seamlessly mount the requested panel state.
+  - **UI & Code Polish:** Cleaned up unused imports in `AuthBrandPanel` and `WorkbenchHeaderIdentity`, renamed residual CV style variants to scope callouts with proper margins, and migrated `BrandLockup` to Next.js `<Image />` for optimized LCP with zero linter warnings.
+- **State Change:** Visitors can browse the About page and access the registration gate directly from the dashboard; header navigation and CTAs are 100% accessible on mobile screens without drawers or wrapping; stale auth cookies are proactively cleared by middleware.
 
 ### 🔗 Dependencies
 
-- **Modified:** `apps/workbench-api/src/application/application.service.ts`, `apps/workbench-api/src/main.ts`, `docs/commit-log.md`
-- **Impact:** All 128 tests continue to pass; cleaner static analysis pass across the API.
+- **Modified:** `apps/web/src/app/about/page.tsx` [NEW], `apps/web/src/apps/about/index.tsx` [NEW], `apps/web/src/constants/about.ts` [NEW], `apps/web/src/features/about/AboutOverview/AboutOverview.styles.ts` [NEW], `apps/web/src/features/about/AboutOverview/index.tsx` [NEW], `apps/web/src/features/auth/AuthRequiredGate/*` [NEW], `apps/web/src/features/navigation/WorkbenchHeaderGuestActions/*` [NEW], `apps/web/src/features/navigation/WorkbenchHeader/*`, `apps/web/src/proxy.ts`, `apps/web/src/routes/index.ts`, `apps/web/src/server-actions/auth.ts`, `apps/web/src/shared/BrandLockup/index.tsx`, `apps/web/src/shared/Modal/index.tsx`, `apps/web/src/constants/auth.ts`, `docs/commit-log.md`
+- **Impact:** Next.js build passes with 0 errors and 0 lint warnings; seamless visitor onboarding and expired session recovery; zero breaking changes to backend or domain layer.

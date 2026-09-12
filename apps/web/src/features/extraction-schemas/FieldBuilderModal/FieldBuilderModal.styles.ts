@@ -6,9 +6,7 @@ export const fieldBuilderHeaderVariants = cva(
   "flex items-center justify-between gap-4 px-[26px] pt-[22px] pb-3.5",
 );
 
-export const fieldBuilderTitleVariants = cva(
-  "text-lg font-bold text-ink",
-);
+export const fieldBuilderTitleVariants = cva("text-xl text-ink");
 
 export const fieldBuilderCloseVariants = cva([
   "flex size-[30px] shrink-0 cursor-pointer items-center justify-center rounded-lg",
@@ -90,9 +88,7 @@ export const fieldBuilderErrorVariants = cva(
   "text-[11.5px] font-medium text-danger",
 );
 
-export const fieldBuilderActionsVariants = cva(
-  "flex justify-end gap-2.5",
-);
+export const fieldBuilderActionsVariants = cva("flex justify-end gap-2.5");
 
 export type FieldBuilderModalVariantProps = VariantProps<
   typeof fieldBuilderModalVariants

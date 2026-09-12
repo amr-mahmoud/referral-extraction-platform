@@ -1,4 +1,5 @@
 import * as React from "react";
+import Image from "next/image";
 
 import { cn } from "@/lib/utils";
 
@@ -23,11 +24,14 @@ const BrandLockup = React.forwardRef<HTMLSpanElement, BrandLockupProps>(
         data-component="BrandLockup"
         data-size={size ?? "md"}
         {...props}
-        className={cn(brandLockupVariants({ size: "md", className }))}
+        className={cn(brandLockupVariants({ size: size ?? "md" }), className)}
       >
-        <img
+        <Image
           src="/combinedlogo.png"
           alt={name}
+          width={2224}
+          height={713}
+          priority
           className={cn(brandLockupImageVariants())}
         />
       </span>

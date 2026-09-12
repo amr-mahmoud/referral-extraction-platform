@@ -14,10 +14,29 @@ export const dashboardLayoutMainVariants = cva(
   "flex w-full flex-1 flex-col bg-canvas",
 );
 
-/** Centres content on ultra-wide displays without capping it on a laptop. */
+/**
+ * Content column variants. `contained` centres content on ultra-wide displays
+ * with padding (the dashboard); `full` lets a page bleed edge-to-edge with no
+ * max-width or padding (the public About page).
+ */
 export const dashboardLayoutContentVariants = cva(
-  "mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-6 px-5 py-6 sm:px-7 sm:py-7",
+  "flex w-full flex-1 flex-col",
+  {
+    variants: {
+      width: {
+        contained: "mx-auto max-w-[1600px] gap-6 px-5 py-6 sm:px-7 sm:py-7",
+        full: "",
+      },
+    },
+    defaultVariants: {
+      width: "contained",
+    },
+  },
 );
+
+export type DashboardLayoutContentWidth = NonNullable<
+  VariantProps<typeof dashboardLayoutContentVariants>["width"]
+>;
 
 export type DashboardLayoutVariantProps = VariantProps<
   typeof dashboardLayoutVariants

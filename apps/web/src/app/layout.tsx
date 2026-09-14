@@ -13,6 +13,11 @@ export const metadata: Metadata = {
   title: "Referral Extraction Workbench",
   description:
     "Extract structured data from medical referral PDFs and review it against the source document.",
+  icons: {
+    icon: "/logo-mark.png",
+    shortcut: "/logo-mark.png",
+    apple: "/logo-mark.png",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -111,3 +111,8 @@ export const REFERRAL_ACCEPTED_EXTENSION = ".pdf";
 
 /** Per-file ceiling, mirrored by the API's presigned-URL policy. */
 export const REFERRAL_MAX_FILE_BYTES = 20 * 1024 * 1024;
+
+/** Public S3 bundle containing 20 sample medical referral PDFs for testing the workbench. */
+export const SAMPLE_DOCUMENTS_DOWNLOAD_URL =
+  "https://document-workbench-examples.s3.us-east-1.amazonaws.com/example-medical-referrals.zip";
+

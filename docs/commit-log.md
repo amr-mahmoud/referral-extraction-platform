@@ -954,3 +954,24 @@ This document serves as the centralized commit history and decision log for the 
 
 - **Modified:** `apps/web/src/app/about/page.tsx` [NEW], `apps/web/src/apps/about/index.tsx` [NEW], `apps/web/src/constants/about.ts` [NEW], `apps/web/src/features/about/AboutOverview/AboutOverview.styles.ts` [NEW], `apps/web/src/features/about/AboutOverview/index.tsx` [NEW], `apps/web/src/features/auth/AuthRequiredGate/*` [NEW], `apps/web/src/features/navigation/WorkbenchHeaderGuestActions/*` [NEW], `apps/web/src/features/navigation/WorkbenchHeader/*`, `apps/web/src/proxy.ts`, `apps/web/src/routes/index.ts`, `apps/web/src/server-actions/auth.ts`, `apps/web/src/shared/BrandLockup/index.tsx`, `apps/web/src/shared/Modal/index.tsx`, `apps/web/src/constants/auth.ts`, `docs/commit-log.md`
 - **Impact:** Next.js build passes with 0 errors and 0 lint warnings; seamless visitor onboarding and expired session recovery; zero breaking changes to backend or domain layer.
+
+---
+
+## v0.0.46 | 2026-09-14 | feat | SAMPLE DOCS DOWNLOAD
+
+**Category:** Interface Services  
+**Summary:** Add 1-click sample medical documents package download banner to dashboard and update brand favicon icons.  
+**SuggestedCommitMessage:** feat: add sample documents download banner and brand favicon | Interface Services
+
+### 🧠 Logic & Decisions
+
+- **The Why:**
+  - **Instant Pipeline Evaluation:** Visitors and evaluators often lack sample clinical referral PDFs to test the extraction platform. Adding a prominent, accessible banner on the dashboard allows users to download a pre-packaged bundle of 20 anonymized medical referral PDFs in one click.
+  - **Seamless Download Experience:** Cleanly triggers the archive download from the public S3 bucket (`https://document-workbench-examples.s3.us-east-1.amazonaws.com/example-medical-referrals.zip`) without opening a blank tab or disrupting the dashboard UI.
+  - **Brand Identity & Favicons:** Added a dedicated `favicon.ico` and updated `icon.png` and `layout.tsx` metadata with the official heart-pulse brand mark.
+- **State Change:** Dashboard presents a callout banner with a "Download examples" action; clicking initiates an immediate background download of sample clinical PDFs while keeping the web application interactive.
+
+### 🔗 Dependencies
+
+- **Modified:** `apps/web/public/favicon.ico` [NEW], `apps/web/src/app/icon.png`, `apps/web/src/app/layout.tsx`, `apps/web/src/apps/dashboard/index.tsx`, `apps/web/src/constants/referrals.ts`, `apps/web/src/features/referrals/SampleDocumentsBanner/SampleDocumentsBanner.styles.ts` [NEW], `apps/web/src/features/referrals/SampleDocumentsBanner/index.tsx` [NEW], `apps/web/src/shared/Icon/index.tsx`, `docs/commit-log.md`
+- **Impact:** Zero breaking changes to backend or database; enhances user onboarding and self-service evaluation flow.

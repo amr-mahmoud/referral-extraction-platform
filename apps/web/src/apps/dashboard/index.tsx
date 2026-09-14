@@ -1,5 +1,6 @@
 import { AuthRequiredGate } from "@/features/auth/AuthRequiredGate";
 import { ReferralsTable } from "@/features/referrals/ReferralsTable";
+import { SampleDocumentsBanner } from "@/features/referrals/SampleDocumentsBanner";
 import { UploadWorkspace } from "@/features/referrals/UploadWorkspace";
 import { WorkbenchHeader } from "@/features/navigation/WorkbenchHeader";
 import { DashboardLayout } from "@/layouts/DashboardLayout";
@@ -29,6 +30,7 @@ export async function DashboardApp() {
     <DashboardLayout
       header={<WorkbenchHeader clinicName={clinic.clinicName} />}
     >
+      <SampleDocumentsBanner />
       <UploadWorkspace savedSchemas={savedSchemas} />
       <ReferralsTable referrals={referrals} />
     </DashboardLayout>

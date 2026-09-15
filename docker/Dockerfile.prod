@@ -27,6 +27,7 @@ RUN npm ci
 
 # ---- build ------------------------------------------------------------------
 FROM deps AS build
+ENV NODE_OPTIONS="--max-old-space-size=1536"
 COPY . .
 RUN npx prisma generate --schema=prisma/schema.prisma \
   && npm run build --workspace apps/workbench-api \

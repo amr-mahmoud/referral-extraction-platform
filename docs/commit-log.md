@@ -1017,3 +1017,25 @@ This document serves as the centralized commit history and decision log for the 
 
 - **Modified:** `docker-compose.prod.yml`, `docker/Caddyfile`, `docs/commit-log.md`
 - **Impact:** Zero Let's Encrypt rate-limiting or ACME challenge failures on EC2 public IPs; Amplify can communicate with the backend over HTTP server-to-server.
+
+---
+
+## v0.0.49 | 2026-09-16 | fix | BUILD MEMORY LIMIT
+
+**Category:** Infrastructure Services  
+**Summary:** Increase Node heap size during backend container build and document swap creation to prevent V8 OOM errors on t3.micro instances.  
+**SuggestedCommitMessage:** fix: set NODE_OPTIONS max-old-space-size in Dockerfile.prod and document EC2 swap setup | Infrastructure Services
+
+### 🧠 Logic & Decisions
+
+- **The Why:**
+  - **Resolve V8 OOM Heap Allocation Crash:** During `docker compose build`, compiling TypeScript across the monorepo (`nest build` and `tsc`) exceeds default Node.js memory limits on low-memory EC2 instances (`t3.micro` with 1 GB RAM), resulting in `AllocateRawWithRetryOrFailSlowPath` core dump.
+  - **Container Build Heap Configuration:** Set `ENV NODE_OPTIONS="--max-old-space-size=1536"` in `docker/Dockerfile.prod` build stage so Node can allocate sufficient memory without failing.
+  - **Explicit Host Swap Steps:** Documented exact bash commands for creating a 2 GB swap file and installing modern `buildx` in `docs/deployment-plan.md`.
+- **State Change:** Monorepo backend image compiles successfully on resource-constrained hosts with swap enabled.
+
+### 🔗 Dependencies
+
+- **Modified:** `docker/Dockerfile.prod`, `docs/deployment-plan.md`, `docs/commit-log.md`
+- **Impact:** Backend containers build cleanly on `t3.micro` without crashing.
+

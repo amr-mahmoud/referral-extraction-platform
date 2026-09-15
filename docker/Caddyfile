@@ -5,8 +5,9 @@
 # Proxies the NestJS API. `flush_interval -1` streams Server-Sent Events
 # (GET /referrals/stream) immediately instead of buffering them.
 
-{$API_DOMAIN} {
+{$API_DOMAIN::80} {
 	reverse_proxy workbench-api:8001 {
 		flush_interval -1
 	}
 }
+

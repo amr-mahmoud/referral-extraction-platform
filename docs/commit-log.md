@@ -997,3 +997,23 @@ This document serves as the centralized commit history and decision log for the 
 
 - **Modified:** `.env.enc`, `.env.example` [DELETE], `.env.production.enc` [NEW], `.gitignore`, `Makefile`, `amplify.yml` [NEW], `apps/web/src/constants/about.ts`, `apps/web/src/features/about/AboutOverview/AboutOverview.styles.ts`, `apps/web/src/features/about/AboutOverview/index.tsx`, `apps/web/src/shared/Icon/index.tsx`, `docker-compose.prod.yml` [NEW], `docker/Caddyfile` [NEW], `docker/Dockerfile.prod` [NEW], `docs/commit-log.md`
 - **Impact:** Production compose stack can be deployed on EC2 via `docker compose -f docker-compose.prod.yml up -d`; Next.js web app builds on AWS Amplify; secrets are safely stored in `.env.production.enc` with zero plaintext keys exposed.
+
+---
+
+## v0.0.48 | 2026-09-16 | fix | CADDY HTTP MODE
+
+**Category:** Infrastructure Services  
+**Summary:** Default Caddy reverse proxy to port 80 HTTP mode and expose Workbench API on port 8001 for bare public IP support.  
+**SuggestedCommitMessage:** fix: configure Caddy HTTP port 80 default and expose API port 8001 | Infrastructure Services
+
+### 🧠 Logic & Decisions
+
+- **The Why:**
+  - **Eliminate ACME/TLS Crash on Bare IPs:** When `API_DOMAIN` is not a registered domain name (e.g. when accessing EC2 directly via public IP), Caddy previously attempted Let's Encrypt ACME challenges and failed. Defaulting `API_DOMAIN` to `:80` in `docker/Caddyfile` (`{$API_DOMAIN::80}`) disables automatic ACME certificate requests and operates Caddy as an unbuffered HTTP reverse proxy on port 80.
+  - **Direct Port 8001 Access:** Added `ports: ["8001:8001"]` to `workbench-api` in `docker-compose.prod.yml` to allow direct server-to-server backend communication from AWS Amplify or diagnostic inspection without requiring Caddy or TLS.
+- **State Change:** The production Docker stack boots cleanly without a registered domain or SSL certificate on EC2; backend endpoints are reachable via the EC2 public IP on port 80 and port 8001.
+
+### 🔗 Dependencies
+
+- **Modified:** `docker-compose.prod.yml`, `docker/Caddyfile`, `docs/commit-log.md`
+- **Impact:** Zero Let's Encrypt rate-limiting or ACME challenge failures on EC2 public IPs; Amplify can communicate with the backend over HTTP server-to-server.

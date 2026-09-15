@@ -31,7 +31,7 @@ services:
     image: plena-backend:latest
     container_name: plena-workbench-api
     restart: unless-stopped
-    command: ["node", "apps/workbench-api/dist/main.js"]
+    command: ["node", "apps/workbench-api/dist/src/main.js"]
     env_file: .env
     environment:
       NODE_ENV: production

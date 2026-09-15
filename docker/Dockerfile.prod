@@ -47,4 +47,4 @@ COPY --from=build /app/apps/agent_worker/package.json ./apps/agent_worker/packag
 COPY --from=build /app/apps/agent_worker/dist ./apps/agent_worker/dist
 
 # Default to the API; compose overrides this for the worker.
-CMD ["node", "apps/workbench-api/dist/main.js"]
+CMD ["node", "apps/workbench-api/dist/src/main.js"]

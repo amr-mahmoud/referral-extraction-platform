@@ -1039,3 +1039,24 @@ This document serves as the centralized commit history and decision log for the 
 - **Modified:** `docker/Dockerfile.prod`, `docs/deployment-plan.md`, `docs/commit-log.md`
 - **Impact:** Backend containers build cleanly on `t3.micro` without crashing.
 
+---
+
+## v0.0.50 | 2026-09-16 | fix | WORKBENCH ENTRYPOINT PATH
+
+**Category:** Infrastructure Services  
+**Summary:** Correct workbench-api production entrypoint path from dist/main.js to dist/src/main.js to resolve MODULE_NOT_FOUND container crash.  
+**SuggestedCommitMessage:** fix: update workbench-api entrypoint path to dist/src/main.js | Infrastructure Services
+
+### 🧠 Logic & Decisions
+
+- **The Why:**
+  - **Resolve MODULE_NOT_FOUND Runtime Error:** NestJS multi-folder compilation (`src/` and `libs/`) outputs compiled files into `dist/src/` rather than directly in `dist/`. The production command `node apps/workbench-api/dist/main.js` failed at runtime because `main.js` is located at `apps/workbench-api/dist/src/main.js`.
+  - **Synchronized Entrypoint References:** Updated `command:` in `docker-compose.prod.yml`, default `CMD` in `docker/Dockerfile.prod`, and `"start:prod"` in `apps/workbench-api/package.json` to reference `dist/src/main.js`.
+- **State Change:** `plena-workbench-api` container boots cleanly and stays up.
+
+### 🔗 Dependencies
+
+- **Modified:** `docker-compose.prod.yml`, `docker/Dockerfile.prod`, `apps/workbench-api/package.json`, `docs/commit-log.md`
+- **Impact:** Workbench API starts successfully without crashing or restarting.
+
+

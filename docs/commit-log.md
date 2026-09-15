@@ -1059,4 +1059,24 @@ This document serves as the centralized commit history and decision log for the 
 - **Modified:** `docker-compose.prod.yml`, `docker/Dockerfile.prod`, `apps/workbench-api/package.json`, `docs/commit-log.md`
 - **Impact:** Workbench API starts successfully without crashing or restarting.
 
+---
+
+## v0.0.51 | 2026-09-16 | fix | CADDY HTTP PREFIX
+
+**Category:** Infrastructure Services  
+**Summary:** Prefix Caddy site block with http:// to prevent automatic HTTPS redirects and ensure plain HTTP on port 80.  
+**SuggestedCommitMessage:** fix: prefix Caddyfile with http:// to disable automatic HTTPS redirects | Infrastructure Services
+
+### 🧠 Logic & Decisions
+
+- **The Why:**
+  - **Disable Automatic HTTPS Redirects:** By default, Caddy treats bare hostnames or `:80` without an explicit scheme as candidates for automatic HTTPS and emits `308 Permanent Redirect` to `https://`. Prefixing the address with `http://{$API_DOMAIN::80}` explicitly tells Caddy to operate purely in HTTP mode without issuing SSL redirects.
+- **State Change:** Port 80 reverse-proxies directly to `workbench-api:8001` over plain HTTP without HTTPS redirection.
+
+### 🔗 Dependencies
+
+- **Modified:** `docker/Caddyfile`, `docs/commit-log.md`
+- **Impact:** Port 80 responds directly with API endpoints without redirect loops.
+
+
 

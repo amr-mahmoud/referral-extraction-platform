@@ -1078,5 +1078,26 @@ This document serves as the centralized commit history and decision log for the 
 - **Modified:** `docker/Caddyfile`, `docs/commit-log.md`
 - **Impact:** Port 80 responds directly with API endpoints without redirect loops.
 
+---
+
+## v0.0.52 | 2026-09-16 | fix | CADDY AUTO HTTPS OFF
+
+**Category:** Infrastructure Services  
+**Summary:** Configure global auto_https off in Caddyfile and bind to :80 to completely eliminate SSL protocol errors on bare IPs and AWS public DNS hostnames.  
+**SuggestedCommitMessage:** fix: set auto_https off globally in Caddyfile | Infrastructure Services
+
+### 🧠 Logic & Decisions
+
+- **The Why:**
+  - **Eliminate ERR_SSL_PROTOCOL_ERROR on AWS Public Hostnames:** Caddy v2's automatic HTTPS engine intercepts connections and attempts TLS handshakes or emits redirects to `https://`. When accessed via AWS EC2 public DNS (`ec2-*.compute-1.amazonaws.com`) or raw IP, browser clients encountered SSL errors because no certificate is issued for internal AWS hostnames.
+  - **Global Configuration:** Setting `{ auto_https off }` globally at the top of `docker/Caddyfile` and listening on `:80` disables all automatic TLS generation and redirects across all incoming hostnames.
+- **State Change:** Caddy serves pure HTTP on port 80 for any IP or AWS DNS hostname without TLS handshake errors.
+
+### 🔗 Dependencies
+
+- **Modified:** `docker/Caddyfile`, `docs/commit-log.md`
+- **Impact:** HTTP requests on port 80 proxy seamlessly without SSL protocol errors.
+
+
 
 

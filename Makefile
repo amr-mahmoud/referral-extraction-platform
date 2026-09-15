@@ -9,7 +9,7 @@
 #   4. postgres/redis- Local data services (Docker Compose)
 # ==============================================================================
 
-.PHONY: help install dev dev-web dev-api dev-worker kill stop kill-all clean-dev-api kill-api build build-web build-api build-worker docker-up docker-dev docker-dev-backend docker-dev-api docker-down docker-logs docker-clean docker-give-perms fix-perms db-setup db-reset db-down-reset db-apply-migrations db-apply-notify redis-build redis-restart redis-flush redis-flush-restart redis-reset redis-cli lint codegen-api clean env-encrypt env-decrypt
+.PHONY: help install dev dev-web dev-api dev-worker kill stop kill-all clean-dev-api kill-api build build-web build-api build-worker docker-up docker-dev docker-dev-backend docker-dev-api docker-down docker-logs docker-clean docker-give-perms fix-perms db-setup db-reset db-down-reset db-apply-migrations db-apply-notify redis-build redis-restart redis-flush redis-flush-restart redis-reset redis-cli lint codegen-api clean env-encrypt env-decrypt encrypt-prod-example decrypt-prod-example env-encrypt-prod-example env-decrypt-prod-example
 
 # Default target when running 'make'
 .DEFAULT_GOAL := help
@@ -232,4 +232,19 @@ env-decrypt: ## Decrypt .env.enc into .env (prompts for passphrase)
 	@echo "--> Decrypting .env.enc -> .env (AES-256-CBC)..."
 	@openssl enc -d -aes-256-cbc -pbkdf2 -in .env.enc -out .env
 	@echo "--> Decrypted .env.enc successfully saved to .env"
+
+encrypt-prod-example: ## Encrypt .env.production.example into .env.production.enc (prompts for passphrase)
+	@echo "--> Encrypting .env.production.example -> .env.production.enc (AES-256-CBC)..."
+	@openssl enc -aes-256-cbc -salt -pbkdf2 -in .env.production.example -out .env.production.enc
+	@echo "--> Encrypted .env.production.example successfully saved to .env.production.enc"
+
+decrypt-prod-example: ## Decrypt .env.production.enc into .env.production (prompts for passphrase)
+	@echo "--> Decrypting .env.production.enc -> .env.production (AES-256-CBC)..."
+	@openssl enc -d -aes-256-cbc -pbkdf2 -in .env.production.enc -out .env.production
+	@echo "--> Decrypted .env.production.enc successfully saved to .env.production"
+
+ecnrypt-prod-example: encrypt-prod-example
+env-encrypt-prod-example: encrypt-prod-example
+env-decrypt-prod-example: decrypt-prod-example
+
 

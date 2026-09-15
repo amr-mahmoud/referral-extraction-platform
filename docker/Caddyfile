@@ -1,0 +1,12 @@
+# Caddy for the demo backend. Caddy automatically obtains and renews a
+# Let's Encrypt certificate for API_DOMAIN (set in .env), so DNS must point at
+# the instance and ports 80/443 must be open.
+#
+# Proxies the NestJS API. `flush_interval -1` streams Server-Sent Events
+# (GET /referrals/stream) immediately instead of buffering them.
+
+{$API_DOMAIN} {
+	reverse_proxy workbench-api:8001 {
+		flush_interval -1
+	}
+}

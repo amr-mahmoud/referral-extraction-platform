@@ -7,6 +7,7 @@ import {
   ABOUT_STACK,
 } from "@/constants/about";
 import { cn } from "@/lib/utils";
+import { ExternalLinkIcon, GitHubIcon } from "@/shared/Icon";
 
 import { AboutStateSection } from "../AboutStateSection";
 import { AboutWorkFlowSection } from "../AboutWorkFlowSection";
@@ -16,6 +17,12 @@ import {
   aboutOverviewEyebrowVariants,
   aboutOverviewHeadingHighlightVariants,
   aboutOverviewHeadingVariants,
+  aboutOverviewHeroGitHubArrowVariants,
+  aboutOverviewHeroGitHubCtaVariants,
+  aboutOverviewHeroGitHubDividerVariants,
+  aboutOverviewHeroGitHubIconVariants,
+  aboutOverviewHeroGitHubRepoVariants,
+  aboutOverviewHeroGitHubTitleVariants,
   aboutOverviewHeroVariants,
   aboutOverviewLeverDotVariants,
   aboutOverviewLeverKeyVariants,
@@ -56,6 +63,7 @@ const AboutOverview = React.forwardRef<HTMLElement, AboutOverviewProps>(
           <span className={cn(aboutOverviewEyebrowVariants())}>
             {ABOUT_HERO.eyebrow}
           </span>
+
           <h1 className={cn(aboutOverviewTitleVariants())}>
             {ABOUT_HERO.title}
           </h1>
@@ -67,6 +75,33 @@ const AboutOverview = React.forwardRef<HTMLElement, AboutOverviewProps>(
             when scaled horizontally.
           </h1>
           <p className={cn(aboutOverviewBodyVariants())}>{ABOUT_HERO.body}</p>
+
+          <div className="pt-2">
+            <a
+              href={ABOUT_HERO.githubUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={cn(aboutOverviewHeroGitHubCtaVariants())}
+              data-component="AboutOverview-heroGithubCta"
+              aria-label="View source code on GitHub"
+            >
+              <div className={cn(aboutOverviewHeroGitHubIconVariants())}>
+                <GitHubIcon className="size-4.5" />
+              </div>
+              <span className={cn(aboutOverviewHeroGitHubTitleVariants())}>
+                View on GitHub
+              </span>
+              <span className={cn(aboutOverviewHeroGitHubDividerVariants())}>
+                •
+              </span>
+              <span className={cn(aboutOverviewHeroGitHubRepoVariants())}>
+                amr-mahmoud/referral-extraction-platform
+              </span>
+              <ExternalLinkIcon
+                className={cn(aboutOverviewHeroGitHubArrowVariants())}
+              />
+            </a>
+          </div>
         </div>
 
         <AboutStateSection />
@@ -139,3 +174,4 @@ const AboutOverview = React.forwardRef<HTMLElement, AboutOverviewProps>(
 AboutOverview.displayName = "AboutOverview";
 
 export { AboutOverview };
+

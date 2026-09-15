@@ -1,0 +1,49 @@
+# syntax=docker/dockerfile:1
+#
+# Production image for the two BACKEND apps (workbench-api + agent_worker).
+# The frontend is NOT here — it deploys separately on AWS Amplify Hosting
+# (see amplify.yml at the repo root).
+#
+# Build from the repo root so npm workspaces resolve hoisted dependencies:
+#   docker build -f docker/Dockerfile.prod -t plena-backend .
+#
+# docker-compose.prod.yml selects which app runs via `command:`.
+
+# ---- base -------------------------------------------------------------------
+FROM node:20-bookworm-slim AS base
+WORKDIR /app
+# Prisma needs OpenSSL at build and runtime; ca-certificates for outbound TLS.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+# ---- dependencies (cached on manifests only) --------------------------------
+FROM base AS deps
+COPY package.json package-lock.json ./
+COPY apps/web/package.json ./apps/web/package.json
+COPY apps/workbench-api/package.json ./apps/workbench-api/package.json
+COPY apps/agent_worker/package.json ./apps/agent_worker/package.json
+RUN npm ci
+
+# ---- build ------------------------------------------------------------------
+FROM deps AS build
+COPY . .
+RUN npx prisma generate --schema=prisma/schema.prisma \
+  && npm run build --workspace apps/workbench-api \
+  && npm run build --workspace apps/agent_worker
+
+# ---- runtime ----------------------------------------------------------------
+FROM base AS runtime
+ENV NODE_ENV=production
+# node_modules carries the generated Prisma client (built for linux) and the
+# prisma CLI used by `prisma migrate deploy`.
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/prisma ./prisma
+COPY --from=build /app/apps/workbench-api/package.json ./apps/workbench-api/package.json
+COPY --from=build /app/apps/workbench-api/dist ./apps/workbench-api/dist
+COPY --from=build /app/apps/agent_worker/package.json ./apps/agent_worker/package.json
+COPY --from=build /app/apps/agent_worker/dist ./apps/agent_worker/dist
+
+# Default to the API; compose overrides this for the worker.
+CMD ["node", "apps/workbench-api/dist/main.js"]

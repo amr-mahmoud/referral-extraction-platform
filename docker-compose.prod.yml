@@ -1,0 +1,114 @@
+# Production/demo backend stack. The frontend deploys separately on AWS
+# Amplify Hosting (amplify.yml). Run from the repo root:
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Only Caddy is internet-facing (80/443). Postgres, Redis, the API, and the
+# worker stay on the internal compose network.
+name: plena-referral-demo
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: plena-caddy
+    restart: unless-stopped
+    environment:
+      API_DOMAIN: ${API_DOMAIN:?set API_DOMAIN in .env, e.g. api.demo.example.com}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - workbench-api
+
+  workbench-api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.prod
+    image: plena-backend:latest
+    container_name: plena-workbench-api
+    restart: unless-stopped
+    command: ["node", "apps/workbench-api/dist/main.js"]
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: "8001"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-referral}:${POSTGRES_PASSWORD:-referral}@postgres:5432/${POSTGRES_DB:-referral_extraction}?connection_limit=15
+      REDIS_URL: redis://redis:6379
+    expose:
+      - "8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  agent_worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.prod
+    image: plena-backend:latest
+    container_name: plena-agent-worker
+    restart: unless-stopped
+    command: ["node", "apps/agent_worker/dist/index.js"]
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      REDIS_URL: redis://redis:6379
+      HEALTHCHECK_PORT: "8002"
+    expose:
+      - "8002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"require('http').get('http://127.0.0.1:8002/healthz',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\"",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: plena-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-referral}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-referral}
+      POSTGRES_DB: ${POSTGRES_DB:-referral_extraction}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: plena-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
+  redis_data:
+  caddy_data:
+  caddy_config:

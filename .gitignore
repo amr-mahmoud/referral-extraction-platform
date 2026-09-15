@@ -1,8 +1,29 @@
-# Environment Variables
+# Environment Variables & Secrets (Only encrypted files are allowed in git)
 .env
+.env*
 .env.*
-!.env.example
+*.env
+*.env.*
+.env.example
+.env.production.example
+.env.production
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
+credentials.json
+secrets.json
+
+# Only encrypted environment files are allowed
 !.env.enc
+!.env.production.enc
+!.env.*.enc
+!*.env.enc
+!*.enc
+
+
 
 # Dependencies
 node_modules/

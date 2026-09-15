@@ -82,6 +82,35 @@ export const aboutOverviewScopeCalloutBodyVariants = cva(
   "text-[12px] leading-relaxed text-muted",
 );
 
+export const aboutOverviewHeroGitHubCtaVariants = cva([
+  "group inline-flex items-center gap-3 rounded-[12px] bg-ink px-4.5 py-3",
+  "text-white shadow-sm transition-all duration-200 w-fit",
+  "hover:bg-brand hover:shadow-md hover:ring-3 hover:ring-brand/25 active:scale-[0.99]",
+]);
+
+export const aboutOverviewHeroGitHubIconVariants = cva([
+  "flex size-7 shrink-0 items-center justify-center rounded-[8px] bg-white/12",
+  "text-white transition-all duration-200 group-hover:scale-105 group-hover:bg-white/20",
+]);
+
+export const aboutOverviewHeroGitHubTitleVariants = cva(
+  "text-[13.5px] font-bold tracking-tight text-white",
+);
+
+export const aboutOverviewHeroGitHubDividerVariants = cva(
+  "hidden text-white/30 sm:inline",
+);
+
+export const aboutOverviewHeroGitHubRepoVariants = cva(
+  "hidden font-mono text-[12px] font-normal text-white/75 sm:inline",
+);
+
+export const aboutOverviewHeroGitHubArrowVariants = cva(
+  "size-3.5 shrink-0 text-white/60 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-white",
+);
+
 export type AboutOverviewVariantProps = VariantProps<
   typeof aboutOverviewVariants
 >;
+
+

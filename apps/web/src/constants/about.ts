@@ -1,5 +1,9 @@
+export const GITHUB_REPO_URL =
+  "https://github.com/amr-mahmoud/referral-extraction-platform";
+
 export const ABOUT_HERO = {
   eyebrow: "Technical demo · Amr Hazem",
+  githubUrl: GITHUB_REPO_URL,
   title: "AI Document Extraction WorkBench",
   heading: "Built to carry 20 million documents when scaled horizontally.",
   body: "A queue-leveled extraction pipeline: presigned direct-to-S3 uploads, stateless worker fleet, one writer to Postgres, and real-time push back to the clinic. Throughput is a function of worker count, not of application code.",

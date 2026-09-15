@@ -975,3 +975,25 @@ This document serves as the centralized commit history and decision log for the 
 
 - **Modified:** `apps/web/public/favicon.ico` [NEW], `apps/web/src/app/icon.png`, `apps/web/src/app/layout.tsx`, `apps/web/src/apps/dashboard/index.tsx`, `apps/web/src/constants/referrals.ts`, `apps/web/src/features/referrals/SampleDocumentsBanner/SampleDocumentsBanner.styles.ts` [NEW], `apps/web/src/features/referrals/SampleDocumentsBanner/index.tsx` [NEW], `apps/web/src/shared/Icon/index.tsx`, `docs/commit-log.md`
 - **Impact:** Zero breaking changes to backend or database; enhances user onboarding and self-service evaluation flow.
+
+---
+
+## v0.0.47 | 2026-09-16 | feat | PROD DEPLOYMENT SECRETS
+
+**Category:** Infrastructure Services  
+**Summary:** Add production Docker Compose stack, Caddy TLS reverse proxy, Amplify build config, AES-256 secrets encryption, and prominent About page GitHub link.  
+**SuggestedCommitMessage:** feat: add production deployment stack, encrypted secrets policy, and about page repo CTA | Infrastructure Services
+
+### 🧠 Logic & Decisions
+
+- **The Why:**
+  - **Production Deployment Configuration:** Added `docker-compose.prod.yml`, `docker/Dockerfile.prod`, and `docker/Caddyfile` for self-hosted EC2 container deployment with automated Let's Encrypt TLS, internal container networking, and health checks across Postgres, Redis, Workbench API, and Agent Worker.
+  - **Amplify Frontend Deployment:** Added `amplify.yml` build pipeline definition for Next.js App Router deployment on AWS Amplify with optimized build and cache rules.
+  - **Strict Secrets & Encryption Policy:** Hardened `.gitignore` to block all plaintext secrets (`.env`, `.env.example`, `.env.production`, `.env.production.example`, `*.pem`, `*.key`, `credentials.json`) while whitelisting only AES-256-CBC encrypted bundles (`.env.enc`, `.env.production.enc`). Added Makefile targets (`encrypt-prod-example`, `decrypt-prod-example`) to securely manage production credentials.
+  - **Prominent GitHub Link on About Page:** Positioned a high-contrast dark CTA button (`View on GitHub • amr-mahmoud/referral-extraction-platform ↗`) directly beneath the hero description on `/about` with responsive wrapping and hover interactions.
+- **State Change:** System is deployment-ready for AWS EC2 and Amplify; environment variables are strictly encrypted with zero plaintext leakage in Git.
+
+### 🔗 Dependencies
+
+- **Modified:** `.env.enc`, `.env.example` [DELETE], `.env.production.enc` [NEW], `.gitignore`, `Makefile`, `amplify.yml` [NEW], `apps/web/src/constants/about.ts`, `apps/web/src/features/about/AboutOverview/AboutOverview.styles.ts`, `apps/web/src/features/about/AboutOverview/index.tsx`, `apps/web/src/shared/Icon/index.tsx`, `docker-compose.prod.yml` [NEW], `docker/Caddyfile` [NEW], `docker/Dockerfile.prod` [NEW], `docs/commit-log.md`
+- **Impact:** Production compose stack can be deployed on EC2 via `docker compose -f docker-compose.prod.yml up -d`; Next.js web app builds on AWS Amplify; secrets are safely stored in `.env.production.enc` with zero plaintext keys exposed.

@@ -2,7 +2,7 @@
   "name": "agent_worker",
   "version": "0.0.1",
   "private": true,
-  "description": "Plena Referral Extraction Workbench - Agent Worker",
+  "description": "Document Extraction Workbench - Agent Worker",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",

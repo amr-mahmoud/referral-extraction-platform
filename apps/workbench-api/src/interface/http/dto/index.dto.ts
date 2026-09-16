@@ -251,7 +251,7 @@ export class ReferralDto {
       patientName: referral.patientName,
       status: referral.status.value,
       extractionSchemaId: referral.extractionSchemaId,
-      s3Bucket: process.env.S3_BUCKET_NAME ?? 'plena-referrals',
+      s3Bucket: process.env.S3_BUCKET_NAME ?? 'referral-workbench',
       s3Key: `referrals/${referral.clinicId}/${referral.id}.pdf`,
       createdAt: referral.createdAt,
       updatedAt: referral.updatedAt,

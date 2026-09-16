@@ -49,7 +49,7 @@ export class ReferralMapper {
       clinicId: referral.clinicId,
       fileName: referral.fileName,
       patientName: referral.patientName,
-      s3Bucket: process.env.S3_BUCKET_NAME ?? 'plena-referrals',
+      s3Bucket: process.env.S3_BUCKET_NAME ?? 'referral-workbench',
       s3Key: `referrals/${referral.clinicId}/${referral.id}.pdf`,
       extractionSchemaId: referral.extractionSchemaId,
       status: referral.status.value,

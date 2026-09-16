@@ -1,16 +1,18 @@
-# Caddy for the demo backend. Caddy automatically obtains and renews a
-# Let's Encrypt certificate for API_DOMAIN (set in .env), so DNS must point at
-# the instance and ports 80/443 must be open.
+# Caddy fronts the whole app. Auto-obtains and renews a Let's Encrypt
+# certificate for API_DOMAIN (set in .env — e.g. a free <ec2-ip>.sslip.io
+# hostname, which needs no domain purchase). DNS/the hostname must resolve to
+# this instance and ports 80/443 must be open. Real HTTPS here is required,
+# not optional: the auth cookie is set `secure: true` in production
+# (apps/web/src/server-actions/auth.ts), so the browser drops it over plain
+# HTTP and sign-in silently fails.
 #
-# Proxies the NestJS API. `flush_interval -1` streams Server-Sent Events
-# (GET /referrals/stream) immediately instead of buffering them.
+# Proxies to `web`, not `workbench-api` — the browser only ever talks to the
+# Next.js app; `web` reaches workbench-api itself over the internal compose
+# network. `flush_interval -1` streams Server-Sent Events
+# (GET /api/referrals/stream) immediately instead of buffering them.
 
-{
-	auto_https off
-}
-
-:80 {
-	reverse_proxy workbench-api:8001 {
+{$API_DOMAIN} {
+	reverse_proxy web:3000 {
 		flush_interval -1
 	}
 }

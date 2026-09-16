@@ -1140,8 +1140,24 @@ This document serves as the centralized commit history and decision log for the 
 - **Modified:** `apps/workbench-api/src/interface/http/clinics/clinics.controller.ts`, `apps/web/src/app/api/referrals/stream/route.ts`, `apps/web/src/hooks/use-referral-status-stream.ts`, `docs/commit-log.md`
 - **Impact:** Live referral status updates flow in real time on production deployments without page refreshes.
 
+---
 
+## v0.0.55 | 2026-09-16 | feat | UNIFIED DOCKER COMPOSE
 
+**Category:** System Architecture  
+**Summary:** Unify frontend and backend into single EC2 Docker Compose stack with Next.js standalone mode, Caddy TLS via sslip.io, and sanitize brand references to generic document-extraction.  
+**SuggestedCommitMessage:** feat: unify web and backend in docker-compose with standalone mode and generic branding | System Architecture
 
+### 🧠 Logic & Decisions
 
+- **The Why:**
+  - **Eliminate Amplify 30s SSE Ceiling & Cookie Drops:** AWS Amplify's serverless compute hard-caps response streams at 30 seconds and caused cross-domain cookie rejection between separate origins. Pivoting to an all-in-one Compose architecture with Caddy proxying `web:3000` under a unified `sslip.io` TLS domain keeps SSE connections open indefinitely (`flush_interval -1`) and preserves `secure: true` cookies on the same origin.
+  - **Internalize Workbench API:** Removed public port exposure for `workbench-api:8001`; Next.js Server Actions communicate with the API directly over internal Docker networking (`http://workbench-api:8001`), eliminating CORS overhead and reducing public attack surface.
+  - **Multi-Stage Unified Production Image:** Enabled Next.js `output: "standalone"` in `apps/web/next.config.ts` and extended `docker/Dockerfile.prod` to build and package `web`, `workbench-api`, and `agent_worker` in one multi-stage build.
+  - **Generic Domain Sanitization:** Renamed all container names, image tags, compose projects, UI brand lockup components, and default secrets from `plena` to generic `document-extraction` / `referral-extraction`.
+- **State Change:** Frontend and backend run co-located in Docker Compose behind Caddy with automated TLS on EC2; Amplify hosting is retired; all container and service identifiers are generic.
 
+### 🔗 Dependencies
+
+- **Modified:** `docker-compose.prod.yml`, `docker/Caddyfile`, `docker/Dockerfile.prod`, `amplify.yml`, `apps/web/next.config.ts`, `apps/web/src/shared/BrandLockup/index.tsx`, `apps/workbench-api/src/main.ts`, `apps/workbench-api/src/infrastructure/auth/jwt-token.service.ts`, `apps/workbench-api/src/infrastructure/repository/referral.mapper.ts`, `apps/workbench-api/src/interface/http/dto/index.dto.ts`, `package.json`, `apps/agent_worker/package.json`, `apps/web/README.md`, `README.md`, `Makefile`, `docs/commit-log.md`
+- **Impact:** Production deployment now requires only `docker compose -f docker-compose.prod.yml up -d --build` on an EC2 host; Amplify deployment is deprecated; SSE and auth cookies operate under a unified HTTPS origin.

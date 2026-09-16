@@ -4,7 +4,7 @@
 
 ## What this is
 
-The Next.js frontend for the Plena Referral Extraction Workbench: clinic auth, referral
+The Next.js frontend for the Document Extraction Workbench: clinic auth, referral
 upload, extraction schema management, and the review interface — a referral PDF next to
 its extracted fields, with click-to-highlight sourced from `page_number` + `bounding_box`.
 

@@ -1,4 +1,4 @@
-# Plena Referral Extraction Platform
+# Document Extraction Platform
 
 A high-throughput medical referral extraction workbench. Ingests medical referral PDFs, extracts structured clinical data using **Gemini** with **spatial bounding-box grounding**, and streams live updates into a **Next.js** review interface.
 
@@ -159,7 +159,7 @@ The Agent Worker is **fully decoupled from the database**: it claims referrals v
 |---|---|---|
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql://referral:referral@localhost:5434/referral_extraction?connection_limit=15` |
 | `REDIS_URL` | Redis connection string | `redis://localhost:6379` |
-| `JWT_SECRET` | JWT signing secret | `plena-dev-secret-change-me` |
+| `JWT_SECRET` | JWT signing secret | `document-extraction-dev-secret-change-me` |
 | `AWS_ACCESS_KEY_ID` | AWS IAM Access Key for S3/SQS | — |
 | `AWS_SECRET_ACCESS_KEY` | AWS IAM Secret Key for S3/SQS | — |
 | `S3_BUCKET_NAME` | Target S3 bucket for referral PDFs | `referral-workbench` |

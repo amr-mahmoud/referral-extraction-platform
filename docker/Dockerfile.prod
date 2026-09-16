@@ -1,11 +1,9 @@
 # syntax=docker/dockerfile:1
 #
-# Production image for the two BACKEND apps (workbench-api + agent_worker).
-# The frontend is NOT here — it deploys separately on AWS Amplify Hosting
-# (see amplify.yml at the repo root).
-#
-# Build from the repo root so npm workspaces resolve hoisted dependencies:
-#   docker build -f docker/Dockerfile.prod -t plena-backend .
+# Single production image for all three apps (web + workbench-api +
+# agent_worker) — one multi-stage build, run from the repo root so npm
+# workspaces resolve hoisted dependencies:
+#   docker build -f docker/Dockerfile.prod -t document-extraction-app .
 #
 # docker-compose.prod.yml selects which app runs via `command:`.
 
@@ -31,7 +29,8 @@ ENV NODE_OPTIONS="--max-old-space-size=1536"
 COPY . .
 RUN npx prisma generate --schema=prisma/schema.prisma \
   && npm run build --workspace apps/workbench-api \
-  && npm run build --workspace apps/agent_worker
+  && npm run build --workspace apps/agent_worker \
+  && npm run build --workspace apps/web
 
 # ---- runtime ----------------------------------------------------------------
 FROM base AS runtime
@@ -45,6 +44,17 @@ COPY --from=build /app/apps/workbench-api/package.json ./apps/workbench-api/pack
 COPY --from=build /app/apps/workbench-api/dist ./apps/workbench-api/dist
 COPY --from=build /app/apps/agent_worker/package.json ./apps/agent_worker/package.json
 COPY --from=build /app/apps/agent_worker/dist ./apps/agent_worker/dist
+# Next.js standalone output (output: "standalone" in apps/web/next.config.ts)
+# already mirrors the monorepo path, so apps/web/server.js lands here directly.
+# Copy its node_modules and apps/web/ subpaths specifically (not the whole
+# standalone/ dir) so its pruned, web-only node_modules MERGES into the
+# already-copied full workspace node_modules above instead of risking
+# clobbering the root package.json workbench-api/agent_worker also need.
+# `static`/`public` are not included in `standalone` and must be copied separately.
+COPY --from=build /app/apps/web/.next/standalone/node_modules ./node_modules
+COPY --from=build /app/apps/web/.next/standalone/apps/web ./apps/web
+COPY --from=build /app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=build /app/apps/web/public ./apps/web/public
 
-# Default to the API; compose overrides this for the worker.
+# Default to the API; compose overrides this for the worker and web.
 CMD ["node", "apps/workbench-api/dist/src/main.js"]

@@ -15,9 +15,9 @@ export interface BrandLockupProps
   name?: string;
 }
 
-/** The Plena Health wordmark used in the header and the auth brand panel. */
+/** The Document Extraction wordmark used in the header and the auth brand panel. */
 const BrandLockup = React.forwardRef<HTMLSpanElement, BrandLockupProps>(
-  ({ className, name = "Plena Health", size, ...props }, ref) => {
+  ({ className, name = "Document Extraction", size, ...props }, ref) => {
     return (
       <span
         ref={ref}

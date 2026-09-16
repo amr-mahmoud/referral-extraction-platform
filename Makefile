@@ -1,5 +1,5 @@
 # ==============================================================================
-# Plena Referral Extraction Platform - Monorepo Makefile
+# Document Extraction Platform - Monorepo Makefile
 # ==============================================================================
 # This Makefile provides organized management targets for developing, building,
 # running, containerizing, and stopping all applications in the monorepo:
@@ -19,7 +19,7 @@
 # ------------------------------------------------------------------------------
 help: ## Display available Makefile commands and usage
 	@echo ""
-	@echo "Plena Referral Extraction Platform - Commands:"
+	@echo "Document Extraction Platform - Commands:"
 	@echo "--------------------------------------------------------"
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?##/ {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@echo ""

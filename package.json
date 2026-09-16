@@ -2,7 +2,7 @@
   "name": "referral-extraction-platform",
   "version": "0.0.1",
   "private": true,
-  "description": "Plena Referral Extraction Workbench - monorepo",
+  "description": "Document Extraction Workbench - monorepo",
   "workspaces": [
     "apps/*",
     "packages/*"

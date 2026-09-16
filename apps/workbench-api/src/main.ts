@@ -29,7 +29,7 @@ async function bootstrap() {
   app.useGlobalFilters(new AllExceptionFilter());
 
   const config = new DocumentBuilder()
-    .setTitle('Plena Referral Extraction Workbench API')
+    .setTitle('Document Extraction Workbench API')
     .setDescription(
       'WorkBench API service owning client auth, referral review, extraction schemas, and SSE live status updates.',
     )

@@ -99,6 +99,7 @@ export class PostgresListenService
       });
 
       await client.connect();
+      await this.ensureNotifyTrigger(client);
       await client.query(`LISTEN ${NOTIFY_CHANNEL}`);
       this.client = client;
       this.logger.log(`Listening on Postgres channel "${NOTIFY_CHANNEL}"`);
@@ -109,6 +110,41 @@ export class PostgresListenService
         }`,
       );
       this.scheduleReconnect();
+    }
+  }
+
+  private async ensureNotifyTrigger(client: Client): Promise<void> {
+    try {
+      await client.query(`
+        CREATE OR REPLACE FUNCTION notify_referral_changed() RETURNS trigger AS $$
+        BEGIN
+          PERFORM pg_notify(
+            '${NOTIFY_CHANNEL}',
+            json_build_object(
+              'referralId', NEW.id,
+              'clinicId', NEW.clinic_id,
+              'status', NEW.status
+            )::text
+          );
+          RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+
+        DROP TRIGGER IF EXISTS referral_changed_notify ON referrals;
+
+        CREATE TRIGGER referral_changed_notify
+        AFTER INSERT OR UPDATE OF status, extracted_payload, patient_name, error_message
+        ON referrals
+        FOR EACH ROW
+        EXECUTE FUNCTION notify_referral_changed();
+      `);
+      this.logger.log('Referral change NOTIFY trigger verified in database');
+    } catch (error) {
+      this.logger.warn(
+        `Could not auto-apply NOTIFY trigger (database may still be initializing): ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
     }
   }
 

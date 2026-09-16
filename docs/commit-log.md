@@ -1161,3 +1161,27 @@ This document serves as the centralized commit history and decision log for the 
 
 - **Modified:** `docker-compose.prod.yml`, `docker/Caddyfile`, `docker/Dockerfile.prod`, `amplify.yml`, `apps/web/next.config.ts`, `apps/web/src/shared/BrandLockup/index.tsx`, `apps/workbench-api/src/main.ts`, `apps/workbench-api/src/infrastructure/auth/jwt-token.service.ts`, `apps/workbench-api/src/infrastructure/repository/referral.mapper.ts`, `apps/workbench-api/src/interface/http/dto/index.dto.ts`, `package.json`, `apps/agent_worker/package.json`, `apps/web/README.md`, `README.md`, `Makefile`, `docs/commit-log.md`
 - **Impact:** Production deployment now requires only `docker compose -f docker-compose.prod.yml up -d --build` on an EC2 host; Amplify deployment is deprecated; SSE and auth cookies operate under a unified HTTPS origin.
+
+---
+
+## v0.0.56 | 2026-09-17 | fix | AUTO SCHEMA INIT
+
+**Category:** Infrastructure Services  
+**Summary:** Automate database schema migrations and NOTIFY trigger creation on container startup, commit baseline Prisma migration, and add clean docker teardown commands.  
+**SuggestedCommitMessage:** fix: automate database schema migration and notify trigger on startup | Infrastructure Services
+
+### 🧠 Logic & Decisions
+
+- **The Why:**
+  - **Resolve "A database read failed" on Fresh Deployments:** `npx prisma migrate deploy` previously exited without creating tables because no migration files existed in `prisma/migrations`, leaving Postgres empty and causing `relation "clinics" does not exist` errors on signup.
+  - **Automated Container Startup Migration:** Updated `workbench-api`'s command in `docker-compose.prod.yml` to automatically execute `npx prisma migrate deploy --schema=prisma/schema.prisma` before launching NestJS.
+  - **Committed Baseline Prisma Migration:** Generated and committed `prisma/migrations/20260917000000_init/` (`migration.sql` + `migration_lock.toml`) so `prisma migrate deploy` has an official migration history to execute.
+  - **Relocate Container Init Triggers to Manual:** Moved `002-referral-notify.sql` to `docker/postgres/manual/referral-notify.sql` so `/docker-entrypoint-initdb.d` does not attempt to attach triggers to non-existent tables during container init on an empty volume.
+  - **Self-Healing Real-Time Trigger:** Added `ensureNotifyTrigger` hook inside `PostgresListenService.connectAndListen()` to automatically verify and apply `notify_referral_changed()` and its trigger whenever the API connects to Postgres.
+  - **Teardown Command Enhancements:** Added `make docker-stop-all`, `make docker-nuke`, `make docker-down-prod`, and `make docker-clean-prod` to cleanly stop and purge all Docker containers on the host.
+- **State Change:** Database tables and NOTIFY triggers are guaranteed to exist on initial container launch without requiring manual `prisma db push` or psql execution.
+
+### 🔗 Dependencies
+
+- **Modified:** `docker-compose.prod.yml`, `apps/workbench-api/src/infrastructure/notifications/postgres-listen.service.ts`, `apps/workbench-api/src/application/ports/referral-notification.port.ts`, `docker/postgres/manual/referral-notify.sql`, `prisma/migrations/20260917000000_init/migration.sql`, `prisma/migrations/migration_lock.toml`, `Makefile`, `docs/commit-log.md`
+- **Impact:** Fresh deployments automatically initialize database tables and real-time triggers on container start.

@@ -3,8 +3,9 @@ import type { Observable } from 'rxjs';
 export const REFERRAL_NOTIFICATION_PORT = 'REFERRAL_NOTIFICATION_PORT';
 
 /**
- * The `pg_notify` payload built in `docker/postgres/init/002-referral-notify.sql` —
- * only ids and status, never the extracted payload (NOTIFY is capped at 8KB).
+ * The `pg_notify` payload built by `notify_referral_changed()`, applied via
+ * `PostgresListenService.ensureNotifyTrigger()` on every connect — only ids
+ * and status, never the extracted payload (NOTIFY is capped at 8KB).
  */
 export interface ReferralChangedNotification {
   referralId: string;

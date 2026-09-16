@@ -51,7 +51,12 @@ services:
     image: document-extraction-app:latest
     container_name: document-extraction-workbench-api
     restart: unless-stopped
-    command: ["node", "apps/workbench-api/dist/src/main.js"]
+    command:
+      [
+        "sh",
+        "-c",
+        "npx prisma migrate deploy --schema=prisma/schema.prisma && node apps/workbench-api/dist/src/main.js",
+      ]
     env_file: .env
     environment:
       NODE_ENV: production

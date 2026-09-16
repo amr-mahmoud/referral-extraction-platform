@@ -9,7 +9,7 @@
 #   4. postgres/redis- Local data services (Docker Compose)
 # ==============================================================================
 
-.PHONY: help install dev dev-web dev-api dev-worker kill stop kill-all clean-dev-api kill-api build build-web build-api build-worker docker-up docker-dev docker-dev-backend docker-dev-api docker-down docker-logs docker-clean docker-give-perms fix-perms db-setup db-reset db-down-reset db-apply-migrations db-apply-notify redis-build redis-restart redis-flush redis-flush-restart redis-reset redis-cli lint codegen-api clean env-encrypt env-decrypt encrypt-prod-example decrypt-prod-example env-encrypt-prod-example env-decrypt-prod-example
+.PHONY: help install dev dev-web dev-api dev-worker kill stop kill-all clean-dev-api kill-api build build-web build-api build-worker docker-up docker-dev docker-dev-backend docker-dev-api docker-down docker-down-prod docker-clean-prod docker-stop-all docker-nuke docker-logs docker-clean docker-give-perms fix-perms db-setup db-reset db-down-reset db-apply-migrations db-apply-notify redis-build redis-restart redis-flush redis-flush-restart redis-reset redis-cli lint codegen-api clean env-encrypt env-decrypt encrypt-prod-example decrypt-prod-example env-encrypt-prod-example env-decrypt-prod-example
 
 # Default target when running 'make'
 .DEFAULT_GOAL := help
@@ -99,6 +99,10 @@ docker-down: ## Gracefully stop and remove Docker Compose containers and network
 	@echo "--> Stopping Docker Compose stack..."
 	docker compose down
 
+docker-down-prod: ## Gracefully stop and remove the production Docker Compose stack
+	@echo "--> Stopping production Docker Compose stack..."
+	docker compose -f docker-compose.prod.yml down
+
 docker-logs: ## Tail live logs from all running Docker Compose containers
 	@echo "--> Tailing live Docker Compose logs (Ctrl+C to exit)..."
 	docker compose logs -f
@@ -106,6 +110,22 @@ docker-logs: ## Tail live logs from all running Docker Compose containers
 docker-clean: ## Stop Docker containers and purge volumes (wipes Postgres/Redis data) and orphan containers
 	@echo "--> Purging Docker Compose containers, networks, and persistent volumes..."
 	docker compose down -v --remove-orphans
+
+docker-clean-prod: ## Stop production Docker containers and purge volumes and orphan containers
+	@echo "--> Purging production Docker Compose containers, networks, and persistent volumes..."
+	docker compose -f docker-compose.prod.yml down -v --remove-orphans
+
+docker-stop-all: ## Stop and remove all Docker containers across dev, prod, and host completely
+	@echo "--> Stopping and removing all Docker Compose stacks..."
+	-docker compose -p plena-referral-demo down -v --remove-orphans 2>/dev/null || true
+	-docker compose -p document-extraction-demo down -v --remove-orphans 2>/dev/null || true
+	-docker compose down -v --remove-orphans 2>/dev/null || true
+	-docker compose -f docker-compose.prod.yml down -v --remove-orphans 2>/dev/null || true
+	@echo "--> Forcibly stopping and removing all remaining Docker containers on host..."
+	-docker rm -f $$(docker ps -aq) 2>/dev/null || true
+	@echo "--> All Docker containers stopped and removed completely."
+
+docker-nuke: docker-stop-all ## Alias for 'make docker-stop-all'
 
 docker-give-perms: ## Fix ownership permissions on ~/.docker and repository workspace files
 	@echo "--> Restoring user file ownership on ~/.docker and workspace..."
@@ -154,7 +174,7 @@ db-apply-migrations: ## Push Prisma schema changes, regenerate client, and (re)a
 db-apply-notify: ## (Re)apply the referral LISTEN/NOTIFY trigger to an already-running database
 	@echo "--> Applying referral NOTIFY trigger..."
 	@docker compose exec -T postgres psql -U $${POSTGRES_USER:-referral} -d $${POSTGRES_DB:-referral_extraction} \
-		< docker/postgres/init/002-referral-notify.sql
+		< docker/postgres/manual/referral-notify.sql
 	@echo "--> NOTIFY trigger applied."
 
 redis-build: ## Build and start Redis container in detached mode

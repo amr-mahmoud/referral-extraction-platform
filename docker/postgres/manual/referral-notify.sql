@@ -6,9 +6,16 @@
 -- changed"; the API then does a primary-key SELECT to fetch the heavy row and
 -- pushes that down the open SSE connection.
 --
--- Written idempotently (CREATE OR REPLACE + DROP TRIGGER IF EXISTS) because
--- files in this directory only auto-run against an EMPTY data volume — an
--- existing database needs this applied manually via `make db-apply-notify`.
+-- NOT auto-run: this file deliberately lives outside docker/postgres/init/.
+-- `PostgresListenService.ensureNotifyTrigger()` (apps/workbench-api/src/
+-- infrastructure/notifications/postgres-listen.service.ts) already applies
+-- this exact function + trigger, idempotently, every time the API connects —
+-- which only ever happens after `prisma migrate deploy` has created the
+-- `referrals` table. Putting an equivalent script back in init/ would run
+-- during Postgres's own first-boot init, before that table exists, which (a)
+-- would fail with "relation referrals does not exist" and (b) Postgres's
+-- entrypoint treats init-script failures as fatal, so it would take the whole
+-- database down. Kept here only for manual/ad-hoc use via `make db-apply-notify`.
 
 CREATE OR REPLACE FUNCTION notify_referral_changed() RETURNS trigger AS $$
 BEGIN

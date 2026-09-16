@@ -26,6 +26,7 @@ export async function GET() {
   }
 
   const upstreamResponse = await fetch(`${API_BASE_URL}/referrals/stream`, {
+    cache: "no-store",
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: "text/event-stream",
@@ -41,6 +42,7 @@ export async function GET() {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
     },
   });
 }

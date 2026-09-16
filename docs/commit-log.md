@@ -1118,6 +1118,29 @@ This document serves as the centralized commit history and decision log for the 
 - **Modified:** `amplify.yml`, `.env.production.enc`, `docs/commit-log.md`
 - **Impact:** Frontend on AWS Amplify can communicate with the EC2 backend during authentication and referral operations without fetch failures.
 
+---
+
+## v0.0.54 | 2026-09-16 | fix | SSE STREAM HEARTBEAT
+
+**Category:** Infrastructure Services  
+**Summary:** Add immediate connected event and 15s heartbeat to SSE stream, disable fetch caching in proxy route, and add auto-reconnect to client hook.  
+**SuggestedCommitMessage:** fix: add SSE heartbeat and initial connected event with client auto-reconnect | Infrastructure Services
+
+### 🧠 Logic & Decisions
+
+- **The Why:**
+  - **Eliminate 30s Pending / 500 Gateway Timeout on Amplify:** In Express/NestJS, response headers for `@Sse()` are buffered until the first chunk is written. Without an initial emission, `workbench-api` sent 0 bytes, blocking Next.js `await fetch(...)` for 30 seconds until AWS Amplify/CloudFront killed the connection with HTTP 500. Adding an immediate `connected` event flushes HTTP 200 headers instantly (<10ms).
+  - **15-Second Heartbeat:** Merged `interval(15000)` heartbeat pings into the SSE stream to prevent idle timeouts on CloudFront and AWS Amplify.
+  - **Next.js Proxy Unbuffered Streaming:** Configured `{ cache: "no-store" }` and `X-Accel-Buffering: no` on the Next.js `/api/referrals/stream` route to disable internal fetch buffering.
+  - **Resilient Client Reconnection:** Updated `useReferralStatusStream` to catch `onerror` events and automatically reconnect with backoff rather than permanently aborting on connection close.
+- **State Change:** SSE connection establishes in milliseconds and maintains continuous streaming updates to the dashboard table.
+
+### 🔗 Dependencies
+
+- **Modified:** `apps/workbench-api/src/interface/http/clinics/clinics.controller.ts`, `apps/web/src/app/api/referrals/stream/route.ts`, `apps/web/src/hooks/use-referral-status-stream.ts`, `docs/commit-log.md`
+- **Impact:** Live referral status updates flow in real time on production deployments without page refreshes.
+
+
 
 
 

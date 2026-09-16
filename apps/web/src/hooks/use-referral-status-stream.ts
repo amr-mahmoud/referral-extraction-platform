@@ -27,7 +27,9 @@ export function useReferralStatusStream(
   }, [onReferralChanged]);
 
   React.useEffect(() => {
-    const eventSource = new EventSource(STREAM_PATH);
+    let eventSource: EventSource | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let isMounted = true;
 
     const handleReferralChanged = (event: MessageEvent<string>) => {
       try {
@@ -38,14 +40,40 @@ export function useReferralStatusStream(
       }
     };
 
-    eventSource.addEventListener(REFERRAL_CHANGED_EVENT, handleReferralChanged);
+    function connect() {
+      if (!isMounted) return;
+
+      eventSource = new EventSource(STREAM_PATH);
+      eventSource.addEventListener(REFERRAL_CHANGED_EVENT, handleReferralChanged);
+
+      eventSource.onerror = () => {
+        if (eventSource) {
+          eventSource.close();
+          eventSource = null;
+        }
+        if (isMounted && !reconnectTimer) {
+          reconnectTimer = setTimeout(() => {
+            reconnectTimer = null;
+            connect();
+          }, 3000);
+        }
+      };
+    }
+
+    connect();
 
     return () => {
-      eventSource.removeEventListener(
-        REFERRAL_CHANGED_EVENT,
-        handleReferralChanged,
-      );
-      eventSource.close();
+      isMounted = false;
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+      }
+      if (eventSource) {
+        eventSource.removeEventListener(
+          REFERRAL_CHANGED_EVENT,
+          handleReferralChanged,
+        );
+        eventSource.close();
+      }
     };
   }, []);
 }

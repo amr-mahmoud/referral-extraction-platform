@@ -15,7 +15,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { Observable } from 'rxjs';
+import { interval, merge, of, Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { ApplicationService } from '../../../application/application.service';
 import { normalizeExtractionSchemaFields } from '../dto/extraction-schema-input.mapper';
@@ -168,7 +168,19 @@ export class ClinicsController {
   public streamClinicReferrals(
     @Req() req: AuthenticatedRequest,
   ): Observable<MessageEvent> {
-    return this.applicationService
+    const initialConnected$ = of({
+      type: 'connected',
+      data: { connectedAt: new Date().toISOString() },
+    });
+
+    const heartbeat$ = interval(15000).pipe(
+      map(() => ({
+        type: 'heartbeat',
+        data: { timestamp: new Date().toISOString() },
+      })),
+    );
+
+    const referralChanges$ = this.applicationService
       .observeClinicReferralChanges(req.user.clinicId)
       .pipe(
         map((referral) => ({
@@ -176,6 +188,8 @@ export class ClinicsController {
           data: ReferralListItemDto.fromReadModel(referral),
         })),
       );
+
+    return merge(initialConnected$, heartbeat$, referralChanges$);
   }
 
   @ApiTags('Referrals')

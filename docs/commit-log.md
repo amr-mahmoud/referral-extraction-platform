@@ -1098,6 +1098,27 @@ This document serves as the centralized commit history and decision log for the 
 - **Modified:** `docker/Caddyfile`, `docs/commit-log.md`
 - **Impact:** HTTP requests on port 80 proxy seamlessly without SSL protocol errors.
 
+---
+
+## v0.0.53 | 2026-09-16 | fix | AMPLIFY SSR ENV
+
+**Category:** Infrastructure Services  
+**Summary:** Inject WORKBENCH_API_URL into .env.production during Amplify build phase and update encrypted production secrets bundle.  
+**SuggestedCommitMessage:** fix: inject WORKBENCH_API_URL into .env.production in amplify.yml and update encrypted secrets | Infrastructure Services
+
+### 🧠 Logic & Decisions
+
+- **The Why:**
+  - **Amplify SSR Runtime Variable Isolation:** AWS Amplify Hosting does not pass standard console environment variables into Next.js Server Actions at runtime in the SSR compute environment. Because `WORKBENCH_API_URL` was unavailable at runtime, Server Actions (like `signupAction`) defaulted to `localhost:8001` and failed with `TypeError: fetch failed`. Writing `WORKBENCH_API_URL` into `.env.production` during the build phase embeds it into the production runtime environment.
+  - **Encrypted Production Bundle:** Updated `.env.production.enc` with latest production configurations.
+- **State Change:** Next.js Server Actions on AWS Amplify successfully resolve `WORKBENCH_API_URL` to the EC2 backend at runtime.
+
+### 🔗 Dependencies
+
+- **Modified:** `amplify.yml`, `.env.production.enc`, `docs/commit-log.md`
+- **Impact:** Frontend on AWS Amplify can communicate with the EC2 backend during authentication and referral operations without fetch failures.
+
+
 
 
 

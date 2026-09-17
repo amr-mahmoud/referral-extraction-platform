@@ -9,6 +9,7 @@ import {
 import { cn } from "@/lib/utils";
 import { ExternalLinkIcon, GitHubIcon } from "@/shared/Icon";
 
+import { AboutDeploymentSection } from "../AboutDeploymentSection";
 import { AboutStateSection } from "../AboutStateSection";
 import { AboutWorkFlowSection } from "../AboutWorkFlowSection";
 
@@ -107,6 +108,10 @@ const AboutOverview = React.forwardRef<HTMLElement, AboutOverviewProps>(
         <AboutStateSection />
 
         <AboutWorkFlowSection />
+
+        <div className={cn(aboutOverviewSectionVariants())}>
+          <AboutDeploymentSection />
+        </div>
 
         <div className={cn(aboutOverviewSectionVariants())}>
           <div className={cn(aboutOverviewTwoColVariants())}>

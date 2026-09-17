@@ -1185,3 +1185,24 @@ This document serves as the centralized commit history and decision log for the 
 
 - **Modified:** `docker-compose.prod.yml`, `apps/workbench-api/src/infrastructure/notifications/postgres-listen.service.ts`, `apps/workbench-api/src/application/ports/referral-notification.port.ts`, `docker/postgres/manual/referral-notify.sql`, `prisma/migrations/20260917000000_init/migration.sql`, `prisma/migrations/migration_lock.toml`, `Makefile`, `docs/commit-log.md`
 - **Impact:** Fresh deployments automatically initialize database tables and real-time triggers on container start.
+
+---
+
+## v0.0.57 | 2026-09-17 | feat | DEPLOYMENT SHOWCASE SECTION
+
+**Category:** Interface Services  
+**Summary:** Add standout Deployment section to the About page demonstrating full-stack 6-container co-location on a single AWS EC2 t3.micro instance.  
+**SuggestedCommitMessage:** feat: add deployment architecture showcase section to about page | Interface Services
+
+### 🧠 Logic & Decisions
+
+- **The Why:**
+  - **Showcase Micro-Footprint Architecture:** Highlight that the full production stack (Next.js standalone web, NestJS API, Agent Worker, Postgres 16, Redis 7, and Caddy with automated Let's Encrypt TLS) runs concurrently and responsively on a single AWS EC2 t3.micro instance (1 vCPU, 1 GB RAM, under $5/mo).
+  - **Architectural Validation as a Stress Test:** Frame the single-instance deployment not as a compromised setup, but as a deliberate proof-of-resilience: the horizontal scaling levers (queue leveling, presigned S3 uploads, stateless workers, cache-aside index) keep the memory and CPU footprint so lean that the entire pipeline operates smoothly shoulder-to-shoulder on micro compute.
+  - **Additive Scale Path:** Clarify that scaling to enterprise volume is purely additive (replicating workers, externalizing managed DB, adding ALB) without requiring code rewrites.
+- **State Change:** The `/about` view now features a high-contrast dark callout card (`AboutDeploymentSection`) detailing the single-instance topology and four key deployment pillars.
+
+### 🔗 Dependencies
+
+- **Modified:** `apps/web/src/constants/about.ts`, `apps/web/src/features/about/AboutDeploymentSection/AboutDeploymentSection.styles.ts`, `apps/web/src/features/about/AboutDeploymentSection/index.tsx`, `apps/web/src/features/about/AboutOverview/index.tsx`, `docs/commit-log.md`
+- **Impact:** Adds the Deployment section into the About page flow between the lifecycle workflow and scaling levers; zero backend or API contract changes.

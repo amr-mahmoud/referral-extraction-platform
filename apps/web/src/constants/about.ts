@@ -153,6 +153,39 @@ export const ABOUT_SCALE_LEVERS: readonly AboutScaleLever[] = [
   },
 ];
 
+export const ABOUT_DEPLOYMENT = {
+  eyebrow: "Where this actually runs",
+  heading: "Deployment",
+  leadPrefix:
+    "Everything above — auth, uploads, the queue, the worker pool, Postgres, Redis, real-time push — runs on ",
+  leadHighlight: "one AWS EC2 t3.micro instance",
+  leadSuffix: ". 1 vCPU, 1 GB RAM, under $5/month.",
+  body: "This isn't the target production topology — it's a stress test of the architecture itself. Presigned S3 uploads, a queue-buffered worker pool, and a single Postgres writer were designed to scale horizontally across a fleet of machines; running the entire pipeline shoulder-to-shoulder on one micro instance proves the design holds under real constraints, not just on a whiteboard. Getting from here to production scale is additive — more worker replicas, a managed database, a load balancer — never a rewrite.",
+};
+
+export const ABOUT_DEPLOYMENT_ITEMS: readonly AboutScaleLever[] = [
+  {
+    key: "Single instance, six containers",
+    detail:
+      "Caddy, web, API, worker, Postgres, and Redis, all co-located on one t3.micro, coordinated over Docker Compose's internal network.",
+  },
+  {
+    key: "Zero-touch HTTPS",
+    detail:
+      "Caddy obtains and renews a real Let's Encrypt certificate automatically — no manual cert management.",
+  },
+  {
+    key: "Under $5/month",
+    detail:
+      "Free-tier EC2 hours plus one public IPv4. No managed database, no load balancer, no NAT gateway.",
+  },
+  {
+    key: "Scale is additive, not a rewrite",
+    detail:
+      "The same horizontal-scaling levers from the section above are what let this run lean today and wide tomorrow.",
+  },
+];
+
 export interface AboutStackGroup {
   category: string;
   items: readonly string[];

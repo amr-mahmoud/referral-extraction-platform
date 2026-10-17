@@ -46,9 +46,9 @@ npm-debug.log*
 /docs/*
 !/docs/commit-log.md
 
-
-.agent/
+.agents/*
 .agent/*
+skills-lock.json
 .claude/
 AGENTS.md
 Claude.md

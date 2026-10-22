@@ -1235,3 +1235,33 @@ Category: System Foundation
 
 - **Modified:** `apps/workbench-api/libs/logger/`, `apps/workbench-api/src/application/application.service.ts`, `apps/workbench-api/src/infrastructure/` (caching, filters, notifications, queue, repository, storage), `apps/workbench-api/src/main.ts`, `apps/agent_worker/src/lib/logger/`, `apps/agent_worker/src/config/env.config.ts`, `apps/agent_worker/src/clients/`, `apps/agent_worker/src/extraction/referral-extraction.service.ts`, `.env.example`, `.claude/skills/add-loggers/SKILL.md`, `docs/commit-log.md`
 - **Impact:** Log output changes everywhere: lines gain a `[Module.method]` tag and high-volume `debug`/`trace` lines are off by default. Worker `console.*` lines outside AppLogger are not tagged yet. No API contract, database or queue changes; regression-test startup with an invalid `LOG_LEVEL` and the worker's extraction path.
+
+## v0.0.59 | 2026-10-22 | test | E2E TEST HARNESS
+
+**Category:** System Foundation  
+**Summary:** Adds the agentic e2e test runner with a web target, an upload-to-Completed journey test, a `make e2e-test` target, and gitignore rules for its run output.  
+**SuggestedCommitMessage:**
+
+```text
+test: add e2e runner with upload and extraction journey
+
+- e2e.config.ts targets the local web app (APP_URL, default
+  localhost:3000) with a clinic test account and an agent model
+- tests/upload-and-extract.e2e.ts signs in, uploads a sample PDF and
+  waits up to 5 minutes for the referral to reach Completed; it
+  refuses to run against a non-local target
+- make e2e-test runs the suite on one worker in a headed browser
+- .e2e run output is gitignored; pnpm prisma build scripts disabled
+
+Category: System Foundation
+```
+
+### 🧠 Logic & Decisions
+
+- **The Why:** The full upload path (S3 -> SQS -> Gemini -> Postgres -> SSE) had no automated end-to-end check. The e2e runner drives a real browser with exact locators and can fall back to agent goals, so one test covers the whole pipeline. The test writes to S3 and Postgres, so it carries a local-only guard. Runs are forced to a single worker because the dev database and ports are shared.
+- **State Change:** `npm run test:e2e` and `make e2e-test` now exist and need the stack running (`make dev` or `make docker-up`). The Makefile help regex accepts digits in target names so `e2e-test` is listed.
+
+### 🔗 Dependencies
+
+- **Modified:** `e2e.config.ts`, `tests/upload-and-extract.e2e.ts`, `tests/example.e2e.ts`, `.cursor/mcp.json`, `Makefile`, `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `.gitignore`, `docs/commit-log.md`
+- **Impact:** New root devDependencies (`e2e`, `@e2e-dev/web`, `ai`, `@ai-sdk/*`, `zod`) grow the install. Open findings: (medium) `e2e.config.ts` commits a plaintext clinic password as the fallback credential; (low) the upload test defaults to an absolute path on the developer's machine (`E2E_SAMPLE_PDF` overrides it), so it fails in a fresh clone without that variable; (low) `tests/example.e2e.ts` is runner scaffolding.

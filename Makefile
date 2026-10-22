@@ -9,7 +9,7 @@
 #   4. postgres/redis- Local data services (Docker Compose)
 # ==============================================================================
 
-.PHONY: help install dev dev-web dev-api dev-worker kill stop kill-all clean-dev-api kill-api build build-web build-api build-worker docker-up docker-dev docker-dev-backend docker-dev-api docker-down docker-down-prod docker-clean-prod docker-stop-all docker-nuke docker-logs docker-clean docker-give-perms fix-perms db-setup db-reset db-down-reset db-apply-migrations db-apply-notify redis-build redis-restart redis-flush redis-flush-restart redis-reset redis-cli lint codegen-api clean env-encrypt env-decrypt encrypt-prod-example decrypt-prod-example env-encrypt-prod-example env-decrypt-prod-example
+.PHONY: help install dev dev-web dev-api dev-worker kill stop kill-all clean-dev-api kill-api build build-web build-api build-worker docker-up docker-dev docker-dev-backend docker-dev-api docker-down docker-down-prod docker-clean-prod docker-stop-all docker-nuke docker-logs docker-clean docker-give-perms fix-perms db-setup db-reset db-down-reset db-apply-migrations db-apply-notify redis-build redis-restart redis-flush redis-flush-restart redis-reset redis-cli lint e2e-test codegen-api clean env-encrypt env-decrypt encrypt-prod-example decrypt-prod-example env-encrypt-prod-example env-decrypt-prod-example
 
 # Default target when running 'make'
 .DEFAULT_GOAL := help
@@ -21,7 +21,7 @@ help: ## Display available Makefile commands and usage
 	@echo ""
 	@echo "Document Extraction Platform - Commands:"
 	@echo "--------------------------------------------------------"
-	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?##/ {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?##/ {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@echo ""
 
 # ------------------------------------------------------------------------------
@@ -231,6 +231,10 @@ build-worker: ## Build Agent Worker TypeScript code (apps/agent_worker)
 lint: ## Run linting across all monorepo apps
 	@echo "--> Linting all monorepo applications..."
 	npm run lint
+
+e2e-test: ## Run all e2e tests one after another (single worker, visible browser). Extra flags: make e2e-test E2E_ARGS="--retries 0"
+	@echo "--> Running e2e tests sequentially (requires the stack running: make dev or make docker-up)..."
+	npm exec -- e2e run --workers 1 --headed $(E2E_ARGS)
 
 codegen-api: ## Regenerate apps/web's typed API client from the running Workbench API's OpenAPI spec
 	@echo "--> Generating apps/web/src/types/api.generated.ts from the Workbench API's /docs-json..."

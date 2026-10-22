@@ -46,15 +46,20 @@ npm-debug.log*
 /docs/*
 !/docs/commit-log.md
 
-.agents/*
-.agent/*
-skills-lock.json
-skills.json
-schemaExample.json
+# Agent tooling & local agent config (never commit)
+.agents/
+.agent/
 .claude/
+.opencode/
+.claude-plugin/
+.mcp.json
+agent-context.md
 AGENTS.md
 Claude.md
 CLAUDE.md
+skills-lock.json
+skills.json
+schemaExample.json
 
 package-lock.json
 

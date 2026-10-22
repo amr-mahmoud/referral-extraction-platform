@@ -4,6 +4,9 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 
+// Shutdown waits for the in-flight SQS long-poll (up to ~20s) to drain.
+jest.setTimeout(45_000);
+
 describe('WorkbenchApi (e2e)', () => {
   let app: INestApplication<App>;
 

@@ -54,13 +54,20 @@ export interface ExtractedFieldView {
   key: string;
   label: string;
   value: string;
-  pageNumber: number;
+  /** `null` only for reviewer-added fields, which have no PDF location. */
+  pageNumber: number | null;
   boundingBox: {
     xmin: number;
     ymin: number;
     xmax: number;
     ymax: number;
   } | null;
+  /** Absent on legacy/worker payloads, which read as `'AI'`. */
+  source?: 'AI' | 'REVIEWER';
+  /** Absent on legacy/worker payloads, which read as `null`. */
+  aiOriginal?: { key: string; label: string; value: string } | null;
+  /** ISO-8601; absent on legacy/worker payloads, which read as `null`. */
+  correctedAt?: string | null;
 }
 
 // ── Auth Commands & Results ──────────────────────────────────────────
@@ -92,6 +99,28 @@ export interface CreateExtractionSchemaCommand {
 }
 
 // ── Referral Commands & Queries ──────────────────────────────────────
+
+export interface ExtractedFieldCorrectionCommand {
+  clinicId: string;
+  referralId: string;
+}
+
+export interface CorrectExtractedFieldCommand extends ExtractedFieldCorrectionCommand {
+  fieldKey: string;
+  key?: string;
+  label?: string;
+  value: string;
+}
+
+export interface AddExtractedFieldCommand extends ExtractedFieldCorrectionCommand {
+  key: string;
+  label: string;
+  value: string;
+}
+
+export interface RevertExtractedFieldCommand extends ExtractedFieldCorrectionCommand {
+  fieldKey: string;
+}
 
 export interface CreateReferralItemCommand {
   fileName: string;

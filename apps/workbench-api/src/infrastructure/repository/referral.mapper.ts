@@ -25,6 +25,9 @@ export class ReferralMapper {
                     field.boundingBox.ymax,
                   )
                 : null,
+              field.source ?? 'AI',
+              field.aiOriginal ?? null,
+              field.correctedAt ? new Date(field.correctedAt) : null,
             ),
         )
       : [];
@@ -66,6 +69,9 @@ export class ReferralMapper {
               ymax: field.boundingBox.ymax,
             }
           : null,
+        source: field.source,
+        aiOriginal: field.aiOriginal,
+        correctedAt: field.correctedAt?.toISOString() ?? null,
       })),
       errorMessage: referral.errorMessage,
       createdAt: referral.createdAt,

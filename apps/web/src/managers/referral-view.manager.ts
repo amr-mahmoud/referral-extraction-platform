@@ -78,6 +78,7 @@ export function toReferralDetailView(
     schemaLabel: toSchemaLabel(dto),
     status: toStatus(dto),
     submittedLabel: formatRelativeTime(dto.createdAt, now),
+    updatedAt: dto.updatedAt,
     errorMessage: dto.errorMessage,
     documentUrl: dto.documentUrl,
     extractedPayload: dto.extractedPayload,

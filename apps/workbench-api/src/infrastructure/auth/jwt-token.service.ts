@@ -10,7 +10,8 @@ export class JwtTokenService implements TokenPort {
   private readonly expiresIn: jwt.SignOptions['expiresIn'];
 
   public constructor() {
-    this.secret = process.env.JWT_SECRET ?? 'document-extraction-dev-secret-change-me';
+    this.secret =
+      process.env.JWT_SECRET ?? 'document-extraction-dev-secret-change-me';
     this.expiresIn =
       (process.env.JWT_EXPIRES_IN as jwt.SignOptions['expiresIn']) ?? '7d';
   }

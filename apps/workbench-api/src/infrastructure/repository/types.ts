@@ -5,13 +5,16 @@ export interface RawExtractedField {
   key: string;
   label: string;
   value: string;
-  pageNumber: number;
+  pageNumber: number | null;
   boundingBox: {
     xmin: number;
     ymin: number;
     xmax: number;
     ymax: number;
   } | null;
+  source?: 'AI' | 'REVIEWER';
+  aiOriginal?: { key: string; label: string; value: string } | null;
+  correctedAt?: string | null;
 }
 
 /** The raw row shape behind the shared `CACHED_REFERRAL_SELECT` projection. */

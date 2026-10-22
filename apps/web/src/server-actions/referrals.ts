@@ -1,13 +1,19 @@
 "use server";
 
+import { revalidateTag } from "next/cache";
 import { cookies } from "next/headers";
 
 import { apiClient } from "@/client/api-client";
 import { ACCESS_TOKEN_COOKIE } from "@/constants/auth";
 import { getApiErrorMessage } from "@/lib/api-error";
 import {
+  type ExtractedFieldCorrectionInput,
+  type NewReviewerFieldInput,
+} from "@/managers/extracted-field-correction.manager";
+import {
   toReferralDetailView,
   toReferralRowView,
+  type ReferralListItemDto,
 } from "@/managers/referral-view.manager";
 import { SCHEMA_SOURCES, type SchemaSelection } from "@/types/extraction-schemas/schema";
 import type { ActionResult } from "@/types/server-action";
@@ -160,4 +166,88 @@ export async function createReferrals(
       error: err instanceof Error ? err.message : "Upload could not be started. Please try again.",
     };
   }
+}
+
+const REFERRAL_CACHE_TAG = "referral";
+
+type CorrectionApiResult = {
+  data?: ReferralListItemDto;
+  error?: unknown;
+  response: Response;
+};
+
+/** Maps a correction endpoint's response (full referral detail) to the review view. */
+function toCorrectionActionResult({
+  data,
+  error,
+  response,
+}: CorrectionApiResult): ActionResult<ReferralDetailView> {
+  if (!response.ok || !data) {
+    return {
+      success: false,
+      error: getApiErrorMessage(
+        error,
+        `Correction could not be saved (${response.status})`,
+      ),
+    };
+  }
+
+  revalidateTag(REFERRAL_CACHE_TAG, "max");
+  return { success: true, data: toReferralDetailView(data, Date.now()) };
+}
+
+async function withCorrectionAuthorization(
+  send: (headers: { Authorization: string }) => Promise<CorrectionApiResult>,
+): Promise<ActionResult<ReferralDetailView>> {
+  try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get(ACCESS_TOKEN_COOKIE)?.value;
+    if (!token) return { success: false, error: "Not authenticated" };
+
+    return toCorrectionActionResult(await send({ Authorization: `Bearer ${token}` }));
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Correction could not be saved. Please try again.",
+    };
+  }
+}
+
+export async function correctExtractedField(
+  referralId: string,
+  fieldKey: string,
+  correction: ExtractedFieldCorrectionInput,
+): Promise<ActionResult<ReferralDetailView>> {
+  return withCorrectionAuthorization((headers) =>
+    apiClient.PATCH("/referrals/{id}/fields/{fieldKey}", {
+      params: { path: { id: referralId, fieldKey } },
+      headers,
+      body: correction,
+    }),
+  );
+}
+
+export async function addExtractedField(
+  referralId: string,
+  newField: NewReviewerFieldInput,
+): Promise<ActionResult<ReferralDetailView>> {
+  return withCorrectionAuthorization((headers) =>
+    apiClient.POST("/referrals/{id}/fields", {
+      params: { path: { id: referralId } },
+      headers,
+      body: newField,
+    }),
+  );
+}
+
+export async function revertExtractedField(
+  referralId: string,
+  fieldKey: string,
+): Promise<ActionResult<ReferralDetailView>> {
+  return withCorrectionAuthorization((headers) =>
+    apiClient.POST("/referrals/{id}/fields/{fieldKey}/revert", {
+      params: { path: { id: referralId, fieldKey } },
+      headers,
+    }),
+  );
 }

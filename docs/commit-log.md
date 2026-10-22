@@ -1265,3 +1265,34 @@ Category: System Foundation
 
 - **Modified:** `e2e.config.ts`, `tests/upload-and-extract.e2e.ts`, `tests/example.e2e.ts`, `.cursor/mcp.json`, `Makefile`, `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `.gitignore`, `docs/commit-log.md`
 - **Impact:** New root devDependencies (`e2e`, `@e2e-dev/web`, `ai`, `@ai-sdk/*`, `zod`) grow the install. Open findings: (medium) `e2e.config.ts` commits a plaintext clinic password as the fallback credential; (low) the upload test defaults to an absolute path on the developer's machine (`E2E_SAMPLE_PDF` overrides it), so it fails in a fresh clone without that variable; (low) `tests/example.e2e.ts` is runner scaffolding.
+
+## v0.0.60 | 2026-10-22 | feat | FIELD CORRECTION
+
+**Category:** Domain Models  
+**Summary:** Lets a reviewer correct, add and revert extracted referral fields through the API and the review UI, with the referral aggregate enforcing the rules.  
+**SuggestedCommitMessage:**
+
+```text
+feat: add reviewer correction of extracted fields
+
+- Referral aggregate gains correctField, addReviewerField and
+  revertFieldToAiOriginal; each checks the current field state
+- Domain errors cover disallowed corrections, unknown field keys and
+  duplicate keys
+- PATCH and POST routes under /referrals/:id/fields, plus a revert
+  route, load the full aggregate and save it back
+- Review UI adds an editable field row, an add-field row and a
+  server action per change
+
+Category: Domain Models
+```
+
+### 🧠 Logic & Decisions
+
+- **The Why:** Reviewers need to fix what the model got wrong without losing the AI original. Keeping the correction rules inside the referral aggregate means the API and any future caller share one set of checks. Each write follows the fetch, value-object, domain-method, save flow, so no fragment-update repository method was added.
+- **State Change:** Extracted fields can now be edited, added by a reviewer, and reverted to the AI value. Corrections that the aggregate rejects return a domain error mapped at the interface layer. The field-correction e2e spec and the aggregate spec were added or extended, but their results are not recorded in this entry.
+
+### 🔗 Dependencies
+
+- **Modified:** `apps/workbench-api/src/domain/referral/` (aggregate, extracted-field value object, errors, spec), `apps/workbench-api/src/application/application.service.ts`, `apps/workbench-api/src/application/types.ts`, `apps/workbench-api/src/interface/http/clinics/clinics.controller.ts`, `apps/workbench-api/src/interface/http/dto/index.dto.ts`, `apps/workbench-api/src/infrastructure/repository/`, `apps/workbench-api/libs/errors/domain-error-code.enum.ts`, `apps/web/src/features/review/`, `apps/web/src/server-hooks/review/`, `apps/web/src/server-actions/referrals.ts`, `apps/web/src/types/api.generated.ts`, `apps/web/src/types/referrals/referral.ts`, `apps/web/src/apps/referral-detail/index.tsx`, `docs/commit-log.md`
+- **Impact:** The referral detail payload and the generated OpenAPI types change, so the web client must be regenerated with them. The referral repository mapper now also carries the reviewer and revert state. Regression-test the extraction path, the referral detail view and the new e2e journey in `apps/workbench-api/test/field-correction.e2e-spec.ts` and `tests/field-correction.e2e.ts`.

@@ -95,8 +95,29 @@ export interface ExtractedFieldView {
   key: string;
   label: string;
   value: string;
-  pageNumber: number;
+  /** `null` for reviewer-added fields, which have no location in the PDF. */
+  pageNumber: number | null;
   boundingBox: BoundingBox | null;
+  /** Who produced the current value: the model, or a reviewer who added the field. */
+  source: ExtractedFieldSource;
+  /** The first AI value before any reviewer edit; `null` when untouched or reviewer-added. */
+  aiOriginal: ExtractedFieldAiOriginal | null;
+  /** ISO-8601 time of the last reviewer correction, or `null`. */
+  correctedAt: string | null;
+}
+
+export const EXTRACTED_FIELD_SOURCES = {
+  AI: "AI",
+  REVIEWER: "REVIEWER",
+} as const;
+
+export type ExtractedFieldSource =
+  (typeof EXTRACTED_FIELD_SOURCES)[keyof typeof EXTRACTED_FIELD_SOURCES];
+
+export interface ExtractedFieldAiOriginal {
+  key: string;
+  label: string;
+  value: string;
 }
 
 /**
@@ -112,6 +133,8 @@ export interface ReferralDetailView {
   schemaLabel: string;
   status: ReferralStatus;
   submittedLabel: string;
+  /** Raw ISO-8601 last-update timestamp — the marker live updates are reconciled on. */
+  updatedAt: string;
   errorMessage: string | null;
   /** Presigned S3 GET URL for the source PDF (re-signed by the API per serve). */
   documentUrl: string;

@@ -1,7 +1,12 @@
 import { DOMAIN_ERROR } from '../../../libs/errors/domain-error-code.enum';
 import { DomainException } from '../shared/domain.exception';
-import { ExtractedField } from './extracted-field.value-object';
 import {
+  assertValidExtractedFieldKeyFormat,
+  ExtractedField,
+} from './extracted-field.value-object';
+import {
+  DuplicateExtractedFieldKeyError,
+  ExtractedFieldNotFoundError,
   ReferralCorrectionNotAllowedError,
   ReferralFileNameError,
   ReferralNotFoundError,
@@ -25,6 +30,9 @@ export class InvalidReferralIdError extends DomainException {
     );
   }
 }
+
+/** Key the worker's extraction schema uses for the patient name. */
+const PATIENT_NAME_FIELD_KEY = 'patient_name';
 
 const PDF_FILE_NAME_PATTERN = /\.pdf$/i;
 
@@ -227,14 +235,123 @@ export class Referral {
     }
   };
 
-  public readonly applyCorrection = (
-    extractedPayload: ExtractedField[],
+  /** Edits an existing field's key/label/value; bbox and page stay attached. */
+  public readonly correctField = (
+    fieldKey: string,
+    correction: { key?: string; label?: string; value: string },
   ): void => {
-    if (this._status.value !== ReferralStatusValue.COMPLETED) {
+    this.assertCorrectionAllowed();
+    const fieldIndex = this.findFieldIndexOrThrow(fieldKey);
+    const currentField = this._extractedPayload[fieldIndex];
+
+    const nextKey = correction.key ?? currentField.key;
+    if (nextKey !== currentField.key) {
+      assertValidExtractedFieldKeyFormat(nextKey);
+      this.assertKeyIsUnused(nextKey);
+    }
+
+    const correctedField = currentField.withCorrection(
+      {
+        key: nextKey,
+        label: correction.label ?? currentField.label,
+        value: correction.value,
+      },
+      new Date(),
+    );
+    this.replaceFieldAt(fieldIndex, correctedField);
+  };
+
+  /** Appends a reviewer-authored field (no PDF location). */
+  public readonly addReviewerField = (field: {
+    key: string;
+    label: string;
+    value: string;
+  }): void => {
+    this.assertCorrectionAllowed();
+    assertValidExtractedFieldKeyFormat(field.key);
+    this.assertKeyIsUnused(field.key);
+
+    const reviewerField = new ExtractedField(
+      field.key,
+      field.label,
+      field.value,
+      null,
+      null,
+      'REVIEWER',
+      null,
+      new Date(),
+    );
+    this._extractedPayload = [...this._extractedPayload, reviewerField];
+    this.syncPatientName(null, reviewerField);
+    this._touch();
+  };
+
+  /** Restores an edited AI field to what the AI originally extracted. */
+  public readonly revertFieldToAiOriginal = (fieldKey: string): void => {
+    this.assertCorrectionAllowed();
+    const fieldIndex = this.findFieldIndexOrThrow(fieldKey);
+    const currentField = this._extractedPayload[fieldIndex];
+    if (!currentField.isEdited) {
       throw new ReferralCorrectionNotAllowedError(this.id);
     }
-    this._extractedPayload = extractedPayload;
+
+    const revertedField = currentField.revertedToAiOriginal();
+    if (revertedField.key !== currentField.key) {
+      this.assertKeyIsUnused(revertedField.key);
+    }
+    this.replaceFieldAt(fieldIndex, revertedField);
+  };
+
+  private readonly assertCorrectionAllowed = (): void => {
+    const isCorrectable =
+      this._status.value === ReferralStatusValue.COMPLETED &&
+      this._extractedPayload.length > 0;
+    if (!isCorrectable) {
+      throw new ReferralCorrectionNotAllowedError(this.id);
+    }
+  };
+
+  private readonly findFieldIndexOrThrow = (fieldKey: string): number => {
+    const fieldIndex = this._extractedPayload.findIndex(
+      (field) => field.key === fieldKey,
+    );
+    if (fieldIndex === -1) {
+      throw new ExtractedFieldNotFoundError(this.id, fieldKey);
+    }
+    return fieldIndex;
+  };
+
+  private readonly assertKeyIsUnused = (key: string): void => {
+    if (this._extractedPayload.some((field) => field.key === key)) {
+      throw new DuplicateExtractedFieldKeyError(this.id, key);
+    }
+  };
+
+  private readonly replaceFieldAt = (
+    fieldIndex: number,
+    field: ExtractedField,
+  ): void => {
+    const previousField = this._extractedPayload[fieldIndex];
+    this._extractedPayload = this._extractedPayload.map((existing, index) =>
+      index === fieldIndex ? field : existing,
+    );
+    this.syncPatientName(previousField, field);
     this._touch();
+  };
+
+  /** Keeps the dashboard's patient name in step with the patient-name field. */
+  private readonly syncPatientName = (
+    previousField: ExtractedField | null,
+    field: ExtractedField,
+  ): void => {
+    if (field.key === PATIENT_NAME_FIELD_KEY) {
+      const trimmedValue = field.value.trim();
+      this._patientName = trimmedValue === '' ? null : trimmedValue;
+      return;
+    }
+    if (previousField?.key === PATIENT_NAME_FIELD_KEY) {
+      this._patientName = null;
+    }
   };
 
   private readonly _transitionTo = (next: ReferralStatusValue): void => {

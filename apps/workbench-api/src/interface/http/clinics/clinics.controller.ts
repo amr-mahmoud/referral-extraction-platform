@@ -2,7 +2,9 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
   Param,
+  Patch,
   Post,
   Req,
   Sse,
@@ -20,7 +22,9 @@ import { map } from 'rxjs/operators';
 import { ApplicationService } from '../../../application/application.service';
 import { normalizeExtractionSchemaFields } from '../dto/extraction-schema-input.mapper';
 import {
+  AddExtractedFieldRequest,
   ClinicDto,
+  CorrectExtractedFieldRequest,
   CreateExtractionSchemaRequest,
   CreateReferralResponseDto,
   CreateReferralsRequest,
@@ -214,6 +218,101 @@ export class ClinicsController {
   ): Promise<ReferralListItemDto> {
     const clinicId = req.user.clinicId;
     const view = await this.applicationService.getClinicReferral(clinicId, id);
+    return ReferralListItemDto.fromReadModel(view);
+  }
+
+  @ApiTags('Referrals')
+  @UseGuards(JwtAuthGuard)
+  @Patch('referrals/:id/fields/:fieldKey')
+  @ApiOperation({
+    summary: 'Correct one extracted field (key, label and/or value)',
+    description:
+      'Only COMPLETED referrals with an extracted payload. The first edit ' +
+      'snapshots the AI original; bounding box and page stay attached.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Updated referral detail',
+    type: ReferralListItemDto,
+  })
+  @ApiResponse({ status: 400, description: 'Invalid key format' })
+  @ApiResponse({ status: 404, description: 'Referral or field not found' })
+  @ApiResponse({
+    status: 409,
+    description: 'Referral not COMPLETED, or duplicate key',
+  })
+  public async correctExtractedField(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Param('fieldKey') fieldKey: string,
+    @Body() body: CorrectExtractedFieldRequest,
+  ): Promise<ReferralListItemDto> {
+    const view = await this.applicationService.correctExtractedField({
+      clinicId: req.user.clinicId,
+      referralId: id,
+      fieldKey,
+      key: body.key,
+      label: body.label,
+      value: body.value,
+    });
+    return ReferralListItemDto.fromReadModel(view);
+  }
+
+  @ApiTags('Referrals')
+  @UseGuards(JwtAuthGuard)
+  @Post('referrals/:id/fields')
+  @ApiOperation({ summary: 'Add a reviewer-authored extracted field' })
+  @ApiResponse({
+    status: 201,
+    description: 'Updated referral detail',
+    type: ReferralListItemDto,
+  })
+  @ApiResponse({ status: 400, description: 'Invalid key format' })
+  @ApiResponse({ status: 404, description: 'Referral not found' })
+  @ApiResponse({
+    status: 409,
+    description: 'Referral not COMPLETED, or duplicate key',
+  })
+  public async addExtractedField(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: AddExtractedFieldRequest,
+  ): Promise<ReferralListItemDto> {
+    const view = await this.applicationService.addExtractedField({
+      clinicId: req.user.clinicId,
+      referralId: id,
+      key: body.key,
+      label: body.label,
+      value: body.value,
+    });
+    return ReferralListItemDto.fromReadModel(view);
+  }
+
+  @ApiTags('Referrals')
+  @UseGuards(JwtAuthGuard)
+  @Post('referrals/:id/fields/:fieldKey/revert')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Revert an edited field to its AI original' })
+  @ApiResponse({
+    status: 200,
+    description: 'Updated referral detail',
+    type: ReferralListItemDto,
+  })
+  @ApiResponse({ status: 404, description: 'Referral or field not found' })
+  @ApiResponse({
+    status: 409,
+    description: 'Referral not COMPLETED, field not edited, or duplicate key',
+  })
+  public async revertExtractedField(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Param('fieldKey') fieldKey: string,
+  ): Promise<ReferralListItemDto> {
+    const view = await this.applicationService.revertExtractedField({
+      clinicId: req.user.clinicId,
+      referralId: id,
+      fieldKey,
+    });
     return ReferralListItemDto.fromReadModel(view);
   }
 }

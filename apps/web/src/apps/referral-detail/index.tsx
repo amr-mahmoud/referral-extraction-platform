@@ -58,10 +58,32 @@ export function ReferralDetailApp({ referral }: ReferralDetailAppProps) {
     React.useCallback(
       (changedReferral) => {
         if (changedReferral.id !== referral.id) return;
-        setLiveReferral(toReferralDetailView(changedReferral));
+        // Skip echoes of our own write (and any out-of-order event): only a
+        // strictly newer snapshot may replace what's on screen.
+        setLiveReferral((current) =>
+          changedReferral.updatedAt > current.updatedAt
+            ? {
+                ...toReferralDetailView(changedReferral),
+                documentUrl: current.documentUrl,
+              }
+            : current,
+        );
       },
       [referral.id],
     ),
+  );
+
+  const adoptUpdatedReferral = React.useCallback(
+    (updatedReferral: ReferralDetailView) => {
+      React.startTransition(() => {
+        setLiveReferral((current) =>
+          updatedReferral.updatedAt >= current.updatedAt
+            ? { ...updatedReferral, documentUrl: current.documentUrl }
+            : current,
+        );
+      });
+    },
+    [],
   );
 
   // Derive the selected field from the live payload so a change in status that
@@ -91,6 +113,7 @@ export function ReferralDetailApp({ referral }: ReferralDetailAppProps) {
           referral={liveReferral}
           selectedFieldIndex={selectedFieldIndex}
           onSelectField={(index) => setSelectedFieldIndex(index)}
+          onReferralUpdated={adoptUpdatedReferral}
           className="md:col-start-2 md:row-start-1"
         />
       </div>

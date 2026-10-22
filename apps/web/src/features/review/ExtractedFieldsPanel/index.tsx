@@ -2,9 +2,19 @@
 
 import * as React from "react";
 
+import { AddExtractedFieldRow } from "@/features/review/AddExtractedFieldRow";
+import { EditableExtractedField } from "@/features/review/EditableExtractedField";
 import { cn } from "@/lib/utils";
 import {
+  applyFieldCorrection,
+  applyFieldRevert,
+  applyReviewerFieldAddition,
+  type ExtractedFieldCorrectionInput,
+  type NewReviewerFieldInput,
+} from "@/managers/extracted-field-correction.manager";
+import {
   REFERRAL_STATUSES,
+  type ExtractedFieldView,
   type ReferralDetailView,
   type ReferralStatus,
 } from "@/types/referrals/referral";
@@ -21,11 +31,6 @@ import {
   extractedFieldsPanelErrorVariants,
   extractedFieldsPanelHintVariants,
   extractedFieldsPanelListVariants,
-  extractedFieldsPanelPageBadgeMutedVariants,
-  extractedFieldsPanelPageBadgeVariants,
-  extractedFieldsPanelRowKeyVariants,
-  extractedFieldsPanelRowValueVariants,
-  extractedFieldsPanelRowVariants,
   extractedFieldsPanelTabActiveVariants,
   extractedFieldsPanelTabVariants,
   extractedFieldsPanelVariants,
@@ -36,11 +41,32 @@ const EXTRACTION_IN_PROGRESS_STATUSES: readonly ReferralStatus[] = [
   REFERRAL_STATUSES.PROCESSING,
 ];
 
+type OptimisticFieldChange =
+  | { type: "correct"; fieldKey: string; correction: ExtractedFieldCorrectionInput }
+  | { type: "add"; newField: NewReviewerFieldInput }
+  | { type: "revert"; fieldKey: string };
+
+function applyOptimisticFieldChange(
+  fields: ExtractedFieldView[],
+  change: OptimisticFieldChange,
+): ExtractedFieldView[] {
+  switch (change.type) {
+    case "correct":
+      return applyFieldCorrection(fields, change.fieldKey, change.correction);
+    case "add":
+      return applyReviewerFieldAddition(fields, change.newField);
+    case "revert":
+      return applyFieldRevert(fields, change.fieldKey);
+  }
+}
+
 export interface ExtractedFieldsPanelProps
   extends React.HTMLAttributes<HTMLDivElement> {
   referral: ReferralDetailView;
   selectedFieldIndex: number | null;
   onSelectField: (index: number) => void;
+  /** Adopts the full referral the API returned after a successful correction. */
+  onReferralUpdated: (referral: ReferralDetailView) => void;
 }
 
 /**
@@ -54,7 +80,7 @@ const ExtractedFieldsPanel = React.forwardRef<
   ExtractedFieldsPanelProps
 >(
   (
-    { className, onSelectField, referral, selectedFieldIndex, ...props },
+    { className, onReferralUpdated, onSelectField, referral, selectedFieldIndex, ...props },
     ref,
   ) => {
     const isTerminalFailure =
@@ -63,6 +89,19 @@ const ExtractedFieldsPanel = React.forwardRef<
 
     const isExtractionInProgress =
       EXTRACTION_IN_PROGRESS_STATUSES.includes(referral.status);
+
+    // Corrections exist only on a finished extraction that produced fields;
+    // anywhere else the panel stays read-only and shows no edit controls.
+    const isCorrectionAvailable =
+      referral.status === REFERRAL_STATUSES.COMPLETED &&
+      referral.extractedPayload.length > 0;
+
+    // Applied inside the correction hooks' transitions, so the edit shows at
+    // once and is dropped automatically if the action fails.
+    const [optimisticFields, dispatchOptimisticChange] = React.useOptimistic(
+      referral.extractedPayload,
+      applyOptimisticFieldChange,
+    );
 
     return (
       <aside
@@ -129,39 +168,35 @@ const ExtractedFieldsPanel = React.forwardRef<
                       Page
                     </span>
                   </div>
-                  {referral.extractedPayload.map((field, index) => {
-                    const isSelected = index === selectedFieldIndex;
-                    return (
-                      <button
-                        key={`${field.key ?? "field"}-${index}`}
-                        type="button"
-                        data-component="ExtractedFieldRow"
-                        data-selected={isSelected}
-                        data-has-source={field.boundingBox !== null}
-                        aria-pressed={isSelected}
-                        onClick={() => onSelectField(index)}
-                        className={cn(
-                          extractedFieldsPanelRowVariants({ selected: isSelected }),
-                        )}
-                      >
-                        <span className={cn(extractedFieldsPanelRowKeyVariants())}>
-                          {field.label || field.key || "—"}
-                        </span>
-                        <span className={cn(extractedFieldsPanelRowValueVariants())}>
-                          {field.value}
-                        </span>
-                        <span
-                          className={cn(
-                            field.boundingBox
-                              ? extractedFieldsPanelPageBadgeVariants()
-                              : extractedFieldsPanelPageBadgeMutedVariants(),
-                          )}
-                        >
-                          p{field.pageNumber}
-                        </span>
-                      </button>
-                    );
-                  })}
+                  {optimisticFields.map((field, index) => (
+                    <EditableExtractedField
+                      key={index}
+                      referralId={referral.id}
+                      field={field}
+                      fieldIndex={index}
+                      allFields={optimisticFields}
+                      isSelected={index === selectedFieldIndex}
+                      isEditable={isCorrectionAvailable}
+                      onSelect={() => onSelectField(index)}
+                      onOptimisticCorrect={(fieldKey, correction) =>
+                        dispatchOptimisticChange({ type: "correct", fieldKey, correction })
+                      }
+                      onOptimisticRevert={(fieldKey) =>
+                        dispatchOptimisticChange({ type: "revert", fieldKey })
+                      }
+                      onReferralUpdated={onReferralUpdated}
+                    />
+                  ))}
+                  {isCorrectionAvailable ? (
+                    <AddExtractedFieldRow
+                      referralId={referral.id}
+                      allFields={optimisticFields}
+                      onOptimisticAdd={(newField) =>
+                        dispatchOptimisticChange({ type: "add", newField })
+                      }
+                      onReferralUpdated={onReferralUpdated}
+                    />
+                  ) : null}
                 </div>
               )}
             </>

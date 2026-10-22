@@ -40,7 +40,7 @@ export function useCustomAutoNavigatorExtractedFieldClick(
   >(selectedFieldIndex);
   if (previousSelectedFieldIndex !== selectedFieldIndex) {
     setPreviousSelectedFieldIndex(selectedFieldIndex);
-    if (selectedField && selectedFieldIndex !== null) {
+    if (selectedField?.pageNumber != null && selectedFieldIndex !== null) {
       setPageNumber(selectedField.pageNumber);
     }
   }

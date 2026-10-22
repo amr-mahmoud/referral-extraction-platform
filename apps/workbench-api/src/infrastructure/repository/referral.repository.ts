@@ -243,7 +243,13 @@ function toExtractedFieldViews(raw: Prisma.JsonValue): ExtractedFieldView[] {
   if (!Array.isArray(raw)) {
     return [];
   }
-  return raw as unknown as ExtractedFieldView[];
+  // Legacy payloads predate provenance: read them as untouched AI fields.
+  return (raw as unknown as ExtractedFieldView[]).map((field) => ({
+    ...field,
+    source: field.source ?? 'AI',
+    aiOriginal: field.aiOriginal ?? null,
+    correctedAt: field.correctedAt ?? null,
+  }));
 }
 
 function toDataReferral(row: CachedReferralRow): ReferralData {

@@ -131,21 +131,57 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Correct/Update extracted referral field values and bounding boxes */
-        patch: operations["ClinicsController_updateReferral"];
+        patch?: never;
         trace?: never;
     };
-    "/referrals/{id}/stream": {
+    "/referrals/{id}/fields/{fieldKey}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Real-time Server-Sent Events (SSE) status stream for processing referral */
-        get: operations["ClinicsController_streamReferral"];
+        get?: never;
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Correct one extracted field (key, label and/or value)
+         * @description Only COMPLETED referrals with an extracted payload. The first edit snapshots the AI original; bounding box and page stay attached.
+         */
+        patch: operations["ClinicsController_correctExtractedField"];
+        trace?: never;
+    };
+    "/referrals/{id}/fields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add a reviewer-authored extracted field */
+        post: operations["ClinicsController_addExtractedField"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/referrals/{id}/fields/{fieldKey}/revert": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revert an edited field to its AI original */
+        post: operations["ClinicsController_revertExtractedField"];
         delete?: never;
         options?: never;
         head?: never;
@@ -307,6 +343,11 @@ export interface components {
             /** @description Normalized maximum Y coordinate (0-1000). */
             ymax: number;
         };
+        ExtractedFieldAiOriginalDto: {
+            key: string;
+            label: string;
+            value: string;
+        };
         ExtractedFieldDto: {
             /** @description Schema key identifying the extracted field (e.g. `patient_name`). */
             key: string;
@@ -314,10 +355,19 @@ export interface components {
             label: string;
             /** @description Extracted text value. */
             value: string;
-            /** @description 1-indexed page number in PDF document. */
-            pageNumber: number;
+            /** @description 1-indexed page number in PDF document; `null` for reviewer-added fields. */
+            pageNumber: number | null;
             /** @description Spatial bounding box used to highlight the value on the PDF page. */
             boundingBox: components["schemas"]["BoundingBoxDto"] | null;
+            /**
+             * @description Who produced the field: the AI extraction or a reviewer.
+             * @enum {string}
+             */
+            source: "AI" | "REVIEWER";
+            /** @description What the AI first extracted, when a reviewer has edited the field; else `null`. */
+            aiOriginal: components["schemas"]["ExtractedFieldAiOriginalDto"] | null;
+            /** @description ISO-8601 time of the last reviewer edit, or `null`. */
+            correctedAt: string | null;
         };
         ReferralListItemDto: {
             /** @description Unique referral ID (UUID). */
@@ -345,9 +395,33 @@ export interface components {
             /** @description ISO-8601 last-update timestamp. */
             updatedAt: string;
         };
-        UpdateReferralRequest: {
-            /** @description Updated payload of extracted fields corrected by staff user. */
-            extractedPayload: components["schemas"]["ExtractedFieldDto"][];
+        CorrectExtractedFieldRequest: {
+            /**
+             * @description New snake_case key; omit to keep the current one.
+             * @example patient_name
+             */
+            key?: string;
+            /**
+             * @description New label; omit to keep the current one.
+             * @example Patient name
+             */
+            label?: string;
+            /**
+             * @description Corrected value (may be empty).
+             * @example Jane Doe
+             */
+            value: string;
+        };
+        AddExtractedFieldRequest: {
+            /**
+             * @description Lower snake_case key, unique within the referral.
+             * @example insurance_id
+             */
+            key: string;
+            /** @example Insurance ID */
+            label: string;
+            /** @example ABC-123 */
+            value: string;
         };
     };
     responses: never;
@@ -596,7 +670,55 @@ export interface operations {
             };
         };
     };
-    ClinicsController_updateReferral: {
+    ClinicsController_correctExtractedField: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                fieldKey: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CorrectExtractedFieldRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated referral detail */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReferralListItemDto"];
+                };
+            };
+            /** @description Invalid key format */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Referral or field not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Referral not COMPLETED, or duplicate key */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ClinicsController_addExtractedField: {
         parameters: {
             query?: never;
             header?: never;
@@ -607,12 +729,35 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["UpdateReferralRequest"];
+                "application/json": components["schemas"]["AddExtractedFieldRequest"];
             };
         };
         responses: {
-            /** @description Referral record updated */
-            200: {
+            /** @description Updated referral detail */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReferralListItemDto"];
+                };
+            };
+            /** @description Invalid key format */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Referral not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Referral not COMPLETED, or duplicate key */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -620,19 +765,36 @@ export interface operations {
             };
         };
     };
-    ClinicsController_streamReferral: {
+    ClinicsController_revertExtractedField: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 id: string;
+                fieldKey: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description SSE event stream connection established */
+            /** @description Updated referral detail */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReferralListItemDto"];
+                };
+            };
+            /** @description Referral or field not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Referral not COMPLETED, field not edited, or duplicate key */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

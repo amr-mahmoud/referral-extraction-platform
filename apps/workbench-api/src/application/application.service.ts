@@ -43,11 +43,15 @@ import { TOKEN_PORT, type TokenPort } from './ports/token.port';
 // ── Command & result types — see ./types.ts ──────────────────────────
 
 import type {
+  AddExtractedFieldCommand,
   AuthResult,
   CachedClinic,
   CachedReferral,
   CachingNewReferralsDataCommand,
+  CorrectExtractedFieldCommand,
   CreateExtractionSchemaCommand,
+  ExtractedFieldCorrectionCommand,
+  RevertExtractedFieldCommand,
   CreateNewReferralsWithAttachedPresignedUrlsCommand,
   ExtractedFieldView,
   LoginCommand,
@@ -256,6 +260,94 @@ export class ApplicationService {
       count: referrals.length,
     });
   };
+
+  // ── Extracted-field corrections ──────────────────────────────────
+
+  public async correctExtractedField(
+    command: CorrectExtractedFieldCommand,
+  ): Promise<ReferralListItem> {
+    try {
+      const referral = await this.fetchReferralForCorrection(command);
+      referral.correctField(command.fieldKey, {
+        key: command.key,
+        label: command.label,
+        value: command.value,
+      });
+      return await this.saveCorrectedReferral(
+        referral,
+        'correctExtractedField',
+      );
+    } catch (error) {
+      translateError(error, 'correctExtractedField');
+    }
+  }
+
+  public async addExtractedField(
+    command: AddExtractedFieldCommand,
+  ): Promise<ReferralListItem> {
+    try {
+      const referral = await this.fetchReferralForCorrection(command);
+      referral.addReviewerField({
+        key: command.key,
+        label: command.label,
+        value: command.value,
+      });
+      return await this.saveCorrectedReferral(referral, 'addExtractedField');
+    } catch (error) {
+      translateError(error, 'addExtractedField');
+    }
+  }
+
+  public async revertExtractedField(
+    command: RevertExtractedFieldCommand,
+  ): Promise<ReferralListItem> {
+    try {
+      const referral = await this.fetchReferralForCorrection(command);
+      referral.revertFieldToAiOriginal(command.fieldKey);
+      return await this.saveCorrectedReferral(referral, 'revertExtractedField');
+    } catch (error) {
+      translateError(error, 'revertExtractedField');
+    }
+  }
+
+  /** Step 1 of the DDD flow: the full aggregate, tenant-checked. */
+  private async fetchReferralForCorrection({
+    clinicId,
+    referralId,
+  }: ExtractedFieldCorrectionCommand): Promise<Referral> {
+    // Postgres, not Redis: a stale cached payload must never be the base of a write.
+    const referralData =
+      await this.referralRepository.findReferralById(referralId);
+    if (!referralData) {
+      throw new ReferralNotFoundError(referralId);
+    }
+    const referral = this.toReferralAggregateFromData(referralData);
+    referral.assertBelongsToClinic(clinicId);
+    return referral;
+  }
+
+  /**
+   * Persists the aggregate, then rewrites its Redis entry (best-effort and
+   * logged; Postgres is the system of record) and serves the fresh detail.
+   */
+  private async saveCorrectedReferral(
+    referral: Referral,
+    operation: string,
+  ): Promise<ReferralListItem> {
+    await this.referralRepository.saveReferral(referral);
+    const servedView = await this.refreshReferralCacheWithDocumentUrl(
+      referral.id,
+    );
+    if (!servedView) {
+      throw new ReferralNotFoundError(referral.id);
+    }
+    this.logger.info('Saved extracted field correction', {
+      operation,
+      clinicId: referral.clinicId,
+      referralId: referral.id,
+    });
+    return servedView;
+  }
 
   /**
    * Compensating event: deletes rows that were persisted but whose cache
@@ -630,7 +722,30 @@ export class ApplicationService {
             view.boundingBox.ymax,
           )
         : null,
+      view.source ?? 'AI',
+      view.aiOriginal ?? null,
+      view.correctedAt ? new Date(view.correctedAt) : null,
     );
+  }
+
+  private toExtractedFieldView(field: ExtractedField): ExtractedFieldView {
+    return {
+      key: field.key,
+      label: field.label,
+      value: field.value,
+      pageNumber: field.pageNumber,
+      boundingBox: field.boundingBox
+        ? {
+            xmin: field.boundingBox.xmin,
+            ymin: field.boundingBox.ymin,
+            xmax: field.boundingBox.xmax,
+            ymax: field.boundingBox.ymax,
+          }
+        : null,
+      source: field.source,
+      aiOriginal: field.aiOriginal,
+      correctedAt: field.correctedAt?.toISOString() ?? null,
+    };
   }
 
   /**
@@ -1120,20 +1235,9 @@ export class ApplicationService {
       // Fresh aggregates are always `PENDING` with an empty payload —
       // mirror `ReferralMapper.toPersistence` so the cached shape can never
       // drift from what a Postgres read of the same row would produce.
-      extractedPayload: referral.extractedPayload.map((field) => ({
-        key: field.key,
-        label: field.label,
-        value: field.value,
-        pageNumber: field.pageNumber,
-        boundingBox: field.boundingBox
-          ? {
-              xmin: field.boundingBox.xmin,
-              ymin: field.boundingBox.ymin,
-              xmax: field.boundingBox.xmax,
-              ymax: field.boundingBox.ymax,
-            }
-          : null,
-      })),
+      extractedPayload: referral.extractedPayload.map((field) =>
+        this.toExtractedFieldView(field),
+      ),
       createdAt: referral.createdAt.toISOString(),
       updatedAt: referral.updatedAt.toISOString(),
       extractionSchema,

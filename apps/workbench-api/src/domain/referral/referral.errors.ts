@@ -49,3 +49,26 @@ export class ReferralCorrectionNotAllowedError extends DomainException {
     );
   }
 }
+
+export class ExtractedFieldNotFoundError extends DomainException {
+  public readonly errorCode = DOMAIN_ERROR.REFERRAL_EXTRACTED_FIELD_NOT_FOUND;
+
+  constructor(referralId: string, fieldKey: string) {
+    super(
+      DOMAIN_ERROR.REFERRAL_EXTRACTED_FIELD_NOT_FOUND,
+      `Referral '${referralId}' has no extracted field with key '${fieldKey}'`,
+    );
+  }
+}
+
+export class DuplicateExtractedFieldKeyError extends DomainException {
+  public readonly errorCode =
+    DOMAIN_ERROR.REFERRAL_DUPLICATE_EXTRACTED_FIELD_KEY;
+
+  constructor(referralId: string, fieldKey: string) {
+    super(
+      DOMAIN_ERROR.REFERRAL_DUPLICATE_EXTRACTED_FIELD_KEY,
+      `Referral '${referralId}' already has an extracted field with key '${fieldKey}'`,
+    );
+  }
+}

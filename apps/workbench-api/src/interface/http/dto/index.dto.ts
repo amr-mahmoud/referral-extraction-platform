@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   ArrayNotEmpty,
@@ -301,6 +301,12 @@ export class BoundingBoxDto {
   public readonly ymax!: number;
 }
 
+export class ExtractedFieldAiOriginalDto {
+  public readonly key!: string;
+  public readonly label!: string;
+  public readonly value!: string;
+}
+
 export class ExtractedFieldDto {
   /** Schema key identifying the extracted field (e.g. `patient_name`). */
   public readonly key!: string;
@@ -311,11 +317,20 @@ export class ExtractedFieldDto {
   /** Extracted text value. */
   public readonly value!: string;
 
-  /** 1-indexed page number in PDF document. */
-  public readonly pageNumber!: number;
+  /** 1-indexed page number in PDF document; `null` for reviewer-added fields. */
+  public readonly pageNumber!: number | null;
 
   /** Spatial bounding box used to highlight the value on the PDF page. */
   public readonly boundingBox!: BoundingBoxDto | null;
+
+  /** Who produced the field: the AI extraction or a reviewer. */
+  public readonly source!: 'AI' | 'REVIEWER';
+
+  /** What the AI first extracted, when a reviewer has edited the field; else `null`. */
+  public readonly aiOriginal!: ExtractedFieldAiOriginalDto | null;
+
+  /** ISO-8601 time of the last reviewer edit, or `null`. */
+  public readonly correctedAt!: string | null;
 }
 
 export class ReferralListItemDto {
@@ -365,7 +380,13 @@ export class ReferralListItemDto {
       extractionSchemaVersion: view.extractionSchemaVersion,
       extractionSchemaTitle: view.extractionSchemaTitle,
       errorMessage: view.errorMessage,
-      extractedPayload: view.extractedPayload,
+      extractedPayload: view.extractedPayload.map((field) => ({
+        ...field,
+        pageNumber: field.pageNumber,
+        source: field.source ?? 'AI',
+        aiOriginal: field.aiOriginal ?? null,
+        correctedAt: field.correctedAt ?? null,
+      })),
       documentUrl: view.documentUrl,
       createdAt: view.createdAt,
       updatedAt: view.updatedAt,
@@ -385,4 +406,42 @@ export class ListReferralsQueryDto {
    * @example 20
    */
   public readonly limit?: number;
+}
+
+export class CorrectExtractedFieldRequest {
+  /** New snake_case key; omit to keep the current one. */
+  @ApiPropertyOptional({ example: 'patient_name' })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  public readonly key?: string;
+
+  /** New label; omit to keep the current one. */
+  @ApiPropertyOptional({ example: 'Patient name' })
+  @IsOptional()
+  @IsString()
+  @Matches(/\S/, { message: 'label must not be blank' })
+  public readonly label?: string;
+
+  /** Corrected value (may be empty). */
+  @ApiProperty({ example: 'Jane Doe' })
+  @IsString()
+  public readonly value!: string;
+}
+
+export class AddExtractedFieldRequest {
+  /** Lower snake_case key, unique within the referral. */
+  @ApiProperty({ example: 'insurance_id' })
+  @IsString()
+  @IsNotEmpty()
+  public readonly key!: string;
+
+  @ApiProperty({ example: 'Insurance ID' })
+  @IsString()
+  @Matches(/\S/, { message: 'label must not be blank' })
+  public readonly label!: string;
+
+  @ApiProperty({ example: 'ABC-123' })
+  @IsString()
+  public readonly value!: string;
 }

@@ -49,6 +49,8 @@ npm-debug.log*
 .agents/*
 .agent/*
 skills-lock.json
+skills.json
+schemaExample.json
 .claude/
 AGENTS.md
 Claude.md

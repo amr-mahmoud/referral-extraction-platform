@@ -5,6 +5,7 @@ import {
   type GenerateContentResponse,
   type Schema,
 } from '@google/genai';
+import { AppLogger } from '../../lib/logger';
 import type { RawLlmOutput } from '../../types/extraction.types';
 
 // Retry budget for a single extraction call. The default is capped low on
@@ -180,6 +181,7 @@ const PROMPT_SPATIAL_GROUNDING_RULES = `
 `.trim();
 
 export class GeminiClient {
+  private readonly logger = new AppLogger(GeminiClient.name);
   private readonly ai: GoogleGenAI;
   private readonly maxAttempts: number;
 
@@ -203,6 +205,7 @@ export class GeminiClient {
     responseSchema: Schema,
     fieldInstructions: string | null,
   ): Promise<RawLlmOutput> {
+    const startedAt = performance.now();
     const result = await this.generateContentWithRetry({
       model: this.model,
       contents: [
@@ -232,7 +235,14 @@ export class GeminiClient {
     if (!rawText || rawText.trim() === '') {
       throw new Error('Gemini returned an empty response');
     }
-    return JSON.parse(rawText) as RawLlmOutput;
+    const rawOutput = JSON.parse(rawText) as RawLlmOutput;
+    this.logger.info('Extracted referral data with Gemini', {
+      model: this.model,
+      count: rawOutput.extractedFields.length,
+      isValidDocument: rawOutput.isValidDocument,
+      durationMs: Math.round(performance.now() - startedAt),
+    });
+    return rawOutput;
   }
 
   /**

@@ -1,9 +1,9 @@
 import {
   Injectable,
-  Logger,
   OnApplicationBootstrap,
   OnModuleDestroy,
 } from '@nestjs/common';
+import { AppLogger } from '../../../libs/logger';
 import {
   DeleteMessageCommand,
   ReceiveMessageCommand,
@@ -34,7 +34,7 @@ const MAX_MESSAGES_PER_RECEIVE = 10;
 export class SqsService
   implements QueueServicePort, OnApplicationBootstrap, OnModuleDestroy
 {
-  private readonly logger = new Logger(SqsService.name);
+  private readonly logger = new AppLogger(SqsService.name);
   private readonly client: SQSClient;
   private readonly queueUrl: string;
   private stopped = false;

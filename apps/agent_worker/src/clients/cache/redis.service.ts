@@ -1,4 +1,5 @@
 import Redis from 'ioredis';
+import { AppLogger } from '../../lib/logger';
 import type { CachedExtractionSchema } from '../../types/referral-job.types';
 
 const REFERRAL_KEY_PREFIX = 'referral:';
@@ -19,6 +20,7 @@ interface CachedReferralFromCache {
 }
 
 export class RedisService {
+  private readonly logger = new AppLogger(RedisService.name);
   private readonly client: Redis;
 
   public constructor(redisUrl: string) {
@@ -72,7 +74,13 @@ export class RedisService {
       ttlSeconds,
       'NX',
     );
-    return result === 'OK';
+    const isClaimAcquired = result === 'OK';
+    this.logger.debug('Attempted referral claim', {
+      referralId,
+      workerId,
+      isClaimAcquired,
+    });
+    return isClaimAcquired;
   }
 
   /** Releases the claim so a failed/duplicate delivery can be retried promptly. */

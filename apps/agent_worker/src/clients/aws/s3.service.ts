@@ -1,6 +1,8 @@
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { AppLogger } from '../../lib/logger';
 
 export class S3StorageService {
+  private readonly logger = new AppLogger(S3StorageService.name);
   private readonly client: S3Client;
 
   public constructor(region: string) {
@@ -8,6 +10,7 @@ export class S3StorageService {
   }
 
   public async downloadPdf(bucketName: string, objectKey: string): Promise<Buffer> {
+    const startedAt = performance.now();
     const response = await this.client.send(
       new GetObjectCommand({ Bucket: bucketName, Key: objectKey }),
     );
@@ -19,6 +22,11 @@ export class S3StorageService {
     for await (const chunk of response.Body as AsyncIterable<Uint8Array>) {
       chunks.push(chunk);
     }
-    return Buffer.concat(chunks);
+    const pdfBuffer = Buffer.concat(chunks);
+    this.logger.debug('Downloaded referral PDF', {
+      byteLength: pdfBuffer.length,
+      durationMs: Math.round(performance.now() - startedAt),
+    });
+    return pdfBuffer;
   }
 }

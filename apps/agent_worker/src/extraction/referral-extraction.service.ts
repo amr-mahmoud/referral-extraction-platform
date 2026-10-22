@@ -8,12 +8,15 @@ import type {
   ReferralJobResult,
   ReferralStatusUpdateEvent,
 } from '../types/referral-job.types';
+import { AppLogger } from '../lib/logger';
 import { buildFieldInstructions, buildGeminiExtractionSchema } from './extraction-schema';
 import { logExtractionResult } from './extraction-logger';
 import { normalizeExtractionOutput } from './payload-normalizer';
 import { preValidatePdfBuffer } from './pre-validator.service';
 
 export class ReferralExtractionService {
+  private readonly logger = new AppLogger(ReferralExtractionService.name);
+
   public constructor(
     private readonly redis: RedisService,
     private readonly s3: S3StorageService,
@@ -24,6 +27,7 @@ export class ReferralExtractionService {
   ) {}
 
   public async processMessage(context: ReferralJobContext): Promise<ReferralJobResult> {
+    const startedAt = performance.now();
     let isClaimed = false;
     try {
       isClaimed = await this.redis.tryClaimReferral(
@@ -32,6 +36,9 @@ export class ReferralExtractionService {
         this.workerId,
       );
       if (!isClaimed) {
+        this.logger.trace('Skipped referral already claimed by another worker', {
+          referralId: context.referralId,
+        });
         return {
           kind: 'SKIPPED',
           reason: 'Referral is already claimed by another worker',
@@ -69,6 +76,12 @@ export class ReferralExtractionService {
           extractedAt: new Date().toISOString(),
         });
         await this.redis.releaseReferralClaim(context.referralId);
+        this.logger.info('Processed referral with pre-validation rejection', {
+          referralId: context.referralId,
+          clinicId: context.clinicId,
+          outcome: 'REJECTED',
+          durationMs: Math.round(performance.now() - startedAt),
+        });
         return { kind: 'REJECTED', reason };
       }
 
@@ -99,6 +112,12 @@ export class ReferralExtractionService {
           extractedAt: new Date().toISOString(),
         });
         await this.redis.releaseReferralClaim(context.referralId);
+        this.logger.info('Processed referral with model rejection', {
+          referralId: context.referralId,
+          clinicId: context.clinicId,
+          outcome: 'REJECTED',
+          durationMs: Math.round(performance.now() - startedAt),
+        });
         return { kind: 'REJECTED', reason };
       }
 
@@ -113,6 +132,13 @@ export class ReferralExtractionService {
         extractedAt: new Date().toISOString(),
       });
       await this.redis.releaseReferralClaim(context.referralId);
+      this.logger.infoSuccess('Processed referral', {
+        referralId: context.referralId,
+        clinicId: context.clinicId,
+        outcome: 'COMPLETED',
+        extractedFieldCount: normalized.extractedFields.length,
+        durationMs: Math.round(performance.now() - startedAt),
+      });
 
       return { kind: 'COMPLETED' };
     } catch (error) {
@@ -137,6 +163,11 @@ export class ReferralExtractionService {
     try {
       const cachedMetadata = await this.redis.getReferralMetadata(referralId);
       if (cachedMetadata) {
+        this.logger.debug('Resolved referral metadata from cache', {
+          referralId,
+          hasExtractionSchema: Boolean(cachedMetadata.extractionSchema),
+          extractionSchemaId: cachedMetadata.extractionSchemaId,
+        });
         if (cachedMetadata.extractionSchema) {
           return cachedMetadata.extractionSchema;
         }

@@ -1,4 +1,5 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import { AppLogger } from '../../libs/logger';
 import { Observable } from 'rxjs';
 import { concatMap, filter } from 'rxjs/operators';
 import { Clinic } from '../domain/clinic/clinic.aggregate';
@@ -71,7 +72,7 @@ export type {
 
 @Injectable()
 export class ApplicationService {
-  private readonly logger = new Logger(ApplicationService.name);
+  private readonly logger = new AppLogger(ApplicationService.name);
 
   public constructor(
     @Inject(CLINIC_REPOSITORY_PORT)
@@ -93,6 +94,7 @@ export class ApplicationService {
   // ── Auth ─────────────────────────────────────────────────────────
 
   public async signup(command: SignupCommand): Promise<AuthResult> {
+    const startedAt = performance.now();
     try {
       const existingClinic = await this.clinicRepository.findByUsername(
         command.username,
@@ -119,6 +121,10 @@ export class ApplicationService {
         username: savedClinic.username,
       });
 
+      this.logger.info('Signed up clinic', {
+        clinicId: savedClinic.id,
+        durationMs: Math.round(performance.now() - startedAt),
+      });
       return { clinic: savedClinic, token };
     } catch (error) {
       translateError(error, 'signup');
@@ -126,6 +132,7 @@ export class ApplicationService {
   }
 
   public async login(command: LoginCommand): Promise<AuthResult> {
+    const startedAt = performance.now();
     try {
       const clinic = await this.clinicRepository.findByUsername(
         command.username,
@@ -141,6 +148,10 @@ export class ApplicationService {
         username: clinic.username,
       });
 
+      this.logger.info('Logged in clinic', {
+        clinicId: clinic.id,
+        durationMs: Math.round(performance.now() - startedAt),
+      });
       return { clinic, token };
     } catch (error) {
       translateError(error, 'login');
@@ -148,11 +159,16 @@ export class ApplicationService {
   }
 
   public async getClinic(clinicId: string): Promise<Clinic> {
+    const startedAt = performance.now();
     try {
       const clinic = await this.clinicRepository.findById(clinicId);
       if (!clinic) {
         throw new ClinicNotFoundError(clinicId);
       }
+      this.logger.info('Fetched clinic', {
+        clinicId: clinic.id,
+        durationMs: Math.round(performance.now() - startedAt),
+      });
       return clinic;
     } catch (error) {
       translateError(error, 'getClinic');
@@ -164,6 +180,7 @@ export class ApplicationService {
   public async createExtractionSchema(
     command: CreateExtractionSchemaCommand,
   ): Promise<ExtractionSchema> {
+    const startedAt = performance.now();
     try {
       // 1. Find the version this schema supersedes (0 when the clinic has none).
       const latestVersion = await this.clinicRepository.findLatestSchemaVersion(
@@ -185,6 +202,13 @@ export class ApplicationService {
       // 4. Best-effort: refresh the clinic's cache entry so its relations (and
       //    this new version) are warm for the next schema-resolution lookup.
       void this.refreshClinicCache(command.clinicId);
+      this.logger.info('Created extraction schema', {
+        clinicId: command.clinicId,
+        schemaId: savedSchema.id,
+        version: savedSchema.version,
+        fieldCount: command.fields.length,
+        durationMs: Math.round(performance.now() - startedAt),
+      });
       return savedSchema;
     } catch (error) {
       translateError(error, 'createExtractionSchema');
@@ -194,10 +218,16 @@ export class ApplicationService {
   public async listExtractionSchemas(
     clinicId: string,
   ): Promise<ExtractionSchema[]> {
+    const startedAt = performance.now();
     try {
-      return await this.clinicRepository.listExtractionSchemasByClinic(
+      const schemas =
+        await this.clinicRepository.listExtractionSchemasByClinic(clinicId);
+      this.logger.info('Listed extraction schemas', {
         clinicId,
-      );
+        count: schemas.length,
+        durationMs: Math.round(performance.now() - startedAt),
+      });
+      return schemas;
     } catch (error) {
       translateError(error, 'listExtractionSchemas');
     }
@@ -221,6 +251,10 @@ export class ApplicationService {
         referrals.map((referral) => referral.id),
       ),
     ]);
+    this.logger.info('Cached new referrals', {
+      clinicId,
+      count: referrals.length,
+    });
   };
 
   /**
@@ -235,6 +269,9 @@ export class ApplicationService {
       await this.referralRepository.deleteReferralsByIds(
         referrals.map((referral) => referral.id),
       );
+      this.logger.info('Rolled back persisted referrals', {
+        count: referrals.length,
+      });
     } catch (error) {
       this.logger.error(
         `[Compensation] Failed to roll back ${referrals.length} persisted referral(s): ${
@@ -258,6 +295,10 @@ export class ApplicationService {
         clinicId,
         referrals.map((referral) => referral.id),
       );
+      this.logger.info('Rolled back referral cache writes', {
+        clinicId,
+        count: referrals.length,
+      });
     } catch (error) {
       this.logger.error(
         `[Compensation] Failed to roll back referral cache writes: ${
@@ -270,6 +311,7 @@ export class ApplicationService {
   public async createNewReferralsWithAttachedPresignedUrls(
     command: CreateNewReferralsWithAttachedPresignedUrlsCommand,
   ): Promise<ReferralWithPresignedUpload[]> {
+    const startedAt = performance.now();
     try {
       if (command.files.length === 0) {
         // Reuses the existing ReferralValidationError — defense-in-depth behind
@@ -334,6 +376,11 @@ export class ApplicationService {
         // 6. Zip by index — referrals/uploads/persisted are the same length
         //    and order as `command.files`.
         const savedReferrals = persistResult.value;
+        this.logger.info('Created referrals with presigned uploads', {
+          clinicId: command.clinicId,
+          count: savedReferrals.length,
+          durationMs: Math.round(performance.now() - startedAt),
+        });
         return savedReferrals.map((referral, index) => ({
           referral,
           upload: uploads[index],
@@ -382,12 +429,19 @@ export class ApplicationService {
     clinicId: string,
     requestedExtractionSchemaId?: string | null,
   ): Promise<ExtractionSchema | null> {
+    const startedAt = performance.now();
     try {
       const schemaFromCache = await this.getExtractionSchemaFromClinicCache(
         clinicId,
         requestedExtractionSchemaId,
       );
       if (schemaFromCache) {
+        this.logger.info('Resolved extraction schema', {
+          clinicId,
+          schemaId: schemaFromCache.id,
+          servedFrom: 'cache',
+          durationMs: Math.round(performance.now() - startedAt),
+        });
         return schemaFromCache;
       }
 
@@ -409,6 +463,12 @@ export class ApplicationService {
       // self-healing projection (a miss re-syncs it), and updateClinicInCache
       // swallows failures — so this must not add Redis latency to the request.
       void this.updateClinicInCache(clinic);
+      this.logger.info('Resolved extraction schema', {
+        clinicId,
+        schemaId: schema?.id ?? null,
+        servedFrom: 'database',
+        durationMs: Math.round(performance.now() - startedAt),
+      });
       return schema;
     } catch (error) {
       translateError(error, 'getExtractionSchema');
@@ -421,17 +481,28 @@ export class ApplicationService {
   ): Promise<ExtractionSchema | null> {
     const cachedClinic = await this.getFullClinicFromCache(clinicId);
     if (!cachedClinic) {
+      this.logger.info('Clinic schema cache miss', { clinicId });
       return null;
     }
     const clinic = this.toClinicAggregateFromCache(cachedClinic);
-    return clinic.findExtractionSchema(requestedExtractionSchemaId);
+    const schema = clinic.findExtractionSchema(requestedExtractionSchemaId);
+    this.logger.info('Looked up extraction schema in clinic cache', {
+      clinicId,
+      isSchemaFound: schema !== null,
+    });
+    return schema;
   }
 
   private async getFullClinicFromCache(
     clinicId: string,
   ): Promise<CachedClinic | null> {
     try {
-      return await this.cachingService.getFullClinic(clinicId);
+      const cachedClinic = await this.cachingService.getFullClinic(clinicId);
+      this.logger.info('Read cached clinic', {
+        clinicId,
+        isCacheHit: cachedClinic !== null,
+      });
+      return cachedClinic;
     } catch (error) {
       this.logCacheDegradation('read clinic', error);
       return null;
@@ -442,6 +513,10 @@ export class ApplicationService {
   private async updateClinicInCache(clinic: Clinic): Promise<void> {
     try {
       await this.cachingService.setFullClinic(this.toCachedClinic(clinic));
+      this.logger.info('Cached clinic', {
+        clinicId: clinic.id,
+        schemaCount: clinic.extractionSchemas.length,
+      });
     } catch (error) {
       this.logCacheDegradation('write clinic', error);
     }
@@ -452,12 +527,19 @@ export class ApplicationService {
     try {
       const clinic = await this.clinicRepository.findById(clinicId);
       if (!clinic) {
+        this.logger.info('Skipped clinic cache refresh, clinic not found', {
+          clinicId,
+        });
         return;
       }
       const schemas =
         await this.clinicRepository.listExtractionSchemasByClinic(clinicId);
       clinic.updateRelationSchemas(schemas);
       await this.updateClinicInCache(clinic);
+      this.logger.info('Refreshed clinic cache', {
+        clinicId,
+        schemaCount: schemas.length,
+      });
     } catch (error) {
       this.logger.warn(
         `Failed to refresh clinic cache for ${clinicId}: ${
@@ -566,18 +648,38 @@ export class ApplicationService {
   public async listClinicReferrals(
     clinicId: string,
   ): Promise<ReferralListItem[]> {
+    const startedAt = performance.now();
     try {
       const cachedReferralIds = await this.readClinicIndexTolerantly(clinicId);
 
       // No index key at all — the clinic has never been cached (cold start,
       // eviction, flushed Redis). Rebuild the whole thing from Postgres.
       if (cachedReferralIds === null) {
-        return this.attachDocumentUrls(
+        this.logger.trace(
+          'Clinic referral index missing, rebuilding from database',
+          {
+            clinicId,
+          },
+        );
+        const rebuiltReferralListItems = await this.attachDocumentUrls(
           await this.rebuildClinicCacheFromDatabase(clinicId),
         );
+        this.logger.info('Listed clinic referrals', {
+          clinicId,
+          count: rebuiltReferralListItems.length,
+          servedFrom: 'database',
+          durationMs: Math.round(performance.now() - startedAt),
+        });
+        return rebuiltReferralListItems;
       }
 
       if (cachedReferralIds.length === 0) {
+        this.logger.info('Listed clinic referrals', {
+          clinicId,
+          count: 0,
+          servedFrom: 'cache',
+          durationMs: Math.round(performance.now() - startedAt),
+        });
         return [];
       }
 
@@ -608,9 +710,17 @@ export class ApplicationService {
         await this.writeCachedReferralsTolerantly(backfilled);
       }
 
-      return this.attachDocumentUrls(
+      const listedReferrals = await this.attachDocumentUrls(
         this.sortNewestFirst([...viewsById.values()]),
       );
+      this.logger.info('Listed clinic referrals', {
+        clinicId,
+        count: listedReferrals.length,
+        backfilledCount: missingReferralIds.length,
+        servedFrom: missingReferralIds.length > 0 ? 'mixed' : 'cache',
+        durationMs: Math.round(performance.now() - startedAt),
+      });
+      return listedReferrals;
     } catch (error) {
       translateError(error, 'listClinicReferrals');
     }
@@ -636,11 +746,18 @@ export class ApplicationService {
     clinicId: string,
     referralId: string,
   ): Promise<ReferralListItem> {
+    const startedAt = performance.now();
     try {
       const cached = await this.readCachedReferralTolerantly(referralId);
       if (cached && cached.clinicId === clinicId) {
-        const [served] = await this.attachDocumentUrls([cached]);
-        return served;
+        const [servedFromCache] = await this.attachDocumentUrls([cached]);
+        this.logger.info('Fetched clinic referral', {
+          clinicId,
+          referralId,
+          servedFrom: 'cache',
+          durationMs: Math.round(performance.now() - startedAt),
+        });
+        return servedFromCache;
       }
 
       const view = await this.referralRepository.findReferralById(referralId);
@@ -649,8 +766,15 @@ export class ApplicationService {
       }
 
       await this.writeCachedReferralsTolerantly([view]);
-      const [served] = await this.attachDocumentUrls([view]);
-      return served;
+      const [servedFromDatabase] = await this.attachDocumentUrls([view]);
+      this.logger.info('Fetched clinic referral', {
+        clinicId,
+        referralId,
+        servedFrom: 'database',
+        status: view.status,
+        durationMs: Math.round(performance.now() - startedAt),
+      });
+      return servedFromDatabase;
     } catch (error) {
       translateError(error, 'getClinicReferral');
     }
@@ -689,12 +813,18 @@ export class ApplicationService {
     const referralData =
       referralFromCache ??
       (await this.referralRepository.findReferralById(referralId));
+    this.logger.info('Read referral projection', {
+      referralId,
+      servedFrom: referralFromCache ? 'cache' : 'database',
+      isFound: referralData !== null,
+    });
     return referralData;
   }
 
   public async applyReferralStatusUpdate(
     event: ReferralStatusUpdateEvent,
   ): Promise<void> {
+    const startedAt = performance.now();
     try {
       const referralData = await this.readDataFromCacheWithFallback(
         event.referralId,
@@ -717,6 +847,10 @@ export class ApplicationService {
       ) {
         // Redelivered event — already applied, ack as a no-op rather than
         // redelivering forever.
+        this.logger.trace('Skipped already-applied referral status update', {
+          referralId: event.referralId,
+          status: event.status,
+        });
         return;
       }
       if (event.status === 'PROCESSING') {
@@ -738,6 +872,13 @@ export class ApplicationService {
       //    if the NOTIFY handler lags. No presigned URL here — this is the
       //    write path, nothing is served to a client.
       await this.refreshCachedReferral(event.referralId);
+      this.logger.info('Applied referral status update', {
+        clinicId: event.clinicId,
+        referralId: event.referralId,
+        status: event.status,
+        extractedFieldCount: event.extractedPayload.length,
+        durationMs: Math.round(performance.now() - startedAt),
+      });
     } catch (error) {
       translateError(error, 'applyReferralStatusUpdate');
     }
@@ -757,6 +898,7 @@ export class ApplicationService {
   public observeClinicReferralChanges(
     clinicId: string,
   ): Observable<ReferralListItem> {
+    this.logger.info('Subscribed to clinic referral changes', { clinicId });
     return this.referralNotificationService.observeReferralChanges().pipe(
       filter((notification) => notification.clinicId === clinicId),
       // concatMap, not mergeMap: serialises the per-notification refreshes
@@ -780,9 +922,16 @@ export class ApplicationService {
     const referralData =
       await this.referralRepository.findReferralById(referralId);
     if (!referralData) {
+      this.logger.info('Skipped referral cache refresh, referral not found', {
+        referralId,
+      });
       return null;
     }
     await this.writeCachedReferralsTolerantly([referralData]);
+    this.logger.info('Refreshed cached referral', {
+      referralId,
+      status: referralData.status,
+    });
     return referralData;
   }
 
@@ -794,12 +943,21 @@ export class ApplicationService {
       return null;
     }
     const [servedView] = await this.attachDocumentUrls([referralData]);
+    this.logger.info('Served refreshed referral with document url', {
+      referralId,
+      hasDocumentUrl: servedView !== undefined,
+    });
     return servedView ?? null;
   }
 
   public async warmAllReferralCaches(): Promise<number> {
+    const startedAt = performance.now();
     const referrals_data = await this.referralRepository.findAllReferrals();
     if (referrals_data.length === 0) {
+      this.logger.info('Warmed referral caches', {
+        count: 0,
+        durationMs: Math.round(performance.now() - startedAt),
+      });
       return 0;
     }
 
@@ -815,6 +973,11 @@ export class ApplicationService {
       await this.addToClinicIndexTolerantly(clinicId, referralIds);
     }
 
+    this.logger.info('Warmed referral caches', {
+      count: referrals_data.length,
+      clinicCount: referralIdsByClinicId.size,
+      durationMs: Math.round(performance.now() - startedAt),
+    });
     return referrals_data.length;
   }
 
@@ -829,6 +992,10 @@ export class ApplicationService {
       clinicId,
       views.map((view) => view.id),
     );
+    this.logger.info('Rebuilt clinic cache from database', {
+      clinicId,
+      count: views.length,
+    });
 
     return views;
   }
@@ -854,7 +1021,14 @@ export class ApplicationService {
     clinicId: string,
   ): Promise<string[] | null> {
     try {
-      return await this.cachingService.getClinicReferralIds(clinicId);
+      const referralIds =
+        await this.cachingService.getClinicReferralIds(clinicId);
+      this.logger.info('Read clinic referral index', {
+        clinicId,
+        count: referralIds?.length ?? 0,
+        isIndexFound: referralIds !== null,
+      });
+      return referralIds;
     } catch (error) {
       this.logCacheDegradation('read clinic index', error);
       return null;
@@ -865,7 +1039,13 @@ export class ApplicationService {
     referralIds: string[],
   ): Promise<(CachedReferral | null)[]> {
     try {
-      return await this.cachingService.getManyCachedReferrals(referralIds);
+      const cachedReferrals =
+        await this.cachingService.getManyCachedReferrals(referralIds);
+      this.logger.info('Read cached referrals', {
+        requestedCount: referralIds.length,
+        hitCount: cachedReferrals.filter((cached) => cached !== null).length,
+      });
+      return cachedReferrals;
     } catch (error) {
       this.logCacheDegradation('read cached referrals', error);
       return referralIds.map(() => null);
@@ -876,7 +1056,13 @@ export class ApplicationService {
     referralId: string,
   ): Promise<CachedReferral | null> {
     try {
-      return await this.cachingService.getCachedReferral(referralId);
+      const cachedReferral =
+        await this.cachingService.getCachedReferral(referralId);
+      this.logger.info('Read cached referral', {
+        referralId,
+        isCacheHit: cachedReferral !== null,
+      });
+      return cachedReferral;
     } catch (error) {
       this.logCacheDegradation('read cached referral', error);
       return null;
@@ -888,6 +1074,7 @@ export class ApplicationService {
   ): Promise<void> {
     try {
       await this.cachingService.setCachedReferrals(views);
+      this.logger.info('Wrote cached referrals', { count: views.length });
     } catch (error) {
       this.logCacheDegradation('write cached referrals', error);
     }
@@ -902,6 +1089,10 @@ export class ApplicationService {
         clinicId,
         referralIds,
       );
+      this.logger.info('Added referrals to clinic index', {
+        clinicId,
+        count: referralIds.length,
+      });
     } catch (error) {
       this.logCacheDegradation('write clinic index', error);
     }
@@ -959,7 +1150,7 @@ export class ApplicationService {
   private async attachDocumentUrls(
     views: CachedReferral[],
   ): Promise<ReferralListItem[]> {
-    return Promise.all(
+    const referralListItems = await Promise.all(
       views.map(async (view): Promise<ReferralListItem> => {
         const { url } = await this.storageService.presignGet({
           bucket: this.storageService.getConfiguredBucketName(),
@@ -968,6 +1159,10 @@ export class ApplicationService {
         return { ...view, documentUrl: url };
       }),
     );
+    this.logger.info('Attached document urls to referrals', {
+      count: referralListItems.length,
+    });
+    return referralListItems;
   }
 
   private logCacheDegradation(operation: string, error: unknown): void {

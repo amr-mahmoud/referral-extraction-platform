@@ -4,9 +4,9 @@ import {
   ExceptionFilter,
   HttpException,
   HttpStatus,
-  Logger,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import { AppLogger } from '../../../libs/logger';
 
 /**
  * Single global exception filter, registered for every exception (`@Catch()`).
@@ -22,7 +22,7 @@ import type { Response } from 'express';
  */
 @Catch()
 export class AllExceptionFilter implements ExceptionFilter {
-  private readonly logger = new Logger(AllExceptionFilter.name);
+  private readonly logger = new AppLogger(AllExceptionFilter.name);
 
   public catch(exception: unknown, host: ArgumentsHost): void {
     if (host.getType() !== 'http') {

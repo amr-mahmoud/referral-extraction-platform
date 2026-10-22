@@ -1206,3 +1206,32 @@ This document serves as the centralized commit history and decision log for the 
 
 - **Modified:** `apps/web/src/constants/about.ts`, `apps/web/src/features/about/AboutDeploymentSection/AboutDeploymentSection.styles.ts`, `apps/web/src/features/about/AboutDeploymentSection/index.tsx`, `apps/web/src/features/about/AboutOverview/index.tsx`, `docs/commit-log.md`
 - **Impact:** Adds the Deployment section into the About page flow between the lifecycle workflow and scaling levers; zero backend or API contract changes.
+
+## v0.0.58 | 2026-10-22 | feat | STRUCTURED APP LOGGING
+
+**Category:** System Foundation  
+**Summary:** Adds a shared AppLogger to workbench-api and agent_worker with a LOG_LEVEL gate, method-name tags on every line, and info logs across the Application Service layer and the worker's extraction path.  
+**SuggestedCommitMessage:**
+
+```text
+feat: add shared AppLogger with LOG_LEVEL and caller tags
+
+- AppLogger extends Nest Logger in workbench-api and wraps console in
+  agent_worker, both with info, infoSuccess, debug and trace keys
+- Every line is tagged Module.method, resolved from the call stack
+- LOG_LEVEL is read from the root .env (default info, fails fast on
+  an unknown value) and gates both apps
+- Application Service methods log at info with outcome ids and counts
+
+Category: System Foundation
+```
+
+### 🧠 Logic & Decisions
+
+- **The Why:** Plain Nest and console lines carried no method context, so tracing a job across services meant reading source. A thin AppLogger that extends Nest's Logger keeps existing `log`, `warn` and `error` calls working while adding the skill's keys. The method tag comes from the call stack, so call sites never repeat their own name. `LOG_LEVEL` lives in the root `.env` next to the other config, so local and Docker runs share one switch.
+- **State Change:** Lines below `LOG_LEVEL` are dropped in both apps. Application Service methods emit one `info` line each. The default of `info` makes these lines visible without any setting.
+
+### 🔗 Dependencies
+
+- **Modified:** `apps/workbench-api/libs/logger/`, `apps/workbench-api/src/application/application.service.ts`, `apps/workbench-api/src/infrastructure/` (caching, filters, notifications, queue, repository, storage), `apps/workbench-api/src/main.ts`, `apps/agent_worker/src/lib/logger/`, `apps/agent_worker/src/config/env.config.ts`, `apps/agent_worker/src/clients/`, `apps/agent_worker/src/extraction/referral-extraction.service.ts`, `.env.example`, `.claude/skills/add-loggers/SKILL.md`, `docs/commit-log.md`
+- **Impact:** Log output changes everywhere: lines gain a `[Module.method]` tag and high-volume `debug`/`trace` lines are off by default. Worker `console.*` lines outside AppLogger are not tagged yet. No API contract, database or queue changes; regression-test startup with an invalid `LOG_LEVEL` and the worker's extraction path.

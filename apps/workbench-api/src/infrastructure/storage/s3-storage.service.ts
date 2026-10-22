@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { AppLogger } from '../../../libs/logger';
 import {
   GetObjectCommand,
   PutObjectCommand,
@@ -28,6 +29,7 @@ const DEFAULT_CONTENT_TYPE = 'application/pdf';
  */
 @Injectable()
 export class S3StorageService implements StoragePort {
+  private readonly logger = new AppLogger(S3StorageService.name);
   private readonly client: S3Client;
   private readonly bucketName: string;
   private readonly presignExpiresInSeconds: number;
@@ -58,7 +60,16 @@ export class S3StorageService implements StoragePort {
     options?: PresignPutOptions,
   ): Promise<PresignedUrl> {
     const key = this.buildReferralPdfKey(clinicId, referralId);
-    return this.presignPut({ bucket: this.bucketName, key }, options);
+    const presignedUpload = await this.presignPut(
+      { bucket: this.bucketName, key },
+      options,
+    );
+    this.logger.debug('Presigned referral upload', {
+      clinicId,
+      referralId,
+      expiresAt: presignedUpload.expiresAt.toISOString(),
+    });
+    return presignedUpload;
   }
 
   public async presignPut(

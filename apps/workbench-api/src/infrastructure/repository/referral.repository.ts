@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { AppLogger } from '../../../libs/logger';
 import { REPOSITORY_ERROR } from '../../../libs/errors/repository-error-code.enum';
 import { ReferralRepositoryPort } from '../../application/ports/referral-repository.port';
 import { Referral } from '../../domain/referral/referral.aggregate';
@@ -11,6 +12,8 @@ import type { CachedReferralRow } from './types';
 
 @Injectable()
 export class PrismaReferralRepository implements ReferralRepositoryPort {
+  private readonly logger = new AppLogger(PrismaReferralRepository.name);
+
   public constructor(private readonly prisma: PrismaService) {}
 
   public async findReferralById(id: string): Promise<ReferralData | null> {
@@ -24,7 +27,13 @@ export class PrismaReferralRepository implements ReferralRepositoryPort {
         return null;
       }
 
-      return toDataReferral(row);
+      const referralData = toDataReferral(row);
+      this.logger.debug('Found referral by id', {
+        referralId: referralData.id,
+        clinicId: referralData.clinicId,
+        status: referralData.status,
+      });
+      return referralData;
     } catch (error) {
       throw this.toRepositoryException(
         error,
@@ -35,6 +44,7 @@ export class PrismaReferralRepository implements ReferralRepositoryPort {
   }
 
   public async saveReferrals(referrals: Referral[]): Promise<Referral[]> {
+    const startedAt = performance.now();
     try {
       const rows = await this.prisma.$transaction(
         referrals.map((referral) => {
@@ -47,6 +57,10 @@ export class PrismaReferralRepository implements ReferralRepositoryPort {
         }),
       );
 
+      this.logger.infoSuccess('Upserted referrals', {
+        count: rows.length,
+        durationMs: Math.round(performance.now() - startedAt),
+      });
       return rows.map((row) => ReferralMapper.toDomain(row));
     } catch (error) {
       throw this.toRepositoryException(
@@ -58,12 +72,18 @@ export class PrismaReferralRepository implements ReferralRepositoryPort {
   }
 
   public async deleteReferralsByIds(referralIds: string[]): Promise<void> {
+    const startedAt = performance.now();
     try {
       if (referralIds.length === 0) {
         return;
       }
-      await this.prisma.referral.deleteMany({
+      const deleteResult = await this.prisma.referral.deleteMany({
         where: { id: { in: referralIds } },
+      });
+      this.logger.info('Deleted referrals', {
+        requestedCount: referralIds.length,
+        deletedCount: deleteResult.count,
+        durationMs: Math.round(performance.now() - startedAt),
       });
     } catch (error) {
       throw this.toRepositoryException(
@@ -84,6 +104,11 @@ export class PrismaReferralRepository implements ReferralRepositoryPort {
         update: data,
       });
 
+      this.logger.debug('Upserted referral', {
+        referralId: row.id,
+        clinicId: row.clinicId,
+        status: row.status,
+      });
       return ReferralMapper.toDomain(row);
     } catch (error) {
       throw this.toRepositoryException(
@@ -97,11 +122,17 @@ export class PrismaReferralRepository implements ReferralRepositoryPort {
   public async findReferralsByClinicId(
     clinicId: string,
   ): Promise<ReferralData[]> {
+    const startedAt = performance.now();
     try {
       const rows = await this.prisma.referral.findMany({
         where: { clinicId },
         orderBy: { createdAt: 'desc' },
         select: CACHED_REFERRAL_SELECT,
+      });
+      this.logger.info('Fetched referrals by clinic', {
+        clinicId,
+        count: rows.length,
+        durationMs: Math.round(performance.now() - startedAt),
       });
       return rows.map(toDataReferral);
     } catch (error) {
@@ -116,6 +147,7 @@ export class PrismaReferralRepository implements ReferralRepositoryPort {
   public async findManyReferralsByIds(
     referralIds: string[],
   ): Promise<ReferralData[]> {
+    const startedAt = performance.now();
     try {
       if (referralIds.length === 0) {
         return [];
@@ -124,6 +156,11 @@ export class PrismaReferralRepository implements ReferralRepositoryPort {
         where: { id: { in: referralIds } },
         orderBy: { createdAt: 'desc' },
         select: CACHED_REFERRAL_SELECT,
+      });
+      this.logger.info('Fetched referrals by ids', {
+        requestedCount: referralIds.length,
+        count: rows.length,
+        durationMs: Math.round(performance.now() - startedAt),
       });
       return rows.map(toDataReferral);
     } catch (error) {
@@ -136,10 +173,15 @@ export class PrismaReferralRepository implements ReferralRepositoryPort {
   }
 
   public async findAllReferrals(): Promise<ReferralData[]> {
+    const startedAt = performance.now();
     try {
       const rows = await this.prisma.referral.findMany({
         orderBy: { createdAt: 'desc' },
         select: CACHED_REFERRAL_SELECT,
+      });
+      this.logger.info('Fetched all referrals', {
+        count: rows.length,
+        durationMs: Math.round(performance.now() - startedAt),
       });
       return rows.map(toDataReferral);
     } catch (error) {

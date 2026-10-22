@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { REPOSITORY_ERROR } from '../../../libs/errors/repository-error-code.enum';
+import { AppLogger } from '../../../libs/logger';
 import { ClinicRepositoryPort } from '../../application/ports/clinic-repository.port';
 import { Clinic } from '../../domain/clinic/clinic.aggregate';
 import { ExtractionSchema } from '../../domain/extraction-schema/extraction-schema.aggregate';
@@ -10,6 +11,8 @@ import { PrismaService } from './prisma.service';
 
 @Injectable()
 export class PrismaClinicRepository implements ClinicRepositoryPort {
+  private readonly logger = new AppLogger(PrismaClinicRepository.name);
+
   public constructor(private readonly prisma: PrismaService) {}
 
   public async findById(id: string): Promise<Clinic | null> {
@@ -22,6 +25,7 @@ export class PrismaClinicRepository implements ClinicRepositoryPort {
         return null;
       }
 
+      this.logger.debug('Found clinic by id', { clinicId: row.id });
       return ClinicMapper.toDomain(row);
     } catch (error) {
       throw this.toRepositoryException(
@@ -62,6 +66,7 @@ export class PrismaClinicRepository implements ClinicRepositoryPort {
         update: data,
       });
 
+      this.logger.debug('Upserted clinic', { clinicId: row.id });
       return ClinicMapper.toDomain(row);
     } catch (error) {
       throw this.toRepositoryException(
@@ -84,6 +89,11 @@ export class PrismaClinicRepository implements ClinicRepositoryPort {
         update: data,
       });
 
+      this.logger.debug('Upserted extraction schema', {
+        schemaId: row.id,
+        clinicId: row.clinicId,
+        version: row.version,
+      });
       return ExtractionSchemaMapper.toDomain(row);
     } catch (error) {
       throw this.toRepositoryException(
@@ -115,12 +125,18 @@ export class PrismaClinicRepository implements ClinicRepositoryPort {
   public async listExtractionSchemasByClinic(
     clinicId: string,
   ): Promise<ExtractionSchema[]> {
+    const startedAt = performance.now();
     try {
       const rows = await this.prisma.extractionSchema.findMany({
         where: { clinicId },
         orderBy: { version: 'asc' },
       });
 
+      this.logger.info('Fetched extraction schemas by clinic', {
+        clinicId,
+        count: rows.length,
+        durationMs: Math.round(performance.now() - startedAt),
+      });
       return rows.map((row) => ExtractionSchemaMapper.toDomain(row));
     } catch (error) {
       throw this.toRepositoryException(

@@ -1,6 +1,7 @@
 import { resolve } from 'path';
 import { config as loadDotEnvFromFile } from 'dotenv';
-import { Logger, ValidationPipe } from '@nestjs/common';
+import { ValidationPipe } from '@nestjs/common';
+import { AppLogger } from '../libs/logger';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { apiReference } from '@scalar/nestjs-api-reference';
@@ -72,7 +73,7 @@ async function bootstrap() {
   // cold and lets normal traffic (or `refreshReferralCache`) warm it
   // incrementally instead.
   if (process.env.NODE_ENV !== 'production') {
-    const logger = new Logger('CacheWarmup');
+    const logger = new AppLogger('CacheWarmup');
     try {
       const applicationService = app.get(ApplicationService);
       const warmedCount = await applicationService.warmAllReferralCaches();

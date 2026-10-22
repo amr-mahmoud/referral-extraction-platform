@@ -1,11 +1,7 @@
-import {
-  Injectable,
-  Logger,
-  OnModuleDestroy,
-  OnModuleInit,
-} from '@nestjs/common';
+import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import Redis from 'ioredis';
 import { REPOSITORY_ERROR } from '../../../libs/errors/repository-error-code.enum';
+import { AppLogger } from '../../../libs/logger';
 import { CachingServicePort } from '../../application/ports/caching.port';
 import { RepositoryException } from '../errors/repository.exception';
 import { CachedClinic, CachedReferral } from 'src/application/types';
@@ -42,7 +38,7 @@ const CONNECT_TIMEOUT_MS = 3000;
 export class RedisService
   implements CachingServicePort, OnModuleInit, OnModuleDestroy
 {
-  private readonly logger = new Logger(RedisService.name);
+  private readonly logger = new AppLogger(RedisService.name);
   private readonly client: Redis;
 
   public constructor() {
@@ -88,6 +84,7 @@ export class RedisService
   }
 
   public async setCachedReferrals(entries: CachedReferral[]): Promise<void> {
+    const startedAt = performance.now();
     if (entries.length === 0) {
       return;
     }
@@ -138,6 +135,10 @@ export class RedisService
         'setCachedReferrals',
       );
     }
+    this.logger.infoSuccess('Cached referrals', {
+      count: entries.length,
+      durationMs: Math.round(performance.now() - startedAt),
+    });
   }
 
   public async getCachedReferral(
@@ -162,8 +163,9 @@ export class RedisService
       pipeline.get(this.buildKey(referralId));
     }
 
+    const startedAt = performance.now();
     const results = await pipeline.exec();
-    return referralIds.map((_, index) => {
+    const cachedReferrals = referralIds.map((_, index) => {
       const entry = results?.[index];
       if (!entry || entry[0] !== null) {
         // A per-command error is treated as a cache miss, not a hard failure:
@@ -172,6 +174,12 @@ export class RedisService
       }
       return this.parseCachedReferral(entry[1] as string | null);
     });
+    this.logger.info('Fetched cached referrals', {
+      requestedCount: referralIds.length,
+      hitCount: cachedReferrals.filter((cached) => cached !== null).length,
+      durationMs: Math.round(performance.now() - startedAt),
+    });
+    return cachedReferrals;
   }
 
   public async addReferralIdsToClinicIndex(

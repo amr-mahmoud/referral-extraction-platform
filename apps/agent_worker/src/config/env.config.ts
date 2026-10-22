@@ -21,6 +21,7 @@ const workerEnvSchema = z.object({
   REDIS_URL: z.string().min(1).default('redis://localhost:6379'),
   GEMINI_API_KEY: z.string().min(1),
   GEMINI_MODEL: z.string().min(1),
+  LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error']).default('info'),
 
   REFERRAL_CLAIM_TTL_SECONDS: z.coerce.number().int().positive().default(600),
   MAX_CONCURRENT_MESSAGES: z.coerce.number().int().positive().default(15),

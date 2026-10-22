@@ -1,4 +1,5 @@
 import { SendMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
+import { AppLogger } from '../../lib/logger';
 import type { ReferralStatusUpdateEvent } from '../../types/referral-job.types';
 
 /**
@@ -8,6 +9,7 @@ import type { ReferralStatusUpdateEvent } from '../../types/referral-job.types';
  * path fans the change out to SSE. The worker never writes the database.
  */
 export class SqsStatusUpdatePublisher {
+  private readonly logger = new AppLogger(SqsStatusUpdatePublisher.name);
   private readonly client: SQSClient;
 
   public constructor(
@@ -18,11 +20,17 @@ export class SqsStatusUpdatePublisher {
   }
 
   public async publish(event: ReferralStatusUpdateEvent): Promise<void> {
+    const startedAt = performance.now();
     await this.client.send(
       new SendMessageCommand({
         QueueUrl: this.queueUrl,
         MessageBody: JSON.stringify(event),
       }),
     );
+    this.logger.debug('Published referral status update', {
+      referralId: event.referralId,
+      status: event.status,
+      durationMs: Math.round(performance.now() - startedAt),
+    });
   }
 }

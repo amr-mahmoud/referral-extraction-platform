@@ -1,9 +1,5 @@
-import {
-  Injectable,
-  Logger,
-  OnModuleDestroy,
-  OnModuleInit,
-} from '@nestjs/common';
+import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { AppLogger } from '../../../libs/logger';
 import { Client } from 'pg';
 import { Subject, type Observable } from 'rxjs';
 import type {
@@ -31,7 +27,7 @@ const RECONNECT_DELAY_MS = 2000;
 export class PostgresListenService
   implements ReferralNotificationPort, OnModuleInit, OnModuleDestroy
 {
-  private readonly logger = new Logger(PostgresListenService.name);
+  private readonly logger = new AppLogger(PostgresListenService.name);
   private readonly referralChanged$ =
     new Subject<ReferralChangedNotification>();
   private client: Client | null = null;
